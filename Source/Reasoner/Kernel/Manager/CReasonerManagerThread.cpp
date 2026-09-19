@@ -76,7 +76,7 @@ namespace Konclude {
 					mWorkControllerCount = qMax(processorCount,mWorkControllerCount);
 
 					mConfgAdaptThreadPoolToWorkerCount = CConfigDataReader::readConfigBoolean(configProvider, "Konclude.Calculation.AdaptThreadPoolSizeProcessorCount", true);
-					mBlockThreadPoolThreadCount = CConfigDataReader::readConfigBoolean(configProvider, "Konclude.Calculation.BlockingThreadPoolThreadsCount", 1);
+					mBlockThreadPoolThreadCount = CConfigDataReader::readConfigInteger(configProvider, "Konclude.Calculation.BlockingThreadPoolThreadsCount", 1);
 
 
 					//if (!isRunning()) {
@@ -248,6 +248,14 @@ namespace Konclude {
 						QThreadPool::globalInstance()->setMaxThreadCount(mWorkControllerCount);
 					}
 					if (mBlockThreadPoolThreadCount > 0) {
+						// The blocked threads occupy their slots in the default thread pool until the
+						// reasoner is closed, so the pool has to be extended by their number. Otherwise
+						// the pool can be left without any usable thread, which makes all later
+						// QtConcurrent processing (for instance the concurrent realization or the
+						// individual label association indexing) wait forever for a task that can
+						// never be scheduled.
+						QThreadPool* defaultThreadPool = QThreadPool::globalInstance();
+						defaultThreadPool->setMaxThreadCount(defaultThreadPool->maxThreadCount() + mBlockThreadPoolThreadCount);
 						for (cint64 i = 0; i < mBlockThreadPoolThreadCount; ++i) {
 							QtConcurrent::run(QThreadPool::globalInstance(), [&]() {
 								mBlockThreadPoolThreadsBlockingSemaphore.acquire(1);
