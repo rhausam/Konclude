@@ -78,16 +78,27 @@ namespace Konclude {
 				}
 
 				void CJNIHandler::throwException(JNIEnv* jenv, const char* className, const char* reason) {
+					// FindClass fails if the exception class is not on the class path of the caller,
+					// in which case it has already scheduled a NoClassDefFoundError and ThrowNew
+					// must not be called with the missing class.
 					jclass cls = jenv->FindClass(className);
-					jenv->ThrowNew(cls,reason);
+					if (cls) {
+						jenv->ThrowNew(cls,reason);
+					}
 				}
 
 
 				void CJNIHandler::throwException(JNIEnv* jenv, const char* className) {
 					jclass cls = jenv->FindClass(className);
-					jmethodID ctorID = jenv->GetMethodID(cls,"<init>","()V");
-					jobject obj = jenv->NewObject(cls,ctorID);
-					jenv->Throw((jthrowable)obj);
+					if (cls) {
+						jmethodID ctorID = jenv->GetMethodID(cls,"<init>","()V");
+						if (ctorID) {
+							jobject obj = jenv->NewObject(cls,ctorID);
+							if (obj) {
+								jenv->Throw((jthrowable)obj);
+							}
+						}
+					}
 				}
 
 				void CJNIHandler::throwGeneralException(JNIEnv* jenv, const char* reason) {
