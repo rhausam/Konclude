@@ -107,6 +107,11 @@ The binaries of Konclude (and possibly some shared libraries) are located in the
     Note that the settings of the `Configs/querying-config.xml` file are automatically enabled if the `sparqlserver` or `sparqlfile` commands are used in order to deactivate some optimizations that are not yet compatible with the integrated query answering engine. However, the `Configs/querying-config.xml` file also contains some commented out settings that may be interesting for configuring some query answering aspects in more detail (e.g., concurrency, interpretation of anonymous variables, etc.).
 
 
+- JNI:
+
+	Konclude further contains a very basic and experimental JNI bridge in `Source/Control/Interface/JNI`, which is compiled into a shared library by `KoncludeLIB.pro` and which allows for building axioms and for asking a part of the supported questions directly from Java, i.e., without the OWLlink interface. The `Java` directory contains the Java classes that the bridge requires as well as a smoke test, see `Java/Readme.md`. Note that this is not a reasoner wrapper, in particular there is no implementation of the OWL API `OWLReasoner` interface, and that only a part of the reasoning questions is provided by the bridge.
+
+
 - CONFIGURATION:
 
 	Konclude can be configured with configuration files, which are also OWLlink request files where only the 'Set' command is used. 'Set' commands without the specification of a specific knowledge base configure the default settings in Konclude, which are used to instantiate the configurations of newly created knowledge bases. It is highly recommended to NOT change the default configuration of Konclude, because many available configurations are only for debugging, testing and experimenting. However, if Konclude requires too much main memory, then you can try to deactivate the satisfiability or unsatisfiability caching (see example configuration file in `Configs` directory). The parameter `-c FILEPATH` can be used to load a configuration file.
