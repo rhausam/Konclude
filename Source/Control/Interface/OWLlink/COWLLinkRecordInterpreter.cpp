@@ -86,6 +86,11 @@ namespace Konclude {
 
 				CCommandRecorder *COWLLinkRecordInterpreter::recordData(CCommandRecordData *recData) {
 					CCommandRecorder::recordData(recData);
+					if (dynamic_cast<CProcessErrorRecord *>(recData) && recData && dynamic_cast<CParseOWLlinkCommandsCommand *>(recData->getCommand())) {
+						// the request itself couldn't be parsed, there is no command that could report the
+						// error, so the response message has to carry it
+						rootNode.appendChild(getErrorNode(recData,"SyntaxError"));
+					}
 					if (dynamic_cast<CClosureProcessCommandRecord *>(recData)) {
 						if (recData) {
 							CCommand *command = recData->getCommand();
