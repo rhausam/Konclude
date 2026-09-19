@@ -1,7 +1,13 @@
 
 
 JAVAHOME = $$(JAVA_HOME)
-message("Using $$JAVAHOME/include from enviroment variable 'JAVA_HOME' as include directory for Java/JNI.")
+# jni.h includes the platform specific jni_md.h, which is located in a subdirectory
+# that is named after the platform, so that subdirectory has to be an include
+# directory as well.
+macx: JAVAPLATFORMINCLUDE = $$JAVAHOME/include/darwin
+else:win32: JAVAPLATFORMINCLUDE = $$JAVAHOME/include/win32
+else:unix: JAVAPLATFORMINCLUDE = $$JAVAHOME/include/linux
+message("Using $$JAVAHOME/include and $$JAVAPLATFORMINCLUDE from enviroment variable 'JAVA_HOME' as include directories for Java/JNI.")
 
 
 message("Updating Konclude version from Git Revision.")
@@ -24,6 +30,7 @@ INCLUDEPATH += ./generatedfiles \
     ./GeneratedFiles/Release \
     ./Source \
 	$$JAVAHOME/include \
+	$$JAVAPLATFORMINCLUDE \
 	.
 DEPENDPATH += .
 MOC_DIR += ./GeneratedFiles/release

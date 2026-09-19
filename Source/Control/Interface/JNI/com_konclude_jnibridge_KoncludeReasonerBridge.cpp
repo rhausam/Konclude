@@ -78,8 +78,10 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_KoncludeReasonerBridge_initKo
 
 	char* defaultJNIArgumentStrings[] =  { 
 		//"-CoutLogObserverLoader ",
-		"-DefaultReasonerLoader +=Konclude.Execution.CalculationManager=Konclude.Calculation.Calculator.ConcurrentTaskCalculationManager +=Konclude.Debugging.WriteDebuggingData=TRUE ",
-		//"-DefaultReasonerLoader +=Konclude.Execution.CalculationManager=Konclude.Calculation.Calculator.ConcurrentTaskCalculationManager ",
+		// Appending '+=Konclude.Debugging.WriteDebuggingData=TRUE' writes the debugging data of
+		// the preprocessing into a 'Debugging' subdirectory of the working directory, which must
+		// not happen by default since the library is loaded into the process of another program.
+		"-DefaultReasonerLoader +=Konclude.Execution.CalculationManager=Konclude.Calculation.Calculator.ConcurrentTaskCalculationManager ",
 		"-JNICommandProcessorLoader ",
 		" "
 	};
