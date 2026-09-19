@@ -78,8 +78,10 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_KoncludeReasonerBridge_initKo
 
 	char* defaultJNIArgumentStrings[] =  { 
 		//"-CoutLogObserverLoader ",
-		"-DefaultReasonerLoader +=Konclude.Execution.CalculationManager=Konclude.Calculation.Calculator.ConcurrentTaskCalculationManager +=Konclude.Debugging.WriteDebuggingData=TRUE ",
-		//"-DefaultReasonerLoader +=Konclude.Execution.CalculationManager=Konclude.Calculation.Calculator.ConcurrentTaskCalculationManager ",
+		// Appending '+=Konclude.Debugging.WriteDebuggingData=TRUE' writes the debugging data of
+		// the preprocessing into a 'Debugging' subdirectory of the working directory, which must
+		// not happen by default since the library is loaded into the process of another program.
+		"-DefaultReasonerLoader +=Konclude.Execution.CalculationManager=Konclude.Calculation.Calculator.ConcurrentTaskCalculationManager ",
 		"-JNICommandProcessorLoader ",
 		" "
 	};
@@ -147,6 +149,10 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_KoncludeReasonerBridge_initKo
 
 				if (!jniInstanceManager->getJNICommandProcessor()) {
 					LOG(WARN,"::Konclude::Main","No JNI command processor loaded!",0);
+					// Without the command processor the library instance cannot be used at all, so
+					// the initialization has to fail here instead of letting the following calls
+					// dereference the missing processor.
+					CJNIHandler::throwKoncludeException(jenv,"No JNI command processor has been loaded, whence the Konclude library instance cannot be used. The loading arguments have to contain '-JNICommandProcessorLoader'.");
 				} else {
 					LOG(INFO,"::Konclude::Main","JNI command processer successfully initialised.",0);
 				}
@@ -188,7 +194,10 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_KoncludeReasonerBridge_initAx
 	if (jniInstanceManager) {
 		CJNIHandler* jniHandler = jniInstanceManager->getJNIHandler();
 		CJNICommandProcessor* jniProcessor = jniInstanceManager->getJNICommandProcessor();
-
+		if (!jniProcessor) {
+			CJNIHandler::throwKoncludeException(jenv,"The Konclude library instance has not been initialized correctly, no JNI command processor is available.");
+			return;
+		}
 
 
 		COntologyRevision* ontRev = nullptr;
@@ -221,6 +230,10 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_KoncludeReasonerBridge_finali
 		LOG(INFO,"::Konclude::Main",logTr("Finalizing axiom/expression building bridge."),0);
 		CJNIHandler* jniHandler = jniInstanceManager->getJNIHandler();
 		CJNICommandProcessor* jniProcessor = jniInstanceManager->getJNICommandProcessor();
+		if (!jniProcessor) {
+			CJNIHandler::throwKoncludeException(jenv,"The Konclude library instance has not been initialized correctly, no JNI command processor is available.");
+			return;
+		}
 		CJNIAxiomExpressionVisitingLoader* axiomExpVisitLoader = jniHandler->getAxiomExpressionBuildingBridgeNativeData(jenv,builderObj);
 		if (axiomExpVisitLoader) {
 			axiomExpVisitLoader->completeBuilding();
@@ -247,7 +260,10 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_KoncludeReasonerBridge_initQu
 		LOG(INFO,"::Konclude::Main",logTr("Creating querying bridge."),0);
 		CJNIHandler* jniHandler = jniInstanceManager->getJNIHandler();
 		CJNICommandProcessor* jniProcessor = jniInstanceManager->getJNICommandProcessor();
-
+		if (!jniProcessor) {
+			CJNIHandler::throwKoncludeException(jenv,"The Konclude library instance has not been initialized correctly, no JNI command processor is available.");
+			return;
+		}
 
 		CJNIOntologyRevisionData* ontRevData = jniInstanceManager->getOntologyRevisionData();
 		if (ontRevData) {
