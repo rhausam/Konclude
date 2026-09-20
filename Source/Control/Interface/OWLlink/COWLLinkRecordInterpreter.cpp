@@ -63,6 +63,7 @@ namespace Konclude {
 					mConfig = config;
 
 					mConfExtendedErrorReporting = CConfigDataReader::readConfigBoolean(mConfig,"Konclude.OWLlink.ExtendedErrorReporting",false);
+					mSyntaxErrorReported = false;
 				}
 
 
@@ -86,10 +87,16 @@ namespace Konclude {
 
 				CCommandRecorder *COWLLinkRecordInterpreter::recordData(CCommandRecordData *recData) {
 					CCommandRecorder::recordData(recData);
-					if (dynamic_cast<CProcessErrorRecord *>(recData) && recData && dynamic_cast<CParseOWLlinkCommandsCommand *>(recData->getCommand())) {
+					if (recData && dynamic_cast<CProcessErrorRecord *>(recData) && dynamic_cast<CParseOWLlinkCommandsCommand *>(recData->getCommand())) {
 						// the request itself couldn't be parsed, there is no command that could report the
-						// error, so the response message has to carry it
-						rootNode.appendChild(getErrorNode(recData,"SyntaxError"));
+						// error, so the response message has to carry it, but only once and not while
+						// another thread is adding a response of its own
+						seqSyncMutex.lock();
+						if (!mSyntaxErrorReported) {
+							mSyntaxErrorReported = true;
+							rootNode.appendChild(getErrorNode(recData,"SyntaxError"));
+						}
+						seqSyncMutex.unlock();
 					}
 					if (dynamic_cast<CClosureProcessCommandRecord *>(recData)) {
 						if (recData) {
@@ -968,7 +975,10 @@ namespace Konclude {
 				QString COWLLinkRecordInterpreter::getErrorString(CCommandRecordData *recData, const QString &nodeString) {
 					QString errorText;
 					if (recData) {
-						errorText = QString("An error has occurred while processing '%1',\n%2 process protocol:\n").arg(recData->getCommand()->getBriefCommandDescription()).arg(nodeString);
+						// the record of a sub command may not have a command any more
+						CCommand *recDataCommand = recData->getCommand();
+						QString commandDescription(recDataCommand ? recDataCommand->getBriefCommandDescription() : QString("unknown command"));
+						errorText = QString("An error has occurred while processing '%1',\n%2 process protocol:\n").arg(commandDescription).arg(nodeString);
 
 						CCommandRecordData *nextRecData = recData;
 
@@ -979,12 +989,11 @@ namespace Konclude {
 
 
 
-						CCommand *command = recData->getCommand();
-						CLinker<CCommand *> *subCommIt = command->getSubCommandLinker();
+						CLinker<CCommand *> *subCommIt = recDataCommand ? recDataCommand->getSubCommandLinker() : nullptr;
 						QString subNodeString = QString("Sub-%1").arg(nodeString);
 						while (subCommIt) {
 							CCommand *subCommand = subCommIt->getData();
-							if (subCommand->getMaxErrorLevel() > 0) {
+							if (subCommand && subCommand->getMaxErrorLevel() > 0) {
 								CCommandRecordData *subCommandRecData = subCommand->getRecordData();
 								if (subCommandRecData) {
 									QString subErrorString = QString("{%1}, %2").arg(getErrorLevelString(subCommand->getMaxErrorLevel())).arg(getErrorString(subCommandRecData,subNodeString));
