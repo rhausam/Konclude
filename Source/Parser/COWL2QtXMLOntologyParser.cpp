@@ -96,6 +96,9 @@ namespace Konclude {
 					LOG(INFO,getLogDomain(),logTr("Parsing of '%1' completed.").arg(filename),this);
 
 				} else {
+					// the document is built up to the error, it must not be processed since everything
+					// after the error would be ignored without any indication
+					successfullParsed = false;
 					LOG(ERROR,getLogDomain(),logTr("XML error: %1, file: %2, line: %3, column %4.").arg(errorMessage).arg(filename).arg(errorLine).arg(errorColumn),this);
 				}
 				file.close();
