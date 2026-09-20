@@ -171,6 +171,8 @@ namespace Konclude {
 
 						CConfiguration* mConfig;
 						bool mConfExtendedErrorReporting;
+						//! whether the response message already carries the error of an unparsable request
+						bool mSyntaxErrorReported;
 
 					// private methods
 					private:
