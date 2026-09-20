@@ -29,15 +29,18 @@ done
 
 # locate the shared library, the name depends on the platform
 find_library_directory() {
-	local candidate
+	local candidate pattern
 	for candidate in "$@"; do
 		[ -d "$candidate" ] || continue
-		if ls "$candidate"/libKonclude.dylib "$candidate"/libKonclude.so \
-		      "$candidate"/Konclude.dll "$candidate"/libKonclude.*.dylib \
-		      "$candidate"/libKonclude.so.* >/dev/null 2>&1; then
-			echo "$candidate"
-			return 0
-		fi
+		# every name has to be tried on its own, ls fails as soon as one of several
+		# arguments does not exist, and only one of these names exists per platform
+		for pattern in 'libKonclude.dylib' 'libKonclude.so' 'Konclude.dll' \
+		               'libKonclude.*.dylib' 'libKonclude.so.*'; do
+			if ls "$candidate"/$pattern >/dev/null 2>&1; then
+				echo "$candidate"
+				return 0
+			fi
+		done
 	done
 	return 1
 }
