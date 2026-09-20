@@ -87,7 +87,8 @@ namespace Konclude {
 
 				CCommandRecorder *COWLLinkRecordInterpreter::recordData(CCommandRecordData *recData) {
 					CCommandRecorder::recordData(recData);
-					if (recData && dynamic_cast<CProcessErrorRecord *>(recData) && dynamic_cast<CParseOWLlinkCommandsCommand *>(recData->getCommand())) {
+					CParseOWLlinkCommandsCommand *parseCommand = recData ? dynamic_cast<CParseOWLlinkCommandsCommand *>(recData->getCommand()) : nullptr;
+					if (parseCommand && parseCommand->hasSyntaxError() && dynamic_cast<CProcessErrorRecord *>(recData)) {
 						// the request itself couldn't be parsed, there is no command that could report the
 						// error, so the response message has to carry it, but only once and not while
 						// another thread is adding a response of its own
