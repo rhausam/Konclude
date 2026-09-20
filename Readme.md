@@ -133,6 +133,16 @@ The binaries of Konclude (and possibly some shared libraries) are located in the
 	makes the realisation complete and reproducible, all 60 instances are then reported, but also somewhat slower, about 30 percent for the example above. So far the problem has only been observed for classes that are defined by a qualified minimum cardinality restriction.
 
 
+	High memory consumption for large ontologies:
+	classifying a large ontology needs a multiple of the memory of the ontology itself, and the memory is not released before the process ends. Classifying SNOMED CT (320k classes, 750k axioms, 297 MB in OWL 2 XML) reaches about 14 GB, which makes it unsuitable for a machine with little free memory, in particular when it is classified from an application such as Protege that holds the ontology as well.
+
+	The memory is allocated while the ontology is precomputed, i.e., during the saturation of the concepts, and not while it is parsed: for the example above, the memory grows to 1.9 GB until the preprocessing is finished and then to 15.6 GB during the precomputation, while the classification itself stays below that. It does not depend noticeably on the number of processing units configured with `-w` (13.8 GB for `-w 1`, 15.7 GB for `-w 4`, 13.7 GB for `-w AUTO` on 16 cores), nor on how the ontology reaches the reasoner: loading it from a file with `LoadOntologies` instead of sending it with an OWLlink `Tell` request changes the peak only from 33 GB to 32 GB.
+
+	The optimizations that build the saturation data cannot be traded for memory with the available settings. Deactivating `Konclude.Calculation.Optimization.SaturationCaching` or `Konclude.Calculation.Optimization.SaturationExpansionSatisfiabilityCacheWriting` increases the memory instead (15.6 GB and 15.4 GB for the example above), and activating the calculation memory limit with `Konclude.Calculation.Memory.AllocationLimitation` did not finish the precomputation within 15 minutes. Deactivating `Konclude.Calculation.Optimization.ConceptSaturation` does reduce the memory to 2.4 GB, but it does not classify the ontology any more: the result then contains every class as a direct subclass of `owl:Thing`.
+
+	For a knowledge base that is served over OWLlink, note that releasing it with `ReleaseKB`, which is what Protege does when the reasoner is stopped, frees the knowledge base but does not return the memory to the system. A subsequent classification reuses it, so the server does not grow further, but the memory becomes available to other processes only when the server is restarted.
+
+
 
 # REQUIREMENTS, INSTALLATION, BUILD
 
