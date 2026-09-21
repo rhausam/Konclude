@@ -358,6 +358,14 @@ unmodified        : 0 15 27 21 32 12     lost subsumptions per run
 `Konclude.Calculation.Classification.TrustSaturationSubsumerCompleteness` restores the
 previous behaviour. It is off by default.
 
+`Scripts/run-classification-reproducibility-test.sh` classifies an ontology repeatedly and
+fails if the runs do not all infer the same hierarchy, which is the signature the defect left.
+It compares the runs against each other rather than against a reference, so it reports a defect
+that makes the result vary and not one that loses the same inferences every time. The losses
+were intermittent - runs that lose nothing were common - so a clean run of a few iterations
+means little, and the ontology in the repository is small enough that it may never have lost
+any. Point it at something substantial with `-i` and raise `-n`.
+
 
 ### WHAT IT COSTS
 
