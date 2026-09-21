@@ -956,7 +956,7 @@ JNIEXPORT jlong JNICALL Java_com_konclude_jnibridge_AxiomExpressionBuildingBridg
 
 
 
-JNIEXPORT jlong JNICALL Java_com_konclude_jnibridge_AxiomExpressionBuildingBridge_buildOWLDataUnionOfFromArgumentList(JNIEnv * jenv, jobject builderObj, jobject bridgeObj, jlong datatype) {
+JNIEXPORT jlong JNICALL Java_com_konclude_jnibridge_AxiomExpressionBuildingBridge_buildOWLDatatypeRestrictionFromArgumentList(JNIEnv * jenv, jobject builderObj, jobject bridgeObj, jlong datatype) {
 	CBuildExpression* expression = nullptr;
 	JNIAXIOMEXPRESSIONBUILDINGBRDIGELOADER(jenv, builderObj, bridgeObj,
 		CEXPRESSIONLIST<CDataFacetRestrictionExpression*>* expList = (CEXPRESSIONLIST<CDataFacetRestrictionExpression*>*)builder->popArgumentExpressionList();
@@ -970,7 +970,7 @@ JNIEXPORT jlong JNICALL Java_com_konclude_jnibridge_AxiomExpressionBuildingBridg
 
 
 
-JNIEXPORT jlong JNICALL Java_com_konclude_jnibridge_AxiomExpressionBuildingBridge_buildOWLDatatypeRestrictionFromArgumentList(JNIEnv * jenv, jobject builderObj, jobject bridgeObj, jlong subPropertyExp, jlong superPropertyExp) {
+JNIEXPORT jlong JNICALL Java_com_konclude_jnibridge_AxiomExpressionBuildingBridge_buildOWLSubDataPropertyOfAxiom(JNIEnv * jenv, jobject builderObj, jobject bridgeObj, jlong subPropertyExp, jlong superPropertyExp) {
 	CBuildExpression* expression = nullptr;
 	JNIAXIOMEXPRESSIONBUILDINGBRDIGELOADER(jenv, builderObj, bridgeObj,
 		expression = builder->getSubDataPropertyOf((CBuildExpression*)subPropertyExp, (CBuildExpression*)superPropertyExp);

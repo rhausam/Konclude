@@ -782,6 +782,17 @@ namespace Konclude {
 					fullCompletionGraphConstruction = true;
 					totallyPreCompItem->setFullCompletionGraphConstruction(true);
 				}
+				// isFullCompletionGraphConstruction only says that the consistency check is meant to
+				// build the completion graph, which is what makes the precomputation of the individuals
+				// unnecessary. It can decide the consistency by the saturation of the all assertion
+				// individual instead, see createConsistencePrecomputationCheck, and then the graph is
+				// never built and the insufficiently saturated individuals still have to be precomputed
+				// here. Without this the individual step waits for a retrieval that nothing requests,
+				// which is why an ABox that forces two individuals to be merged never finished.
+				if (fullCompletionGraphConstruction && totallyPreCompItem->isConsistenceStepFinished()
+						&& !totallyPreCompItem->isFullCompletionGraphConstructed()) {
+					fullCompletionGraphConstruction = false;
+				}
 				if (totallyPreCompItem->hasIndividualsSaturationCacheSynchronisation() && totallyPreCompItem->hasIndividualsSaturated() && totallyPreCompItem->hasALLIndividualsSaturationOrderd() && totallyPreCompItem->hasInsufficientSaturationIndividuals()) {
 					if (!fullCompletionGraphConstruction) {
 						if (!totallyPreCompItem->hasIndividualPrecomputationChecked()) {

@@ -109,7 +109,7 @@ The binaries of Konclude (and possibly some shared libraries) are located in the
 
 - JNI:
 
-	Konclude further contains a very basic and experimental JNI bridge in `Source/Control/Interface/JNI`, which is compiled into a shared library by `KoncludeLIB.pro` and which allows for building axioms and for asking a part of the supported questions directly from Java, i.e., without the OWLlink interface. The `Java` directory contains the Java classes that the bridge requires as well as a smoke test, see `Java/Readme.md`. Note that this is not a reasoner wrapper, in particular there is no implementation of the OWL API `OWLReasoner` interface, and that only a part of the reasoning questions is provided by the bridge.
+	Konclude further contains a very basic and experimental JNI bridge in `Source/Control/Interface/JNI`, which is compiled into a shared library by `KoncludeLIB.pro` and which allows for building axioms and for asking a part of the supported questions directly from Java, i.e., without the OWLlink interface. The `Java` directory contains the Java classes that the bridge requires, a smoke test of the bridge, a translator from the OWL API into it and an implementation of the OWL API `OWLReasoner` interface on top of it, see `Java/Readme.md`. Note that only a part of the reasoning questions is provided by the bridge, so the reasoner reports the questions that it cannot answer as unsupported, and that the wrapper has not been used in a Protege plug-in yet. Several defects of the bridge itself, which had never been driven from Java before, were found and fixed along the way, see `Java/Readme.md`.
 
 
 - CONFIGURATION:
