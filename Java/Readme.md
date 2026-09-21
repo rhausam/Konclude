@@ -402,9 +402,36 @@ It compares the runs against each other rather than against a reference, so it r
 that makes the result vary and not one that loses the same inferences every time. The losses
 were intermittent - runs that lose nothing were common - so a clean run of a few iterations
 means little, and the ontology in the repository is small enough that it may never have lost
-any. Point it at something substantial with `-i` and raise `-n`. It does catch this defect
-where the defect is reachable: on master it fails on SNOMED CT, with six of six runs inferring
-a different hierarchy.
+any. Point it at something substantial with `-i` and raise `-n`.
+
+It does catch this defect where the defect is reachable. On master, six runs of SNOMED CT:
+
+```
+classifying, run 1 of 6 ... 602868 inferences
+classifying, run 2 of 6 ... 602855 inferences
+classifying, run 3 of 6 ... 602851 inferences
+classifying, run 4 of 6 ... 602859 inferences
+classifying, run 5 of 6 ... 602855 inferences
+classifying, run 6 of 6 ... 602852 inferences
+
+run 2 differs from run 1: 47 only in run 1, 34 only in run 2
+	S	http://snomed.info/id/111411000119103	http://snomed.info/id/104931000119100
+	S	http://snomed.info/id/129151000119102	http://snomed.info/id/104931000119100
+S	http://snomed.info/id/129151000119102	http://snomed.info/id/38481006
+	S	http://snomed.info/id/129161000119100	http://snomed.info/id/104931000119100
+S	http://snomed.info/id/129161000119100	http://snomed.info/id/38481006
+[...]
+run 5 differs from run 1: 40 only in run 1, 27 only in run 5
+
+FAILED: 5 of 5 comparisons disagree with the first run.
+The same binary inferred different class hierarchies from the same ontology.
+```
+
+The counts differ in both directions and some runs report more than the 602 853 of the fixed
+build, which is not unsoundness. The test compares the direct hierarchy, so losing a
+subsumption from the closure promotes edges that were redundant to direct ones and those appear
+as entries the other run does not have. Checked against ELK, no run ever reported a subsumption
+that does not hold; the defect only ever loses.
 
 
 ### WHAT IT COSTS
