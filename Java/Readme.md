@@ -150,16 +150,25 @@ run. Driving them against the library brought out the following, all of which ar
   `queryOWLEquivalentObjectProperties` reported only the properties whose role happened to be
   its own inverse, in practice only `owl:topObjectProperty` and `owl:bottomObjectProperty`.
   The role of a property is resolved to its expression through
-  `getRoleObjectPropertyTermMappingHash`, and as soon as
-  `CConcreteOntologyInverseRoleBuilder` has created an inverse role for a role, it replaces
-  the entry of that role by `CInverseObjectPropertyOfExpression(entry of the role)`. The
-  `dynamic_cast` to `CObjectPropertyExpression` in
-  `CEntityExpressionSetResultVisitingCallback::visitRoleAssociatedEntityExpression` then
-  failed and the property was silently dropped from the answer.
-  `visitRoleAssociatedEntityExpression` now takes the named property out of the inverse
-  expression again. Note that the entry it replaces belongs to the role itself and not to its
-  inverse, which looks like an oversight in `CConcreteOntologyInverseRoleBuilder`; fixing it
-  there would change a hash that the whole answering engine reads, so it was left alone.
+  `getRoleObjectPropertyTermMappingHash`, and whenever an inverse role was created for a
+  role, `CInverseObjectPropertyOfExpression(entry of the role)` was registered under **that
+  role** instead of under the inverse role it denotes. It therefore replaced the named
+  property of the role, the `dynamic_cast` to `CObjectPropertyExpression` in
+  `CEntityExpressionSetResultVisitingCallback::visitRoleAssociatedEntityExpression` failed,
+  and the property was silently dropped from the answer. The same mistake sat in both
+  directions of the mapping and at three places, twice in
+  `CConcreteOntologyInverseRoleBuilder::createDelayedInverseRoles` and once in
+  `CSubroleTransformationPreProcess`. All three now register the inverse expression under the
+  inverse role.
+
+  The expression to role direction of that hash is read throughout the answering engine, so
+  the five OWLlink and SPARQL tests of the CI were compared before and after the change. They
+  answer the same, which is what would be expected: the engine unwraps an
+  `ObjectInverseOf` itself before it consults the hash, see
+  `COptimizedComplexExpressionAnsweringHandler`, so the wrong entries were never read there.
+  Note that Konclude is a parallel reasoner and its answers come back in a different order on
+  every run, so those responses have to be compared as sets and without the response times,
+  not byte for byte.
 
 - `queryOWLSameIndividuals` reported nothing. Its query took the concept realization instead
   of the same realization, and it did not override `getDynamicRealizationRequirement`, so the

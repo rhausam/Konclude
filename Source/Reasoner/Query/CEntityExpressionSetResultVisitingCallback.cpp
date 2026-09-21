@@ -48,18 +48,6 @@ namespace Konclude {
 			CEntityExpressionSetResultVisitingCallback* CEntityExpressionSetResultVisitingCallback::visitRoleAssociatedEntityExpression(CRole* role, CConcreteOntology* ontology) {
 				CPropertyTermExpression* propertyTermExp = ontology->getDataBoxes()->getExpressionDataBoxMapping()->getRoleObjectPropertyTermMappingHash()->value(role);
 				if (propertyTermExp) {
-					// As soon as an inverse role has been created for this role,
-					// CConcreteOntologyInverseRoleBuilder has replaced the entry of the role in the
-					// hash by CInverseObjectPropertyOfExpression(entry of the role), so the named
-					// property of the role has to be taken out of it again. Note that the wrapped
-					// expression belongs to this role and not to its inverse, see
-					// CConcreteOntologyInverseRoleBuilder::createDelayedInverseRoles.
-					CInverseObjectPropertyOfExpression* inversePropertyExp = dynamic_cast<CInverseObjectPropertyOfExpression*>(propertyTermExp);
-					if (inversePropertyExp) {
-						propertyTermExp = inversePropertyExp->getInverseOfExpression();
-					}
-				}
-				if (propertyTermExp) {
 					CObjectPropertyExpression* propertyExp = dynamic_cast<CObjectPropertyExpression*>(propertyTermExp);
 					if (propertyExp) {
 						return visitEntityExpression(propertyExp,ontology);
