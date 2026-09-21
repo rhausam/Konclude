@@ -620,10 +620,11 @@ with 48 GB and the statically linked library:
 41.8 s  walking all 374 710 classes, 619 472 direct super class nodes
 ```
 
-13 to 16 GB for the process as a whole, about 1 GB of it the Java heap. The result agrees with
-the command line, which infers 619 474 direct super class nodes for the same file, within the
-run to run variation described above. The classification time depends strongly on how much
-memory is free: the same run took 148 s on a machine that was paging.
+13 to 16 GB for the process as a whole, about 1 GB of it the Java heap. The result agrees
+exactly with the command line: both infer 619 472 direct super class nodes for this file, and
+four runs of the same binary produce the same hierarchy, since the classification no longer
+skips the subsumption tests. The classification time depends strongly on how much memory is
+free: the same run took 148 s on a machine that was paging.
 
 The comparison that matters for a plug-in is with the OWLlink route that Protege uses today,
 where the ontology is rendered into a 349 MB `Tell` request, which costs about 30 s and a copy
