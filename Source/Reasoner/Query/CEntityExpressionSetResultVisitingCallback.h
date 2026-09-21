@@ -33,6 +33,7 @@
 #include "Parser/Expressions/CExpressionEntity.h"
 #include "Parser/Expressions/CClassTermExpression.h"
 #include "Parser/Expressions/CClassExpression.h"
+#include "Parser/Expressions/CInverseObjectPropertyOfExpression.h"
 
 #include "Reasoner/Ontology/CConcreteOntology.h"
 

@@ -128,7 +128,7 @@ namespace Konclude {
 					CRole* role = ont->getStringMapping()->getRoleFromName(propertyName);
 					if (role) {
 						CCalculationConfigurationExtension* calcConfig = new CCalculationConfigurationExtension(mOntRevData->getOntologyRevision()->getOntologyConfiguration());
-						CSubSuperPropertiesResultVisitCallbackQuery* subSuperPropertiesQuery = new CSubSuperPropertiesResultVisitCallbackQuery(mOntRevData->getOntologyRevision()->getOntology(),calcConfig,role,propertyName,true,false,false,direct);
+						CSubSuperPropertiesResultVisitCallbackQuery* subSuperPropertiesQuery = new CSubSuperPropertiesResultVisitCallbackQuery(mOntRevData->getOntologyRevision()->getOntology(),calcConfig,role,propertyName,true,false,direct,false);
 						mJNICommandProcessor->calculateOntologyQuery(subSuperPropertiesQuery);
 						CQueryResult* result = subSuperPropertiesQuery->getQueryResult();
 						if (result) {
@@ -146,7 +146,7 @@ namespace Konclude {
 					CRole* role = ont->getStringMapping()->getRoleFromName(propertyName);
 					if (role) {
 						CCalculationConfigurationExtension* calcConfig = new CCalculationConfigurationExtension(mOntRevData->getOntologyRevision()->getOntologyConfiguration());
-						CSubSuperPropertiesResultVisitCallbackQuery* subSuperPropertiesQuery = new CSubSuperPropertiesResultVisitCallbackQuery(mOntRevData->getOntologyRevision()->getOntology(),calcConfig,role,propertyName,false,true,false,direct);
+						CSubSuperPropertiesResultVisitCallbackQuery* subSuperPropertiesQuery = new CSubSuperPropertiesResultVisitCallbackQuery(mOntRevData->getOntologyRevision()->getOntology(),calcConfig,role,propertyName,false,true,direct,false);
 						mJNICommandProcessor->calculateOntologyQuery(subSuperPropertiesQuery);
 						CQueryResult* result = subSuperPropertiesQuery->getQueryResult();
 						if (result) {

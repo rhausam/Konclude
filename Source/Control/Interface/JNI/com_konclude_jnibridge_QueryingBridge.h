@@ -82,7 +82,7 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLTypes
 /*
  * Class:     com_konclude_jnibridge_QueryingBridge
  * Method:    queryOWLSameIndividuals
- * Signature: (Lcom/konclude/jnibridge/KoncludeReasonerBridge;Ljava/lang/String;Ljava/lang/Object;Lcom/konclude/jnibridge/SetOfObjectSetCallbackListener;)V
+ * Signature: (Lcom/konclude/jnibridge/KoncludeReasonerBridge;Ljava/lang/String;Ljava/lang/Object;Lcom/konclude/jnibridge/ObjectSetCallbackListener;)V
  */
 JNIEXPORT void JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLSameIndividuals
   (JNIEnv *, jobject, jobject, jstring, jobject, jobject);
