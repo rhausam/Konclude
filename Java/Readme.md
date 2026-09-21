@@ -396,6 +396,41 @@ namespace disjoint copies of it (109 920 classes, four runs, 1 230 200 pairs), w
 missing or extra in any run.
 
 
+### THE PRE CHECK ON THE OTHER CLASSIFIER
+
+That condition is a property of the saturation as a whole. It does not establish that the
+saturation produced data for each individual class concept, and the extracting classifier is
+the one place that does not check. `CPrecomputedSaturationSubsumerExtractor::getConceptFlags`
+returns false when it cannot reach the saturation data for a concept, which is exactly when
+`extractSubsumers` would report no subsumers at all; the KPSet and the SubClass classifier
+both test that return value, the extracting classifier discards it. A concept in that state
+would be classified with no subsumers and nothing would report it, which is the same silent
+shape as the defect above.
+
+`CConfigDependedSubsumptionClassifierFactory` therefore verifies, before choosing the
+extracting classifier, that every active class concept has saturation data, and otherwise
+classifies with subsumption tests instead and logs which concept was missing it. The fallback
+is the ordinary one: the SubClass classifier when the ontology is deterministic, KPSet
+otherwise.
+
+`Konclude.Calculation.Classification.RequireSaturationDataForAllClassConcepts` removes the
+pre check. It is on by default.
+
+The check has never been observed to fire. It was exercised by forcing it to report missing
+data, which selects the fallback and produces the same hierarchy for full GALEN, 457 090
+ancestor pairs with nothing missing or extra, at 4.12 s against 3.50 s. Left to decide for
+itself it costs nothing measurable, on the same binary with the setting on and off,
+alternating over four rounds on full GALEN:
+
+```
+pre check on  : 3.32  3.33  3.16  3.50 s
+pre check off : 3.37  3.37  3.39  3.37 s
+```
+
+The scan is a single pass over the active class concepts with one pointer chase each, and it
+is smaller than the spread between runs.
+
+
 ## OTHER LIMITATIONS
 
 - Annotations and annotation axioms are dropped by the translator, which matches the
