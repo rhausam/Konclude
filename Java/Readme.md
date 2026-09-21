@@ -234,10 +234,54 @@ without having constructed the graph, the promise behind the first flag has not 
 the individuals are precomputed after all. `isFullCompletionGraphConstructed` already existed
 for exactly this distinction and had no reader until now.
 
-The five OWLlink and SPARQL tests of the CI answer the same before and after. Note that
-Konclude is a parallel reasoner and returns its answers in a different order on every run, so
-those responses have to be compared as sets and without the response times, not byte for
-byte.
+### WHAT IT WAS CHECKED AGAINST
+
+The five OWLlink and SPARQL tests of the CI answer the same before and after, and so does the
+classification of SNOMED CT (the November 2024 OWL/XML release, 302 MB, 225 000 SubClassOf
+axioms), on an M3 Mac with 48 GB:
+
+| | master | with the fix |
+| --- | --- | --- |
+| wall time | 45.0 s | 44.1 s |
+| peak resident set size | 14.5 GB | 12.9 GB |
+| preprocessing / precomputing / classification | 7.3 / 23.9 / 7.1 s | 7.9 / 23.1 / 6.3 s |
+| inferred subsumptions | 602 853 | 602 871 |
+
+Do not read those differences as an improvement, they are inside the run to run variation
+described below. Note also that SNOMED CT has no individuals at all, so it never reaches the
+code that this fix changes. It says that the classification is not disturbed, not that the
+fix works.
+
+**The trigger is a matter of size, and not in the direction one would expect.** With N
+subjects that each have two values of one functional property, so N forced merges:
+
+| forced merges | 1 | 10 | 100 | 1000 | 3000 | 10000 | 20000 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| master | hangs | hangs | hangs | hangs | ok | ok | ok |
+| with the fix | ok | ok | ok | ok | ok | ok | ok |
+
+Somewhere between 1000 and 3000 individuals Konclude chooses another strategy and master
+stops hanging by itself, so it is the small and the medium ABox that is affected. At 1000
+forced merges the fix answers correctly, `y0_1` with `y0_2` and `y999_1` with `y999_2`.
+
+
+### COMPARING TWO RUNS OF KONCLUDE
+
+Konclude does not answer the same way twice, which has to be taken into account when a change
+is checked against a previous result.
+
+The obvious part is the order: synsets, bindings and XML attributes come back in a different
+order on every run, and a response carries its `response-time`, so responses have to be
+compared as sets and without the timings rather than byte for byte.
+
+The less obvious part is that the answers themselves vary a little. Two runs of the **same,
+unchanged** binary over SNOMED CT differ in about 90 of the 602 000 inferred subsumptions,
+and roughly 37 of those are not even entailed by the other run's hierarchy, so one of the two
+runs misses them. It is not a race between the processing threads, two runs with `-w 1`
+differ as well, which points at an iteration over addresses rather than over the entities
+themselves. It is about 0.006 % of the hierarchy and it is not caused by anything here, the
+released binary does it too, but a comparison that does not expect it will report a
+difference that has nothing to do with the change being tested.
 
 
 ### WHAT IS LEFT IN THE WRAPPER
