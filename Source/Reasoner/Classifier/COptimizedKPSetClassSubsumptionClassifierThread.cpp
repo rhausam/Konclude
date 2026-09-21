@@ -351,8 +351,11 @@ namespace Konclude {
 								// this is explicitly asked for, see
 								// Konclude.Calculation.Classification.TrustSaturationSubsumerCompleteness.
 								// The subsumers of the saturation are still used, only the tests that
-								// would confirm them are no longer skipped, which costs about a third
-								// of the classification time of SNOMED CT.
+								// would confirm them are no longer skipped. That turned out to cost
+								// nothing measurable: over three pairs of alternating runs of the same
+								// binary with the setting on and off, classifying SNOMED CT took 15.6 s
+								// with the tests and 15.8 s without them, a difference well inside the
+								// spread of the runs themselves.
 								if (mConfTrustSaturationSubsumerCompleteness
 										&& !insufficientFlag && !possibleSubsumerFlag && !incompleteProcessedFlag) {
 									classItem->setResultSatisfiableDerivated(true);

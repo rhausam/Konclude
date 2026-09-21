@@ -267,21 +267,20 @@ forced merges the fix answers correctly, `y0_1` with `y0_2` and `y999_1` with `y
 
 ### COMPARING TWO RUNS OF KONCLUDE
 
-Konclude does not answer the same way twice, which has to be taken into account when a change
-is checked against a previous result.
+Konclude does not answer in the same order twice: synsets, bindings and XML attributes come
+back differently arranged on every run, and a response carries its `response-time`. Responses
+therefore have to be compared as sets and without the timings rather than byte for byte.
 
-The obvious part is the order: synsets, bindings and XML attributes come back in a different
-order on every run, and a response carries its `response-time`, so responses have to be
-compared as sets and without the timings rather than byte for byte.
+A classification result also has to be compared as a *closure* and not as a set of edges.
+Which member of a set of equivalent classes carries the parent edges is not fixed, so two
+runs can describe the same hierarchy with different edges. Comparing the edges directly
+reports differences that are not there, and a closure that does not contract the equivalence
+cycles first loses the ancestors of one member of every such set, which looks exactly like a
+missing inference.
 
-The less obvious part is that the answers themselves vary a little. Two runs of the **same,
-unchanged** binary over SNOMED CT differ in about 90 of the 602 000 inferred subsumptions,
-and roughly 37 of those are not even entailed by the other run's hierarchy, so one of the two
-runs misses them. It is not a race between the processing threads, two runs with `-w 1`
-differ as well, which points at an iteration over addresses rather than over the entities
-themselves. It is about 0.006 % of the hierarchy and it is not caused by anything here, the
-released binary does it too, but a comparison that does not expect it will report a
-difference that has nothing to do with the change being tested.
+The answers themselves used to vary as well, by about 90 of the 602 000 inferred subsumptions
+per pair of runs. That was the defect described under THE CLASSIFICATION THAT LOST
+SUBSUMPTIONS below and it is fixed; four runs now produce byte identical hierarchies.
 
 
 ### WHAT IS LEFT IN THE WRAPPER
@@ -327,6 +326,74 @@ threads crashes the virtual machine rather than raising an exception, which is w
 `KoncludeReasoner` runs the initialisation, the queries and the closing of an instance all on
 the same watch dog thread when a time out is configured. A caller that drives one reasoner
 from several threads has to serialise the calls itself.
+
+
+## THE CLASSIFICATION THAT LOST SUBSUMPTIONS
+
+Classifying SNOMED CT lost inferences. Repeated runs of the same binary over the same file
+lost between 3 and 42 of the 56 subsumptions that were seen to vary, over 46 concepts, and no
+run ever reported one that does not hold. It is a silent defect: a lost subsumption is simply
+absent from the result and nothing reports it.
+
+`COptimizedKPSetClassSubsumptionClassifierThread` takes the subsumers of a concept from its
+precomputed saturation and, when the saturation reports itself as sufficient, complete and
+free of possible subsumers, marks the result as derived so that no subsumption test is ever
+run for that concept. When the extracted set is nevertheless incomplete, the missing
+subsumptions can no longer be found.
+
+Which concepts lose subsumers depends on the memory layout of the process and not on the
+ontology. It happens single threaded as well, and recording anything about the decision, even
+into a preallocated array, is enough to make the losses disappear, which is why the defect
+resists being observed from inside. The conditions under which the sufficiency flags are
+wrong were therefore not determined, and the flags are no longer trusted as a reason to skip
+the tests.
+
+Six runs with the shortcut and six without, on the same file, before the fix:
+
+```
+shortcut disabled : 0  0  0  0  0  0
+unmodified        : 0 15 27 21 32 12     lost subsumptions per run
+```
+
+`Konclude.Calculation.Classification.TrustSaturationSubsumerCompleteness` restores the
+previous behaviour. It is off by default.
+
+
+### WHAT IT COSTS
+
+Nothing measurable. The same binary with the setting on and off, alternating runs so that the
+state of the machine counts for both:
+
+| | classification | wall |
+| --- | --- | --- |
+| tests no longer skipped (the default) | 15.6 s | 40.6 / 43.8 / 41.1 s |
+| previous behaviour | 15.8 s | 40.9 / 42.5 / 42.8 s |
+
+The difference is 1 %, it changes sign between rounds, and it is smaller than the spread
+within either arm. Note that in all six of those runs the previous behaviour happened to lose
+no subsumptions, so they compare runs that did equivalent work; a run where the shortcut
+would have fired more often could cost more.
+
+
+### WHAT IT WAS CHECKED AGAINST
+
+With the fix, four runs produce byte identical hierarchies for SNOMED CT, and the result
+agrees with ELK exactly: 7 557 791 ancestor pairs over 369 185 classes, none missing on
+either side.
+
+ELK is not a complete reference for SNOMED CT though. It warns 72 217 times that it supports
+`DataHasValue` only partially and ignores the 10 `SubDataPropertyOf` axioms, so the agreement
+says nothing about the datatype part of the ontology. That part was checked separately
+against HermiT, which is complete for OWL 2 DL, on a locality based module around the
+`DataHasValue` axioms: 1 162 classes, `SRI(D)`, classified by this same classifier, 11 332
+ancestor pairs, none missing on either side over three runs.
+
+The other classifier, `COptimizedClassExtractedSaturationSubsumptionClassifierThread`, does
+not have this defect. It is only chosen when no insufficient node occurred anywhere in the
+saturation at all, which is a far stronger condition than the per concept flags, and it was
+checked against HermiT on GALEN (2 748 classes, `SHIF`, six runs, 30 755 pairs) and on forty
+namespace disjoint copies of it (109 920 classes, four runs, 1 230 200 pairs), with nothing
+missing or extra in any run.
 
 
 ## OTHER LIMITATIONS
