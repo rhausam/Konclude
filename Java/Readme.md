@@ -506,6 +506,63 @@ The scan is a single pass over the active class concepts with one pointer chase 
 is smaller than the spread between runs.
 
 
+### WHAT THE CAUSE IS NOT
+
+The account above says the defect answers to the layout of the binary and that it happens
+single threaded as well. Both were probed directly on a build of `d981a6b3`, the commit before
+the fix, and neither holds in the form stated.
+
+Address layout is not it. Launched through `posix_spawn` with `_POSIX_SPAWN_DISABLE_ASLR`, so
+that the binary loads at the same address in every run, verified by comparing the `__TEXT`
+range, six runs of SNOMED CT still disagree. Randomised addresses therefore do not select which
+concepts lose subsumers, whatever else the allocation layout does.
+
+`-w 1` does not make Konclude single threaded, so the runs that carry that flag do not exclude
+concurrency. The process runs 20 threads, and sampling during such a classification finds two
+of them inside saturation and tableau code at the same moment.
+`CConcurrentTaskScheduler::run` dispatches through `QtConcurrent` whenever the thread pool
+holds more than one thread, and the second saturation thread is not a pool thread, so no
+setting serialises it.
+
+What else was excluded, each on SNOMED CT with the runs still disagreeing afterwards:
+
+```
+uninitialised heap values : MallocPreScribble=1 MallocScribble=1
+Qt hash iteration order   : QT_HASH_SEED=0
+decisions on elapsed time : the kernel contains none
+memory driven caching     : the memory level of CSignatureSatisfiableExpanderCache put out of reach
+a shared saturation budget: every Saturation...ProcessLimit and the checking depth raised
+parallel classification   : MaximumParallelSubsumptionCalculationCount and both classifier counts at 1
+```
+
+The last one also deadlocks: with the subsumption calculation count at 1, the third run of
+SNOMED CT sat at 0 % CPU for 58 minutes with four threads waiting on locks or semaphores, which
+is the shape of the thread pool starvation fixed in 658c7bb2.
+
+### A SMALLER REPRODUCER
+
+The defect needs scale, and STAR modules of SNOMED CT extracted with the OWL API bracket it.
+The signature is the 63 classes that were seen in differing subsumptions plus a number of
+random ones:
+
+```
+  63 signature classes ->    928 classes,   1 872 axioms, tiny    : 8 runs agree
+2000 signature classes -> 51 330 classes, 102 810 axioms,  4.8 GB : 8 runs agree
+8000 signature classes -> 95 073 classes, 190 161 axioms, 11.2 GB : 3 of 7 runs disagree
+25000 signature classes -> 146 245 classes, 292 333 axioms, 15.5 GB : 5 of 5 disagree
+full ontology          -> 374 710 classes, 750 302 axioms, 14.0 GB : 5 of 5 disagree
+```
+
+So a quarter of the axioms still reproduces it, and the threshold lies between 51 000 and
+95 000 classes. Lowering the expander cache thresholds to 1 MB on the stable module does not
+make it appear, so the scale is not acting through that cache.
+
+A race detector is the instrument this wants next, and the reason for keeping a smaller
+reproducer: ThreadSanitizer multiplies the memory of a run by five to ten, which the full
+ontology cannot afford on a 48 GB machine and the 95 073 class module still cannot. It becomes
+affordable on a machine with 128 GB, and the module is the input that makes that run worth
+starting.
+
 ## OTHER LIMITATIONS
 
 - Annotations and annotation axioms are dropped by the translator, which matches the
