@@ -563,6 +563,50 @@ ontology cannot afford on a 48 GB machine and the 95 073 class module still cann
 affordable on a machine with 128 GB, and the module is the input that makes that run worth
 starting.
 
+### A LIBRARY WITHOUT QT DEPENDENCIES
+
+Konclude is written in Qt rather than merely using it for input and output: `QString` appears
+in 1642 of the 5215 source files, `QList` in 572, `QSet` in 352 and `QHash` in 348, so the
+containers, strings, threads and the XML parser of the reasoner are Qt. Only `QTcpServer`,
+which the OWLlink and SPARQL servers need, is confined to a single file, so a library for a
+plug-in still needs QtCore, QtXml and QtConcurrent. Built against the Qt of a package manager,
+the library carries them as dependencies and runs only where that Qt is installed at the same
+path, which is what makes shipping it awkward.
+
+Built against a static Qt it carries none of them. The release workflow already builds such a
+Qt for the macOS and Linux packages, and the same one serves here:
+
+```
+qtbase 5.15.17, configured as in .github/workflows/build-release-with-redland.yml:
+  ./configure -static -release -opensource -confirm-license -prefix <prefix> -platform macx-clang \
+    -no-gui -no-widgets -no-opengl -no-icu -no-dbus -no-feature-gssapi -no-zstd -qt-pcre \
+    -no-sql-mysql -no-sql-psql -no-sql-odbc -nomake examples -nomake tests \
+    QMAKE_APPLE_DEVICE_ARCHS=arm64
+
+<prefix>/bin/qmake -o Makefile KoncludeLIB.pro -after "QT-=gui" \
+    "CONFIG-=static staticlib" "CONFIG+=shared dll"
+make -j16
+```
+
+The two `CONFIG` arguments are needed. A static Qt propagates `CONFIG += static` into the
+project, and a library project then builds `libKonclude.a`, an archive that `System.loadLibrary`
+cannot load. `QT-=gui` drops a dependency on QtGui that the reasoner does not use at all.
+
+The result on macOS is 23.5 MB and depends on the system frameworks only:
+
+```
+SystemConfiguration, DiskArbitration, IOKit, AppKit, Security, ApplicationServices,
+CoreServices, CoreFoundation, Foundation, CFNetwork, libSystem, libc++, libz, libobjc
+```
+
+`otool -L` reports no Qt library at all, against five for a library built with the Qt of
+Homebrew. Both `Java/run-jni-smoke-test.sh` and `Java/run-owlapi-test.sh` pass against it, so a
+plug-in can ship a single self-contained library the way the FaCT++ plug-in does.
+
+This was done on macOS only. A Linux build needs the static Qt compiled with position
+independent code before it can be linked into a shared object, and a Windows build needs a
+static Qt for the Visual Studio tool set, which the release workflow does not build.
+
 ## OTHER LIMITATIONS
 
 - Annotations and annotation axioms are dropped by the translator, which matches the
@@ -576,9 +620,9 @@ starting.
   datatype only.
 - The bridge cannot update an installed ontology, so `flush()` translates the whole ontology
   into a fresh library instance.
-- The shared library depends on the Qt libraries, in contrast to the self-contained native
-  libraries of other reasoners, which has to be taken into account when the library is
-  shipped, for a Protege plug-in for instance.
+- The shared library depends on the Qt libraries when it is built against a shared Qt, in
+  contrast to the self-contained native libraries of other reasoners. Building it against a
+  static Qt removes that, see below.
 - A non-empty configuration string for `initKoncludeLibraryInstance` replaces the default
   loading arguments instead of extending them, so it also has to contain
   `-JNICommandProcessorLoader`. The `missing-processor` scenario of the smoke test documents
