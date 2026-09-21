@@ -24,20 +24,25 @@ package com.konclude.jnibridge;
  * Asks the native reasoner, corresponds to
  * Source/Control/Interface/JNI/com_konclude_jnibridge_QueryingBridge.cpp.
  *
- * ATTENTION: this is only the part of the bridge that the smoke test requires. The native
- * side provides 12 entry points, namely
+ * All 12 entry points that the native side declares are declared here.
  *
- *   checkIsOWLOntologyConsistent
- *   queryOWLSubClasses, queryOWLSuperClasses, queryOWLEquivalentClasses
- *   queryOWLSubObjectProperties, queryOWLSuperObjectProperties, queryOWLEquivalentObjectProperties
- *   queryOWLInstances, queryOWLTypes, queryOWLSameIndividuals
- *   queryOWLObjectPropertySources, queryOWLObjectPropertyTargets
+ * An entity is identified by its IRI, the object beside it is only handed over so that the
+ * native side can remember it if the entity has not been built before. The results are not
+ * returned, they are reported to the callback listener, which receives the objects that were
+ * handed over while the entities were built.
  *
- * so the queries of the data property hierarchy and several other questions of the OWL API
- * OWLReasoner interface are not provided by the native side yet.
+ * The hierarchy queries report a set per set of equivalent entities and therefore take a
+ * SetOfObjectSetCallbackListener, the queries that answer with a flat set take an
+ * ObjectSetCallbackListener. A reported set can be empty, for instance for the bottom node
+ * if no object has been associated with owl:Nothing while the ontology was built.
  *
- * The results are not returned, they are reported to the callback listener, which receives
- * the objects that were handed over while the entities were built.
+ *
+ * WHAT THE NATIVE SIDE DOES NOT ANSWER
+ *
+ * The 12 queries do not cover the OWL API OWLReasoner interface. Missing are the hierarchy
+ * of the data properties, the disjoint classes and properties, the domains and the ranges of
+ * properties, the inverse properties, the different individuals, the data property values
+ * and the entailment check, so the native side has to be extended for them.
  */
 public class QueryingBridge {
 
@@ -48,8 +53,69 @@ public class QueryingBridge {
 	public QueryingBridge() {
 	}
 
+
+	// ----------------------------------------------------------- consistency
+
+	public native boolean checkIsOWLOntologyConsistent(KoncludeReasonerBridge bridge);
+
+
+	// ------------------------------------------------------- class hierarchy
+
 	public native void queryOWLSubClasses(KoncludeReasonerBridge bridge, String iri, Object classObject,
 			SetOfObjectSetCallbackListener callback, boolean direct);
+
+	public native void queryOWLSuperClasses(KoncludeReasonerBridge bridge, String iri, Object classObject,
+			SetOfObjectSetCallbackListener callback, boolean direct);
+
+	public native void queryOWLEquivalentClasses(KoncludeReasonerBridge bridge, String iri, Object classObject,
+			ObjectSetCallbackListener callback);
+
+
+	// --------------------------------------------- object property hierarchy
+
+	/**
+	 * ATTENTION: the native side accepts the inverses flag but ignores it, it calls
+	 * queryOntologySubObjectProperties with the IRI, the direct flag and the callback only.
+	 */
+	public native void queryOWLSubObjectProperties(KoncludeReasonerBridge bridge, String iri, Object propertyObject,
+			SetOfObjectSetCallbackListener callback, boolean direct, boolean inverses);
+
+	/** ATTENTION: the native side ignores the inverses flag, see queryOWLSubObjectProperties */
+	public native void queryOWLSuperObjectProperties(KoncludeReasonerBridge bridge, String iri, Object propertyObject,
+			SetOfObjectSetCallbackListener callback, boolean direct, boolean inverses);
+
+	public native void queryOWLEquivalentObjectProperties(KoncludeReasonerBridge bridge, String iri, Object propertyObject,
+			ObjectSetCallbackListener callback);
+
+
+	// --------------------------------------------------------------- ABox
+
+	public native void queryOWLInstances(KoncludeReasonerBridge bridge, String iri, Object classObject,
+			SetOfObjectSetCallbackListener callback, boolean direct);
+
+	public native void queryOWLTypes(KoncludeReasonerBridge bridge, String iri, Object individualObject,
+			SetOfObjectSetCallbackListener callback, boolean direct);
+
+	/**
+	 * The individuals that are the same as the given one, a flat set, so this takes an
+	 * ObjectSetCallbackListener like the other queries that answer with one set. The generated
+	 * header declared a SetOfObjectSetCallbackListener here while the implementation has always
+	 * looked up visitObject on ObjectSetCallbackListener, which terminated the virtual machine
+	 * as soon as the query reported anything.
+	 */
+	public native void queryOWLSameIndividuals(KoncludeReasonerBridge bridge, String iri, Object individualObject,
+			ObjectSetCallbackListener callback);
+
+	/** the individuals that are related to the given one by the given property */
+	public native void queryOWLObjectPropertySources(KoncludeReasonerBridge bridge,
+			String individualIRI, Object individualObject, String propertyIRI, Object propertyObject,
+			SetOfObjectSetCallbackListener callback);
+
+	/** the individuals that the given one is related to by the given property */
+	public native void queryOWLObjectPropertyTargets(KoncludeReasonerBridge bridge,
+			String individualIRI, Object individualObject, String propertyIRI, Object propertyObject,
+			SetOfObjectSetCallbackListener callback);
+
 
 	/** only of interest for the smoke test, to show that the native side filled the field */
 	public long getNativeDataPointer() {
