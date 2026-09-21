@@ -39,7 +39,7 @@ public class KoncludeReasonerFactory implements OWLReasonerFactory {
 	private final KoncludeReasoner.MergeSafety mMergeSafety;
 
 	public KoncludeReasonerFactory() {
-		this("", KoncludeReasoner.MergeSafety.DETECT);
+		this("", KoncludeReasoner.MergeSafety.OFF);
 	}
 
 	/**
@@ -47,7 +47,7 @@ public class KoncludeReasonerFactory implements OWLReasonerFactory {
 	 * reasoner, see KoncludeReasoner.
 	 */
 	public KoncludeReasonerFactory(String loadingConfiguration) {
-		this(loadingConfiguration, KoncludeReasoner.MergeSafety.DETECT);
+		this(loadingConfiguration, KoncludeReasoner.MergeSafety.OFF);
 	}
 
 	public KoncludeReasonerFactory(KoncludeReasoner.MergeSafety mergeSafety) {
@@ -56,12 +56,12 @@ public class KoncludeReasonerFactory implements OWLReasonerFactory {
 
 	/**
 	 * The merge safety says what to do about an ABox that forces two individuals to be merged,
-	 * which Konclude does not terminate on unless the completion graph is built, see
+	 * which only matters against a shared library that predates the fix for it, see
 	 * KoncludeReasoner.MergeSafety.
 	 */
 	public KoncludeReasonerFactory(String loadingConfiguration, KoncludeReasoner.MergeSafety mergeSafety) {
 		mLoadingConfiguration = loadingConfiguration != null ? loadingConfiguration : "";
-		mMergeSafety = mergeSafety != null ? mergeSafety : KoncludeReasoner.MergeSafety.DETECT;
+		mMergeSafety = mergeSafety != null ? mergeSafety : KoncludeReasoner.MergeSafety.OFF;
 	}
 
 	@Override

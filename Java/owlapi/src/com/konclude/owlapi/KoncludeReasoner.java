@@ -93,19 +93,23 @@ import java.util.concurrent.TimeoutException;
 public class KoncludeReasoner implements OWLReasoner {
 
 	/**
-	 * What to do about an ABox that forces two individuals to be merged, which Konclude does
-	 * not terminate on unless the completion graph is built, see Java/Readme.md.
+	 * What to do about an ABox that forces two individuals to be merged.
+	 *
+	 * Konclude used to stay in its precomputation for such an ontology unless the completion
+	 * graph was built, see Java/Readme.md. That is fixed in
+	 * CTotallyPrecomputationThread::createIndividualPrecomputationCheck, so OFF is the
+	 * default. The other two remain for a shared library that predates the fix.
 	 */
 	public enum MergeSafety {
+		/** leave the loading configuration alone, the default */
+		OFF,
 		/**
-		 * Look at the ontology and build the completion graph only if a forced merge was
-		 * found, see KoncludeIndividualMergeInspector. The default.
+		 * Look at the ontology and build the completion graph if a forced merge is found, see
+		 * KoncludeIndividualMergeInspector. For a library that predates the fix.
 		 */
 		DETECT,
 		/** always build the completion graph, which is safe and slower */
-		ALWAYS,
-		/** never change the loading configuration, the reasoner may then not answer */
-		NEVER
+		ALWAYS
 	}
 
 	/** the name of the shared library, without the platform specific prefix and suffix */
@@ -126,14 +130,11 @@ public class KoncludeReasoner implements OWLReasoner {
 	 * 'Konclude.Calculation.Precomputation.ForceFullCompletionGraphConstruction', which makes
 	 * Konclude build the completion graph instead of taking its saturation based short cuts.
 	 *
-	 * This is the way around the defect described in Java/Readme.md: Konclude does not
-	 * terminate while precomputing an ontology whose ABox forces two named individuals to be
-	 * merged, a functional property with two targets for instance, unless the ontology also
-	 * contains a SameIndividual or DifferentIndividuals axiom. Every query that needs the
-	 * classification or the realisation then hangs, only the consistency check answers.
-	 *
-	 * It is not the default here because building the completion graph is the expensive path
-	 * that the short cuts exist to avoid, which matters for a large ABox.
+	 * This was the way around the defect described in Java/Readme.md, where Konclude stayed in
+	 * its precomputation for an ontology whose ABox forces two named individuals to be merged.
+	 * That is fixed, so this is only needed against a shared library that predates the fix,
+	 * see MergeSafety. Building the completion graph is the expensive path that the short cuts
+	 * exist to avoid, which matters for a large ABox.
 	 */
 	public static final String FULL_COMPLETION_GRAPH_LOADING_CONFIGURATION =
 			"-DefaultReasonerLoader "
@@ -205,12 +206,12 @@ public class KoncludeReasoner implements OWLReasoner {
 
 	public KoncludeReasoner(OWLOntology rootOntology, OWLReasonerConfiguration configuration,
 			BufferingMode bufferingMode) {
-		this(rootOntology, configuration, bufferingMode, "", MergeSafety.DETECT);
+		this(rootOntology, configuration, bufferingMode, "", MergeSafety.OFF);
 	}
 
 	public KoncludeReasoner(OWLOntology rootOntology, OWLReasonerConfiguration configuration,
 			BufferingMode bufferingMode, String loadingConfiguration) {
-		this(rootOntology, configuration, bufferingMode, loadingConfiguration, MergeSafety.DETECT);
+		this(rootOntology, configuration, bufferingMode, loadingConfiguration, MergeSafety.OFF);
 	}
 
 	/**
@@ -229,7 +230,7 @@ public class KoncludeReasoner implements OWLReasoner {
 		mConfiguration = configuration != null ? configuration : new SimpleConfiguration();
 		mBufferingMode = bufferingMode != null ? bufferingMode : BufferingMode.BUFFERING;
 		mLoadingConfiguration = loadingConfiguration != null ? loadingConfiguration : "";
-		mMergeSafety = mergeSafety != null ? mergeSafety : MergeSafety.DETECT;
+		mMergeSafety = mergeSafety != null ? mergeSafety : MergeSafety.OFF;
 		if (getTimeOut() != Long.MAX_VALUE && getTimeOut() > 0) {
 			mWatchdog = Executors.newSingleThreadExecutor(new ThreadFactory() {
 				@Override
@@ -306,7 +307,7 @@ public class KoncludeReasoner implements OWLReasoner {
 			return FULL_COMPLETION_GRAPH_LOADING_CONFIGURATION;
 		}
 		mMergeInspector = null;
-		if (mMergeSafety == MergeSafety.NEVER) {
+		if (mMergeSafety == MergeSafety.OFF) {
 			return mLoadingConfiguration;
 		}
 		KoncludeIndividualMergeInspector inspector = new KoncludeIndividualMergeInspector(mRootOntology);

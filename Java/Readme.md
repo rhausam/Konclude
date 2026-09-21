@@ -66,8 +66,8 @@ see `OWLAPI_VERSION` in the script.
 | `inconsistency` | an inconsistent ontology is reported as inconsistent |
 | `unsupported` | every question that the bridge cannot answer throws an `UnsupportedOperationException` |
 | `lifecycle` | three reasoners in one virtual machine, and `flush` after a change of the ontology |
-| `merges` | an ABox that forces two individuals to be merged, which is detected and answered, and one that does not |
-| `timeout` | a question that Konclude does not answer is reported as a `TimeOutException` |
+| `merges` | an ABox that forces two individuals to be merged, which the precomputation used to hang on |
+| `timeout` | a call that overruns the configured time out is reported as a `TimeOutException` |
 
 All scenarios pass on macOS on arm64 with Liberica JDK 17 and Qt 5.15.
 
@@ -183,97 +183,96 @@ run. Driving them against the library brought out the following, all of which ar
   corrected to `ObjectSetCallbackListener`.
 
 
-## A DEFECT OF THE REASONER THAT IS STILL OPEN
+## THE PRECOMPUTATION THAT DID NOT FINISH
 
-Konclude does not terminate while precomputing an ontology whose ABox forces two **named**
-individuals to be merged, unless the completion graph is built. The smallest case found is
+Konclude used to stay in its precomputation for an ontology whose ABox forces two **named**
+individuals to be merged. The smallest case is
 
 ```
 FunctionalObjectProperty(r)   ObjectPropertyAssertion(r x y1)   ObjectPropertyAssertion(r x y2)
 ```
 
-`InverseFunctionalObjectProperty` and `ObjectMaxCardinality 1` behave the same way, so it is
-the merge that matters and not the axiom that forces it.
+and `InverseFunctionalObjectProperty` and `ObjectMaxCardinality 1` behave the same way, so it
+is the merge that matters and not the axiom that forces it. Every question that needs the
+classification or the realisation hung, `GetSameIndividuals`, `GetSubClasses`, `GetTypes` and
+`GetInstances` alike, while `IsKBSatisfiable` answered normally. It was not a loop: the
+process sat at 0% CPU with every thread idle in its event loop, and the log stopped after
+`Precomputing ontology '...'`.
 
-This is not a defect of the bridge or of the wrapper. The released Konclude binary behaves
-the same way over OWLlink, without any Java involved, which is how it was separated from the
-JNI work.
-
-
-### WHAT WAS OBSERVED
-
-- Every question that needs the classification or the realisation hangs, `GetSameIndividuals`,
-  `GetSubClasses`, `GetTypes` and `GetInstances` alike. `IsKBSatisfiable` answers normally.
-- The process is not busy, it sits at 0% CPU with every thread idle in its event loop, so it
-  is a lost wake-up and not a loop. The log stops after `Precomputing ontology '...'` and the
-  matching `Finished precomputing` never arrives, so it never leaves the precomputation.
-- The merge has to be forced and not already known. A functional property with only one value
-  is fine, and so is one whose values are asserted to be the same individual anyway.
-- Adding a `SameIndividual` or `DifferentIndividuals` axiom about two other, completely
-  unrelated individuals makes the hang go away, and so does a
-  `NegativeObjectPropertyAssertion`. Adding an `ObjectHasValue` or an `ObjectOneOf` does not,
-  although those also make Konclude report nominals in the expressiveness, so it is not the
-  nominals as such: it is whether the individuals of the ABox are pushed onto the completion
-  graph instead of the saturation short cut.
-- Setting `Konclude.Calculation.Precomputation.ForceFullCompletionGraphConstruction` to
-  `true` makes all of these cases terminate, with the right answers.
-
-Taken together this puts the defect in the saturation based short cut of the precomputation,
-the part that avoids building the completion graph and instead retrieves and precomputes the
-"insufficiently handled" individuals in batches through the representative association cache,
-see `CTotallyPrecomputationThread::createIndividualPrecomputationCheck` and
-`retrieveIndividualsPrecomputation`. A merge changes which individual represents the
-association cache entry, and the precomputation then waits for a batch that never completes:
-`createNextTest` only creates the consistency check once `isIndividualComputationRunning()`
-and `isPrecompuationRetrievingIncompletelyHandledIndividuals()` are both false again, and
-nothing wakes it if one of them stays set. Fixing that coordination is a change in the core
-of the reasoner, which is why it was left alone here.
+It was not a defect of the bridge. The released Konclude binary did the same over OWLlink,
+with no Java involved, which is how it was separated from the JNI work.
 
 
-### HOW THE WRAPPER HANDLES IT
+### WHAT IT WAS
 
-Rather than letting a caller run into it, `KoncludeReasoner` deals with it in two steps.
+`CTotallyOntologyPrecomputationItem` has two flags that sound alike.
+`isFullCompletionGraphConstruction` says that the consistency check is *meant* to build the
+whole completion graph, which is what makes a separate precomputation of the individuals
+unnecessary. `isFullCompletionGraphConstructed` says that it actually *did*.
 
-**It looks for the merge before loading the ontology.**
-`KoncludeIndividualMergeInspector` reports a subject that has two or more different asserted
-values of one object property whose number of values is restricted somewhere, by a
-functionality axiom or by a maximum or exact cardinality, and the same for the subjects of an
-inverse functional property. If it finds one, the reasoner initialises the library instance
-with `FULL_COMPLETION_GRAPH_LOADING_CONFIGURATION` by itself and answers normally.
-`getForcedIndividualMerge()` and `getAppliedLoadingConfiguration()` report what happened.
+`createIndividualPrecomputationCheck` skipped the precomputation of the insufficiently
+saturated individuals whenever the first flag was set. But
+`createConsistencePrecomputationCheck` only builds the graph when
+`isForceCompletionGraphConstruction` is set; otherwise it is free to decide the consistency
+from the saturation of the all assertion individual instead, and for these ontologies it did,
+logging `Trivial consistency detected with merged individual`. The graph was then never
+built, so nothing precomputed the merged individuals and nothing set
+`hasAllIncompletelyHandledIndividualsRetrieved`, which is what the individual step waits for
+before it reports itself finished. With no work scheduled and no callback outstanding the
+event queues ran empty and the reasoner sat there.
 
-`KoncludeReasoner.MergeSafety` chooses the policy, `DETECT` by default:
+Instrumenting `createNextTest` showed the stranded state directly:
+
+```
+consCheckCreated=1 consChecked=1 allRetrieved=0 allIndiPrecompCreated=0 indiPrecompChecked=0
+```
+
+and the working case, with the completion graph forced, differed only in `allRetrieved=1`.
+
+The fix is in `createIndividualPrecomputationCheck`: once the consistency step has finished
+without having constructed the graph, the promise behind the first flag has not been kept, so
+the individuals are precomputed after all. `isFullCompletionGraphConstructed` already existed
+for exactly this distinction and had no reader until now.
+
+The five OWLlink and SPARQL tests of the CI answer the same before and after. Note that
+Konclude is a parallel reasoner and returns its answers in a different order on every run, so
+those responses have to be compared as sets and without the response times, not byte for
+byte.
+
+
+### WHAT IS LEFT IN THE WRAPPER
+
+`KoncludeReasoner.MergeSafety` and `KoncludeIndividualMergeInspector` were written while the
+defect was open, to find such an ABox and build the completion graph for it. They are kept
+for a shared library that predates the fix and default to `OFF`.
 
 | policy | what it does |
 | --- | --- |
-| `DETECT` | look at the ontology and build the completion graph only where a merge was found |
+| `OFF` | leave the loading configuration alone, the default |
+| `DETECT` | look for a forced merge and build the completion graph if one is found |
 | `ALWAYS` | always build the completion graph, safe and slower |
-| `NEVER` | never touch the loading configuration, the reasoner may then not answer |
 
-The check is syntactic, so it finds the merges that follow directly from the assertions and
-not the ones that only follow after further reasoning. It is deliberately biased towards
-reporting a risk: a false report costs the slower completion graph construction, a missed one
-costs a reasoner that never answers.
-
-**It honours the time out of the OWL API for what the check misses.** If
+The time out of the OWL API is independent of all this and worth having in its own right. If
 `OWLReasonerConfiguration.getTimeOut()` is set, every native call runs on a watch dog thread
-and a call that overruns the time out is reported as the OWL API `TimeOutException` instead
-of blocking the caller for ever:
+and a call that overruns is reported as the OWL API `TimeOutException` instead of blocking
+the caller for ever:
 
 ```java
 OWLReasoner reasoner = new KoncludeReasonerFactory()
         .createReasoner(ontology, new SimpleConfiguration(60000L));
 ```
 
-Two things to know about it. The stuck call **keeps running**, the bridge has no way to
-cancel it, `interrupt()` is a no-op on the native side; its thread is a daemon so that it
-does not keep the virtual machine alive, but it holds its share of the machine until the
-process ends. The reasoner therefore refuses to be used after a time out, with an
-`IllegalStateException`, rather than queueing further calls behind the one that is stuck.
-Without a configured time out no watch dog thread is created at all and the calls happen on
-the calling thread, so nothing is paid for this unless it is asked for.
+Two things to know. The stuck call **keeps running**, the bridge has no way to cancel it and
+`interrupt()` is a no-op on the native side; its thread is a daemon so it does not keep the
+virtual machine alive, but it holds its library instance and its share of the machine until
+the process ends, so another reasoner should not be started beside it. The reasoner refuses
+to be used after a time out, with an `IllegalStateException`, rather than queueing further
+calls behind the one that is stuck. Without a configured time out no watch dog thread is
+created and the calls happen on the calling thread, so nothing is paid for this unless it is
+asked for.
 
-The `merges` and the `timeout` scenario cover both steps.
+The `merges` scenario keeps the fix honest, on the default configuration, and the `timeout`
+scenario covers the watch dog.
 
 
 ### ONE THREAD PER REASONER

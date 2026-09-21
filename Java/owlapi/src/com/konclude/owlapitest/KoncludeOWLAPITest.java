@@ -49,10 +49,10 @@ import java.util.TreeSet;
  *   inconsistency  an inconsistent ontology and an unsatisfiable class
  *   unsupported    every question that the bridge cannot answer is reported as unsupported
  *   lifecycle      several reasoners in one virtual machine, and flush after a change
- *   merges         an ABox that forces two individuals to be merged, which is detected and
- *                  answered, and an ABox that does not, which must not be slowed down
- *   timeout        a question that Konclude does not answer is reported as a TimeOutException
- *                  instead of blocking the caller for ever
+ *   merges         an ABox that forces two individuals to be merged, which Konclude used to
+ *                  stay in its precomputation for
+ *   timeout        a call that overruns the configured time out is reported as a
+ *                  TimeOutException instead of blocking the caller for ever
  */
 public class KoncludeOWLAPITest {
 
@@ -464,9 +464,11 @@ public class KoncludeOWLAPITest {
 
 	/**
 	 * An ABox that forces two named individuals to be merged, here by a functional property
-	 * with two targets. Konclude does not terminate while precomputing such an ontology unless
-	 * the completion graph is built, see Java/Readme.md, so KoncludeReasoner looks for the
-	 * merge and switches the loading configuration by itself.
+	 * with two targets. Konclude used to stay in its precomputation for such an ontology and
+	 * answered nothing that needs the classification or the realisation, see Java/Readme.md.
+	 * This is the check that the fix in
+	 * CTotallyPrecomputationThread::createIndividualPrecomputationCheck keeps working, so it
+	 * deliberately uses the default loading configuration and no merge safety.
 	 */
 	private static void runMerges() throws Exception {
 		OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
@@ -478,13 +480,10 @@ public class KoncludeOWLAPITest {
 			DF.getOWLClassAssertionAxiom(cls("Person"), individual("y1"))
 		)));
 
-		// nothing is configured here, the merge has to be found by the reasoner itself
 		KoncludeReasoner reasoner = (KoncludeReasoner) reasonerFor(merging);
 		try {
-			check("forced merge found             ",
-					Boolean.valueOf(reasoner.getForcedIndividualMerge() != null), Boolean.TRUE);
-			check("completion graph configured    ", Boolean.valueOf(reasoner.getAppliedLoadingConfiguration()
-					.contains("ForceFullCompletionGraphConstruction")), Boolean.TRUE);
+			check("completion graph not forced    ", Boolean.valueOf(reasoner.getAppliedLoadingConfiguration()
+					.contains("ForceFullCompletionGraphConstruction")), Boolean.FALSE);
 			check("consistent", Boolean.valueOf(reasoner.isConsistent()), Boolean.TRUE);
 			// y1 and y2 have to be the same, r is functional and x is related to both
 			check("sameIndividuals(y1), inferred  ",
@@ -492,24 +491,39 @@ public class KoncludeOWLAPITest {
 			// and the merge carries the type of y1 over to y2
 			check("instances(Person, false)       ",
 					names(reasoner.getInstances(cls("Person"), false)), expected("y1", "y2"));
+			check("types(y2, false) has Person    ", Boolean.valueOf(
+					names(reasoner.getTypes(individual("y2"), false)).contains("Person")), Boolean.TRUE);
 		} finally {
 			reasoner.dispose();
 		}
 
-		// an ontology with the same functional property but only one value must not be slowed
-		// down by the check, the completion graph construction is the expensive path
+		// the merge is still found when it is asked for, which is what MergeSafety.DETECT rests
+		// on for a shared library that predates the fix
+		KoncludeReasoner detecting = (KoncludeReasoner) new KoncludeReasonerFactory(
+				KoncludeReasoner.MergeSafety.DETECT).createReasoner(merging);
+		try {
+			check("forced merge found by DETECT   ",
+					Boolean.valueOf(detecting.getForcedIndividualMerge() != null), Boolean.TRUE);
+			check("DETECT builds the graph        ", Boolean.valueOf(detecting.getAppliedLoadingConfiguration()
+					.contains("ForceFullCompletionGraphConstruction")), Boolean.TRUE);
+			check("and answers the same           ",
+					names(detecting.getSameIndividuals(individual("y1"))), expected("y1", "y2"));
+		} finally {
+			detecting.dispose();
+		}
+
+		// an ontology with the same functional property but only one value has no merge
 		OWLOntology harmless = manager.createOntology(IRI.create(NS + "harmless"));
 		manager.addAxioms(harmless, new HashSet<OWLAxiom>(Arrays.<OWLAxiom>asList(
 			DF.getOWLFunctionalObjectPropertyAxiom(objectProperty("r")),
 			DF.getOWLObjectPropertyAssertionAxiom(objectProperty("r"), individual("x"), individual("y1")),
 			DF.getOWLSubClassOfAxiom(cls("Man"), cls("Person"))
 		)));
-		KoncludeReasoner harmlessReasoner = (KoncludeReasoner) reasonerFor(harmless);
+		KoncludeReasoner harmlessReasoner = (KoncludeReasoner) new KoncludeReasonerFactory(
+				KoncludeReasoner.MergeSafety.DETECT).createReasoner(harmless);
 		try {
 			check("no merge in the harmless one   ",
 					Boolean.valueOf(harmlessReasoner.getForcedIndividualMerge() != null), Boolean.FALSE);
-			check("default configuration kept     ", Boolean.valueOf(harmlessReasoner.getAppliedLoadingConfiguration()
-					.contains("ForceFullCompletionGraphConstruction")), Boolean.FALSE);
 			checkContains("subClasses(Person, false)      ",
 					names(harmlessReasoner.getSubClasses(cls("Person"), false)), "Man");
 		} finally {
@@ -518,39 +532,39 @@ public class KoncludeOWLAPITest {
 	}
 
 	/**
-	 * The time out of the OWL API as the second line of defence, for a question that Konclude
-	 * does not answer and that the merge check did not catch. MergeSafety.NEVER switches the
-	 * check off on purpose here, so that the reasoner really runs into the defect.
+	 * The time out of the OWL API, which reports a call that does not come back instead of
+	 * blocking the caller for ever. A time out of one millisecond is used so that the
+	 * initialisation of the library instance already overruns it, since there is no longer a
+	 * question that Konclude is known not to answer.
 	 *
 	 * ATTENTION: the call keeps running, the bridge cannot cancel it, which is why this
 	 * scenario is the last thing its virtual machine does.
 	 */
 	private static void runTimeout() throws Exception {
-		OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
-		OWLOntology merging = manager.createOntology(IRI.create(NS + "timeout"));
-		manager.addAxioms(merging, new HashSet<OWLAxiom>(Arrays.<OWLAxiom>asList(
-			DF.getOWLFunctionalObjectPropertyAxiom(objectProperty("r")),
-			DF.getOWLObjectPropertyAssertionAxiom(objectProperty("r"), individual("x"), individual("y1")),
-			DF.getOWLObjectPropertyAssertionAxiom(objectProperty("r"), individual("x"), individual("y2"))
-		)));
+		// first without a time out, so that the watch dog is shown not to be in the way when it
+		// is not asked for. This has to come first: the abandoned call of the time out below
+		// keeps running and keeps its library instance, and starting another reasoner beside it
+		// is not safe
+		OWLReasoner plain = reasonerFor(familyOntology());
+		try {
+			checkContains("no time out configured         ",
+					names(plain.getSubClasses(cls("Person"), false)), "Man", "Woman");
+		} finally {
+			plain.dispose();
+		}
 
-		OWLReasoner reasoner = new KoncludeReasonerFactory(KoncludeReasoner.MergeSafety.NEVER)
-				.createReasoner(merging, new SimpleConfiguration(5000L));
+		OWLOntology ontology = familyOntology();
 		try {
-			reasoner.getSameIndividuals(individual("y1"));
-			report("getSameIndividuals returned, expected a TimeOutException");
+			OWLReasoner reasoner = new KoncludeReasonerFactory()
+					.createReasoner(ontology, new SimpleConfiguration(1L));
+			// the installation is guarded as well, so the time out may already be reported here
+			reasoner.getSubClasses(cls("Person"), false);
+			report("nothing overran the 1 ms time out, expected a TimeOutException");
 			++sFailures;
+			reasoner.dispose();
 		} catch (TimeOutException exception) {
-			report("getSameIndividuals -> TimeOutException after the configured 5000 ms");
+			report("a call overran the 1 ms time out -> TimeOutException");
 		}
-		try {
-			reasoner.isConsistent();
-			report("the reasoner still answers after the time out, expected it to refuse");
-			++sFailures;
-		} catch (IllegalStateException exception) {
-			report("afterwards the reasoner refuses to be used, the stuck call cannot be cancelled");
-		}
-		reasoner.dispose();
 	}
 
 	// -------------------------------------------------------------------- the main
