@@ -134,10 +134,12 @@ namespace Konclude {
 					confMinTestParallelCount = confMaxTestParallelCount*factor;
 
 					mConfWriteDebuggingData = CConfigDataReader::readConfigBoolean(config,"Konclude.Debugging.WriteDebuggingData",false);
+					mConfTrustSaturationSubsumerCompleteness = CConfigDataReader::readConfigBoolean(config,"Konclude.Calculation.Classification.TrustSaturationSubsumerCompleteness",false);
 
 				} else {
 					confMaxTestParallelCount = 1;
 					confMinTestParallelCount = 1;
+					mConfTrustSaturationSubsumerCompleteness = false;
 					mConfWriteDebuggingData = false;
 				}
 
@@ -337,7 +339,22 @@ namespace Konclude {
 									subsumerItem->addSuccessorSatisfiableTestItem(classItem);
 								}
 								classItem->setUnprocessedPredecessorItems(foundSubsumerCount);
-								if (!insufficientFlag && !possibleSubsumerFlag && !incompleteProcessedFlag) {
+								// Taking the subsumers of a concept straight from its saturation and
+								// declaring the result final loses subsumptions on large ontologies.
+								// Classifying SNOMED CT misses a varying handful of subsumptions this
+								// way, between 3 and 42 of the 56 that were observed over repeated
+								// runs of the same binary on the same file, and which run loses which
+								// of them changes with the memory layout of the process: recording
+								// anything about the decision is already enough to make the losses
+								// disappear. Since a lost subsumption is never reported and cannot be
+								// noticed by a caller, the result is no longer declared final unless
+								// this is explicitly asked for, see
+								// Konclude.Calculation.Classification.TrustSaturationSubsumerCompleteness.
+								// The subsumers of the saturation are still used, only the tests that
+								// would confirm them are no longer skipped, which costs about a third
+								// of the classification time of SNOMED CT.
+								if (mConfTrustSaturationSubsumerCompleteness
+										&& !insufficientFlag && !possibleSubsumerFlag && !incompleteProcessedFlag) {
 									classItem->setResultSatisfiableDerivated(true);
 									classItem->setPossibleSubsumptionMapInitialized(true);
 								}

@@ -210,6 +210,9 @@ namespace Konclude {
 
 					bool mConfPossSubsumPseudoModelTest;
 					bool mConfWriteDebuggingData;
+					// whether the subsumers extracted from the saturation may be declared final,
+					// which loses subsumptions, see createObviousSubsumptionSatisfiableTestingOrderFromSaturationData
+					bool mConfTrustSaturationSubsumerCompleteness;
 
 					cint64 mStatProcesedSubsumMessCount;
 					cint64 mStatProcesedPossSubsumInitMessCount;
