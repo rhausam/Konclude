@@ -341,6 +341,13 @@ namespace Konclude {
 								classItem->setUnprocessedPredecessorItems(foundSubsumerCount);
 								// Taking the subsumers of a concept straight from its saturation and
 								// declaring the result final loses subsumptions on large ontologies.
+								// The defect is latent rather than fixed elsewhere: on master,
+								// classifying SNOMED CT loses a varying number of subsumptions, and
+								// adding code that cannot run while a class hierarchy is computed is
+								// already enough to make the losses disappear, so it answers to the
+								// layout of the binary. Restoring the option below therefore does not
+								// bring the losses back on this branch, and the next change anywhere
+								// in the binary can bring them back on its own.
 								// Classifying SNOMED CT misses a varying handful of subsumptions this
 								// way, between 3 and 42 of the 56 that were observed over repeated
 								// runs of the same binary on the same file, and which run loses which

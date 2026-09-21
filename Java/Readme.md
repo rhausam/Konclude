@@ -358,13 +358,53 @@ unmodified        : 0 15 27 21 32 12     lost subsumptions per run
 `Konclude.Calculation.Classification.TrustSaturationSubsumerCompleteness` restores the
 previous behaviour. It is off by default.
 
+
+### THE DEFECT IS LATENT AND IS BEING MASKED
+
+Setting that option on this branch does not bring the losses back. Twelve runs of SNOMED CT
+with the shortcut restored lose nothing at all and produce the same hierarchy every time, and
+all 56 subsumptions are present. The option is a faithful revert - with it set, the condition
+reads exactly as it did before - so the old code path really does run. Something else here
+stops the defect from showing.
+
+It is not another fix. Bisecting the branch, six runs each, counting the losses against the 56
+subsumptions that ELK confirms:
+
+```
+master                                    : 11  1  0  1  5 27     6 distinct hierarchies
+f47587cf, the JNI entry points            :  0  0  0  0  0  0     1
+1198ba29, the inverse role registration   :  0  0  0  0  0  0     1
+master + the query callback hunk alone    :  0  0  0  0  0  0     1
+```
+
+The last line is the point. It is master with nothing but the thirteen lines that
+`f47587cf` added to `CEntityExpressionSetResultVisitingCallback::visitRoleAssociatedEntityExpression`,
+which unwrap an inverse property expression. That method is reached only from the property
+queries, `CSubSuperPropertiesResultVisitCallbackQuery` and
+`CEquivalentPropertiesResultVisitCallbackQuery`; classes go through
+`visitConceptAssociatedEntityExpression`. The code cannot execute while a class hierarchy is
+computed and cannot add or remove a subsumption, and adding it removes the losses completely.
+
+So the defect answers to the layout of the binary and not to the computation, which is the same
+thing that made it resist being observed: recording anything about the decision, even into a
+preallocated array, was already enough to make it disappear. It is untouched in the classifier
+and merely sits outside the window in which it shows.
+
+That is what makes not trusting the flags the only fix here. Everything else on this branch
+moves the defect rather than removing it, and the next change to any part of the binary can
+move it back. It also means the numbers above cannot be reproduced on this branch by setting
+the option - master is needed for that - and that several clean runs are never evidence that
+the defect is gone.
+
 `Scripts/run-classification-reproducibility-test.sh` classifies an ontology repeatedly and
 fails if the runs do not all infer the same hierarchy, which is the signature the defect left.
 It compares the runs against each other rather than against a reference, so it reports a defect
 that makes the result vary and not one that loses the same inferences every time. The losses
 were intermittent - runs that lose nothing were common - so a clean run of a few iterations
 means little, and the ontology in the repository is small enough that it may never have lost
-any. Point it at something substantial with `-i` and raise `-n`.
+any. Point it at something substantial with `-i` and raise `-n`. It does catch this defect
+where the defect is reachable: on master it fails on SNOMED CT, with six of six runs inferring
+a different hierarchy.
 
 
 ### WHAT IT COSTS
