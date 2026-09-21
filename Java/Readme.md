@@ -607,6 +607,75 @@ This was done on macOS only. A Linux build needs the static Qt compiled with pos
 independent code before it can be linked into a shared object, and a Windows build needs a
 static Qt for the Visual Studio tool set, which the release workflow does not build.
 
+## CLASSIFYING SNOMED CT THROUGH THE WRAPPER
+
+SNOMED CT with additions, 750 302 axioms over 374 710 classes in 297 MB of OWL 2 XML, on an M3
+with 48 GB and the statically linked library:
+
+```
+ 6.6 s  the OWL API loads the ontology
+10.0 s  the wrapper translates it into the library
+35.4 s  precomputeInferences(CLASS_HIERARCHY)
+ 0.12 ms  every query afterwards
+41.8 s  walking all 374 710 classes, 619 472 direct super class nodes
+```
+
+13 to 16 GB for the process as a whole, about 1 GB of it the Java heap. The result agrees
+exactly with the command line: both infer 619 472 direct super class nodes for this file, and
+four runs of the same binary produce the same hierarchy, since the classification no longer
+skips the subsumption tests. The classification time depends strongly on how much memory is
+free: the same run took 148 s on a machine that was paging.
+
+The comparison that matters for a plug-in is with the OWLlink route that Protege uses today,
+where the ontology is rendered into a 349 MB `Tell` request, which costs about 30 s and a copy
+in the heap of the editor, and the reasoner is a second process holding the ontology again:
+
+```
+                    OWLlink                         wrapper
+into the reasoner   349 MB request, about 30 s      10 s, no serialisation
+load and classify   62 to 76 s                      about 45 s
+memory              20 to 34 GB and 4.2 GB in       13 to 16 GB in one process
+                    Protege, two processes
+per query           0.024 ms from the local cache,  0.12 ms, always current
+                    0.9 ms when it has to be asked
+```
+
+So the wrapper is worth having for a large ontology: about half the memory and about a third
+less time. What it gives up is the isolation of a separate process. Two defects that crashed
+the OWLlink server were found and fixed on 2026-09-20; in a plug-in the same defects take the
+editor down with them.
+
+### PRECOMPUTEINFERENCES TRIGGERS THE WORK
+
+Konclude computes on demand, so `precomputeInferences` used to return at once and the
+classification happened in whichever query arrived first. For an editor that is the worst
+arrangement: the progress dialogue completes immediately and the window then stops responding
+for the length of the classification with nothing to indicate why.
+
+It now asks for something that cannot be answered without the inference type, the direct sub
+classes of `owl:Thing` for `CLASS_HIERARCHY` and the direct instances of `owl:Thing` for
+`CLASS_ASSERTIONS`, so the cost falls where the caller expects it. `isPrecomputed` reports
+what was computed, `getPrecomputableInferenceTypes` names those two, and both are forgotten
+when the ontology is translated again. The remaining inference types have no query of their
+own in the bridge and are ignored, which the OWL API allows.
+
+### THE LOADING CONFIGURATION SETS THE PROCESSING UNITS
+
+The library defaults to a single processing unit, as the command line does without `-w AUTO`,
+and nothing in the OWL API suggests that a caller should think about it.
+`DEFAULT_LOADING_CONFIGURATION` therefore sets
+
+```
+Konclude.Calculation.ProcessorCount=AUTO
+```
+
+Two runs of SNOMED CT one after the other on the same machine, only that setting differing:
+
+```
+AUTO : precomputeInferences  35.4 s
+1    : precomputeInferences 192.5 s
+```
+
 ## OTHER LIMITATIONS
 
 - Annotations and annotation axioms are dropped by the translator, which matches the
