@@ -206,3 +206,16 @@ jobs:
       - name: Run the Protege plug-in test
         if: startsWith(matrix.config.os, 'macos')
         run: ./Java/run-protege-plugin-test.sh "$(dirname "$(ls -d protege/*/bundles)")" Release
+
+      # a crash of the virtual machine in a native call leaves its report beside the test and
+      # only a summary in the log, so the report is kept for reading
+      - name: Keep the crash reports of the virtual machine
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jvm-crash-reports-${{ matrix.config.os }}
+          path: |
+            hs_err_pid*.log
+            Java/hs_err_pid*.log
+            Java/protege/hs_err_pid*.log
+          if-no-files-found: ignore
