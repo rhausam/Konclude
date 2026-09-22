@@ -134,8 +134,9 @@ What the plug-in cannot do yet: the inferred axioms that Protege's export and it
 inferences ask for through the queries listed under WHAT THE BRIDGE DOES NOT ANSWER, the
 disjoint classes, the property domains and ranges and the data property hierarchy among
 them, end in an `UnsupportedOperationException`; the 'Disjoint classes' displayed inference
-is best switched off in the reasoner preferences. `interrupt` cannot stop a running
-calculation, so cancelling in the progress window waits for it to finish.
+is best switched off in the reasoner preferences. `interrupt` releases the caller of a
+running calculation but cannot stop the calculation itself, so cancelling in the progress
+window returns at once while Konclude works on in the background until it is done.
 
 
 ## THE CONTRACT OF THE NATIVE SIDE
@@ -467,7 +468,8 @@ OWLReasoner reasoner = new KoncludeReasonerFactory()
 ```
 
 Two things to know. The stuck call **keeps running**, the bridge has no way to cancel it and
-`interrupt()` is a no-op on the native side; its thread is a daemon so it does not keep the
+`interrupt()` only releases the callers that wait for the reasoner's thread, each with a
+`ReasonerInterruptedException`, while the calculation runs on; its thread is a daemon so it does not keep the
 virtual machine alive, but it holds its library instance and its share of the machine until
 the process ends, so another reasoner should not be started beside it. The reasoner refuses
 to be used after a time out, with an `IllegalStateException`, rather than queueing further
@@ -844,6 +846,51 @@ handed an empty configuration to the library, which then applied its own default
 the line above, so a reasoner that was not given a configuration explicitly ran on one
 processing unit. An empty configuration now means `DEFAULT_LOADING_CONFIGURATION`, see
 `chooseLoadingConfiguration`, so the factory and the plug-in get `AUTO` without saying so.
+
+## ENTAILMENT CHECKING AND INTERRUPTION
+
+Both were the gaps between the wrapper and ELK 0.6.0 on the methods Protege calls, measured
+on 2026-09-22 against the `ElkReasoner` classes of ELK 0.4.3 and 0.6.0 and the bytecode of
+every Protege bundle: ELK answers `isEntailed` for some axiom types and stops a calculation
+on `interrupt`, the wrapper did neither. Everything else Protege asks for is either answered
+by both or by neither, and what neither answers, the data properties, disjointness, domains,
+ranges and inverses, Protege tolerates: `DisplayedInferencePreferences.executeTask` catches
+the `UnsupportedOperationException` and switches that optional inference off, which is how
+ELK has always been usable there.
+
+### ENTAILMENT
+
+The bridge has no entailment query, but every axiom type that ELK 0.6.0 checks can be decided
+with the queries it has, now that anonymous class expressions are answered. A class inclusion
+`C SubClassOf D` holds when `C and not D` is unsatisfiable, and the other types reduce to that
+or to the instance, property and individual queries:
+
+```
+SubClassOf, EquivalentClasses, DisjointClasses   satisfiability of an intersection
+ObjectPropertyDomain, ObjectPropertyRange        'p some Thing' below the domain, 'p some not C' unsatisfiable
+SubObjectPropertyOf, EquivalentObjectProperties  the property hierarchy, named properties only
+ClassAssertion, ObjectPropertyAssertion          the instances and the property values
+SameIndividual                                   the same individuals
+DifferentIndividuals                             satisfiability of an intersection of two nominals
+Declaration                                      always entailed
+```
+
+`isEntailmentCheckingSupported` names exactly these, everything else ends in an
+`UnsupportedEntailmentTypeException`, as does an inverse property expression or an anonymous
+individual inside one of them. An inconsistent ontology ends in an
+`InconsistentOntologyException`. The `entailment` scenario of the test checks 27 axioms
+against the family ontology, including expressions on both sides of an inclusion.
+
+### INTERRUPTION
+
+`interrupt()` cancels the calls that wait for the reasoner's thread, each of which ends in a
+`ReasonerInterruptedException`. The calculation itself cannot be abandoned, the native side
+has no way to stop one, so it runs on to its end on the reasoner's thread and a call made in
+the meantime queues behind it. For Protege that is the difference between a cancel button
+that returns and one that waits for the classification of a large ontology to finish. The
+`interrupt` scenario of the test checks that an idle interrupt changes nothing, that a call
+caught in flight ends in that exception and no other, and that the reasoner answers correctly
+afterwards.
 
 ## OTHER LIMITATIONS
 
