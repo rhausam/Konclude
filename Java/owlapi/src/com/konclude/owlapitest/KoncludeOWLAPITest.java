@@ -680,11 +680,20 @@ public class KoncludeOWLAPITest {
 			plain.dispose();
 		}
 
+		// the family ontology alone was once created, translated and classified within the
+		// 1 ms on a fast machine, so the timed reasoner gets an ontology whose translation alone
+		// takes tens of thousands of native calls, which cannot be done in 1 ms anywhere
 		OWLOntology ontology = familyOntology();
+		OWLOntologyManager manager = ontology.getOWLOntologyManager();
+		Set<OWLAxiom> padding = new HashSet<OWLAxiom>();
+		for (int i = 0; i < 20000; ++i) {
+			padding.add(DF.getOWLSubClassOfAxiom(cls("Padding" + i), cls("Person")));
+		}
+		manager.addAxioms(ontology, padding);
 		try {
 			OWLReasoner reasoner = new KoncludeReasonerFactory()
 					.createReasoner(ontology, new SimpleConfiguration(1L));
-			// the installation is guarded as well, so the time out may already be reported here
+			// the installation is guarded as well, so the time out is expected to be reported here
 			reasoner.getSubClasses(cls("Person"), false);
 			report("nothing overran the 1 ms time out, expected a TimeOutException");
 			++sFailures;
