@@ -29,13 +29,27 @@
 #include "CJNIOntologyRevisionData.h"
 #include "CJNICommandProcessor.h"
 #include "CJNIInstanceManager.h"
+#include "CJNIQueryExpressionBuildingLoader.h"
 
 // Other includes
 #include "Reasoner/Generator/CConcreteOntologyUpdateCollectorBuilder.h"
 
 #include "Parser/Expressions/CBuildExpression.h"
+#include "Parser/Expressions/CClassTermExpression.h"
+
+#include "Reasoner/Revision/COntologyRevision.h"
 
 #include "Reasoner/Query/CSetOfEntityExpressionSetResultVisitingCallback.h"
+#include "Reasoner/Query/CComplexConceptAnsweringQuery.h"
+#include "Reasoner/Query/CComplexSatisfiabilityAnsweringQuery.h"
+#include "Reasoner/Query/CComplexSubClassesAnsweringQuery.h"
+#include "Reasoner/Query/CComplexSuperClassesAnsweringQuery.h"
+#include "Reasoner/Query/CComplexEquivalentClassesAnsweringQuery.h"
+#include "Reasoner/Query/CComplexIndividualInstancesAnsweringQuery.h"
+#include "Reasoner/Query/CBooleanQueryResult.h"
+#include "Reasoner/Query/CClassSynsetsResult.h"
+#include "Reasoner/Query/CClassSetResult.h"
+#include "Reasoner/Query/CIndividualSynsetsResult.h"
 #include "Reasoner/Query/CEquivalentClassesResultVisitCallbackQuery.h"
 #include "Reasoner/Query/CSubSuperClassesResultVisitCallbackQuery.h"
 #include "Reasoner/Query/CEquivalentPropertiesResultVisitCallbackQuery.h"
@@ -103,14 +117,49 @@ namespace Konclude {
 						bool queryOntologyObjectPropertyTargets(const QString& indiName, const QString& propertyName, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback);
 
 
+						/**
+						 * The builder for the class expressions that the queries below are asked
+						 * about. It builds into a revision of the installed ontology that is never
+						 * installed, created on first use and kept for the lifetime of this processor,
+						 * so the expressions stay valid as long as the querying bridge is open.
+						 * Returns null if no revision could be created.
+						 */
+						CJNIAxiomExpressionVisitingLoader* getClassExpressionBuilder();
+
+						/**
+						 * The queries about a class expression, the anonymous class expressions of the
+						 * OWL API. They are answered by the complex answering queries that the OWLlink
+						 * interface uses, whose results name the entities, so the names are resolved
+						 * to the entity expressions of the installed ontology and reported through the
+						 * same callbacks as the named queries above. Each returns false if the query
+						 * was not answered and says why in the error message.
+						 */
+						bool checkIsClassExpressionSatisfiable(CBuildExpression* classExpression, bool& satisfiable, QString& errorMessage);
+						bool queryClassExpressionSubClasses(CBuildExpression* classExpression, bool direct, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback, QString& errorMessage);
+						bool queryClassExpressionSuperClasses(CBuildExpression* classExpression, bool direct, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback, QString& errorMessage);
+						bool queryClassExpressionEquivalentClasses(CBuildExpression* classExpression, CEntityExpressionSetResultVisitingCallback* visitingCallback, QString& errorMessage);
+						bool queryClassExpressionInstances(CBuildExpression* classExpression, bool direct, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback, QString& errorMessage);
+
+
 					// protected methods
 					protected:
+						CClassTermExpression* getQueryClassTermExpression(CBuildExpression* classExpression, QString& errorMessage);
+						CQueryResult* calculateClassExpressionQuery(CComplexConceptAnsweringQuery* query, QString& errorMessage);
+
+						bool computeClassExpressionEquivalentClassNames(CClassTermExpression* classTermExp, QStringList& classNames, QString& errorMessage);
+						bool queryClassExpressionSubSuperClasses(CBuildExpression* classExpression, bool subClasses, bool superClasses, bool direct, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback, QString& errorMessage);
+
+						void visitClassName(const QString& className, CEntityExpressionSetResultVisitingCallback* visitingCallback);
+						void visitIndividualName(const QString& individualName, CEntityExpressionSetResultVisitingCallback* visitingCallback);
 
 					// protected variables
 					protected:
 						CJNIInstanceManager* mJNIInstanceManager;
 						CJNICommandProcessor* mJNICommandProcessor;
 						CJNIOntologyRevisionData* mOntRevData;
+
+						COntologyRevision* mExpressionOntRev;
+						CJNIQueryExpressionBuildingLoader* mExpressionBuilder;
 
 
 
