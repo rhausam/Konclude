@@ -103,6 +103,54 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLObject
 JNIEXPORT void JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLObjectPropertyTargets
   (JNIEnv *, jobject, jobject, jstring, jobject, jstring, jobject, jobject);
 
+/*
+ * Class:     com_konclude_jnibridge_QueryingBridge
+ * Method:    initOWLClassExpressionBuilder
+ * Signature: (Lcom/konclude/jnibridge/KoncludeReasonerBridge;Lcom/konclude/jnibridge/AxiomExpressionBuildingBridge;)V
+ */
+JNIEXPORT void JNICALL Java_com_konclude_jnibridge_QueryingBridge_initOWLClassExpressionBuilder
+  (JNIEnv *, jobject, jobject, jobject);
+
+/*
+ * Class:     com_konclude_jnibridge_QueryingBridge
+ * Method:    checkIsOWLClassExpressionSatisfiable
+ * Signature: (Lcom/konclude/jnibridge/KoncludeReasonerBridge;J)Z
+ */
+JNIEXPORT jboolean JNICALL Java_com_konclude_jnibridge_QueryingBridge_checkIsOWLClassExpressionSatisfiable
+  (JNIEnv *, jobject, jobject, jlong);
+
+/*
+ * Class:     com_konclude_jnibridge_QueryingBridge
+ * Method:    queryOWLClassExpressionSubClasses
+ * Signature: (Lcom/konclude/jnibridge/KoncludeReasonerBridge;JLcom/konclude/jnibridge/SetOfObjectSetCallbackListener;Z)V
+ */
+JNIEXPORT void JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLClassExpressionSubClasses
+  (JNIEnv *, jobject, jobject, jlong, jobject, jboolean);
+
+/*
+ * Class:     com_konclude_jnibridge_QueryingBridge
+ * Method:    queryOWLClassExpressionSuperClasses
+ * Signature: (Lcom/konclude/jnibridge/KoncludeReasonerBridge;JLcom/konclude/jnibridge/SetOfObjectSetCallbackListener;Z)V
+ */
+JNIEXPORT void JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLClassExpressionSuperClasses
+  (JNIEnv *, jobject, jobject, jlong, jobject, jboolean);
+
+/*
+ * Class:     com_konclude_jnibridge_QueryingBridge
+ * Method:    queryOWLClassExpressionEquivalentClasses
+ * Signature: (Lcom/konclude/jnibridge/KoncludeReasonerBridge;JLcom/konclude/jnibridge/ObjectSetCallbackListener;)V
+ */
+JNIEXPORT void JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLClassExpressionEquivalentClasses
+  (JNIEnv *, jobject, jobject, jlong, jobject);
+
+/*
+ * Class:     com_konclude_jnibridge_QueryingBridge
+ * Method:    queryOWLClassExpressionInstances
+ * Signature: (Lcom/konclude/jnibridge/KoncludeReasonerBridge;JLcom/konclude/jnibridge/SetOfObjectSetCallbackListener;Z)V
+ */
+JNIEXPORT void JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLClassExpressionInstances
+  (JNIEnv *, jobject, jobject, jlong, jobject, jboolean);
+
 #ifdef __cplusplus
 }
 #endif

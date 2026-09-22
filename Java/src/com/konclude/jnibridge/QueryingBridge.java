@@ -24,7 +24,8 @@ package com.konclude.jnibridge;
  * Asks the native reasoner, corresponds to
  * Source/Control/Interface/JNI/com_konclude_jnibridge_QueryingBridge.cpp.
  *
- * All 12 entry points that the native side declares are declared here.
+ * All 18 entry points that the native side declares are declared here: 12 queries about a
+ * named entity, and the builder and 5 queries for a class expression.
  *
  * An entity is identified by its IRI, the object beside it is only handed over so that the
  * native side can remember it if the entity has not been built before. The results are not
@@ -37,9 +38,22 @@ package com.konclude.jnibridge;
  * if no object has been associated with owl:Nothing while the ontology was built.
  *
  *
+ * QUERIES ABOUT A CLASS EXPRESSION
+ *
+ * A class expression that is not a named class, the ObjectSomeValuesFrom of a DL query for
+ * instance, is built first, through an AxiomExpressionBuildingBridge that
+ * initOWLClassExpressionBuilder binds to this querying bridge. That builder writes into a
+ * revision of the installed ontology that is never installed, so the expression does not
+ * change the ontology, and the expression stays valid as long as this querying bridge is
+ * open. The address it returns is what the class expression queries take, like the arguments
+ * of the building bridge. The results are reported like those of the named queries. A query
+ * that the native side does not answer throws a KoncludeReasonerException, since an empty
+ * answer is a valid one.
+ *
+ *
  * WHAT THE NATIVE SIDE DOES NOT ANSWER
  *
- * The 12 queries do not cover the OWL API OWLReasoner interface. Missing are the hierarchy
+ * The queries do not cover the OWL API OWLReasoner interface. Missing are the hierarchy
  * of the data properties, the disjoint classes and properties, the domains and the ranges of
  * properties, the inverse properties, the different individuals, the data property values
  * and the entailment check, so the native side has to be extended for them.
@@ -115,6 +129,34 @@ public class QueryingBridge {
 	public native void queryOWLObjectPropertyTargets(KoncludeReasonerBridge bridge,
 			String individualIRI, Object individualObject, String propertyIRI, Object propertyObject,
 			SetOfObjectSetCallbackListener callback);
+
+
+	// -------------------------------------------------------- class expressions
+
+	/**
+	 * Binds the builder to this querying bridge, so that its buildOWL... methods build the
+	 * expressions that the queries below are asked about, see the class comment. The builder
+	 * is owned by the querying bridge and is closed with it by finalizeQueryingBridge, it must
+	 * not be handed to finalizeAxiomExpressionVisitingBridge.
+	 */
+	public native void initOWLClassExpressionBuilder(KoncludeReasonerBridge bridge,
+			AxiomExpressionBuildingBridge builder);
+
+	public native boolean checkIsOWLClassExpressionSatisfiable(KoncludeReasonerBridge bridge,
+			long classExpression);
+
+	public native void queryOWLClassExpressionSubClasses(KoncludeReasonerBridge bridge,
+			long classExpression, SetOfObjectSetCallbackListener callback, boolean direct);
+
+	public native void queryOWLClassExpressionSuperClasses(KoncludeReasonerBridge bridge,
+			long classExpression, SetOfObjectSetCallbackListener callback, boolean direct);
+
+	/** the named classes equivalent to the expression, a flat set */
+	public native void queryOWLClassExpressionEquivalentClasses(KoncludeReasonerBridge bridge,
+			long classExpression, ObjectSetCallbackListener callback);
+
+	public native void queryOWLClassExpressionInstances(KoncludeReasonerBridge bridge,
+			long classExpression, SetOfObjectSetCallbackListener callback, boolean direct);
 
 
 	/** only of interest for the smoke test, to show that the native side filled the field */

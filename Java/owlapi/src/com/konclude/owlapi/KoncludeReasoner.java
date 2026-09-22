@@ -64,10 +64,10 @@ import java.util.concurrent.TimeoutException;
  *
  * WHAT THE BRIDGE CANNOT ANSWER
  *
- * The querying bridge provides 12 queries, which do not cover the OWLReasoner interface. The
- * methods that it cannot answer throw an UnsupportedOperationException instead of answering
- * with an empty node set, because an empty node set is a valid answer and a caller cannot
- * tell it from 'not supported'.
+ * The querying bridge provides 12 queries about a named entity and 5 about a class expression,
+ * which do not cover the OWLReasoner interface. The methods that it cannot answer throw an
+ * UnsupportedOperationException instead of answering with an empty node set, because an
+ * empty node set is a valid answer and a caller cannot tell it from 'not supported'.
  *
  * The native side has no query for these:
  *
@@ -84,9 +84,18 @@ import java.util.concurrent.TimeoutException;
  * because four of the 12 queries of the bridge reported nothing. That was a defect of the
  * native side, not of the translation, and it has been fixed, see Java/Readme.md.
  *
- * In addition every query of the bridge identifies the asked entity by its IRI, so a query
- * about an anonymous class expression, getSubClasses of an ObjectSomeValuesFrom for
- * instance, is not supported either. The named case is answered.
+ * A query about an anonymous class expression, getSubClasses of an ObjectSomeValuesFrom for
+ * instance, is answered as well, for isSatisfiable, the sub, super and equivalent classes and
+ * the instances. The expression is built through a second building bridge that the querying
+ * bridge binds to a revision of the installed ontology, so that the ontology is not changed,
+ * and the native side answers it with the complex answering queries of its OWLlink interface.
+ * The first such query pays for the preparation of that machinery. A named class keeps
+ * being answered from the class hierarchy directly.
+ *
+ * An entity that the ontology does not mention is a fresh entity, see FreshEntityPolicy. The
+ * native side is never asked about one: with DISALLOW a FreshEntitiesException is thrown, with
+ * ALLOW the answer is the trivial one, an empty node set, and this applies to a class
+ * expression as soon as one of its entities is fresh.
  *
  * isEntailmentCheckingSupported answers false for every axiom type, which is what the
  * interface asks for when isEntailed is not implemented.
@@ -182,6 +191,13 @@ public class KoncludeReasoner implements OWLReasoner {
 	private AxiomExpressionBuildingBridge mBuilder;
 	private QueryingBridge mQuerying;
 	private KoncludeOWLAPITranslator mTranslator;
+	/**
+	 * Builds the class expressions that the queries are asked about, bound to the querying
+	 * bridge, see QueryingBridge.initOWLClassExpressionBuilder. Its translator does not declare
+	 * the entities it meets, a declaration would be an axiom.
+	 */
+	private AxiomExpressionBuildingBridge mExpressionBuilder;
+	private KoncludeOWLAPITranslator mExpressionTranslator;
 	private boolean mDisposed = false;
 
 	/** the configuration that was handed to the library instance, after the merge check */
@@ -294,6 +310,11 @@ public class KoncludeReasoner implements OWLReasoner {
 
 			mQuerying = new QueryingBridge();
 			mBridge.initQueryingBridge(mQuerying);
+
+			mExpressionBuilder = new AxiomExpressionBuildingBridge();
+			mQuerying.initOWLClassExpressionBuilder(mBridge, mExpressionBuilder);
+			mExpressionTranslator = new KoncludeOWLAPITranslator(mBridge, mExpressionBuilder);
+			mExpressionTranslator.setDeclareEntities(false);
 			installed = true;
 		} finally {
 			if (!installed) {
@@ -303,6 +324,8 @@ public class KoncludeReasoner implements OWLReasoner {
 				mBuilder = null;
 				mQuerying = null;
 				mTranslator = null;
+				mExpressionBuilder = null;
+				mExpressionTranslator = null;
 			}
 		}
 	}
@@ -360,6 +383,7 @@ public class KoncludeReasoner implements OWLReasoner {
 	private void doUninstall() {
 		if (mBridge != null) {
 			if (mQuerying != null) {
+				// closes the expression builder as well, which the querying bridge owns
 				mBridge.finalizeQueryingBridge(mQuerying);
 			}
 			mBridge.closeKoncludeLibraryInstance();
@@ -368,6 +392,8 @@ public class KoncludeReasoner implements OWLReasoner {
 		mBuilder = null;
 		mQuerying = null;
 		mTranslator = null;
+		mExpressionBuilder = null;
+		mExpressionTranslator = null;
 	}
 
 	/** the axioms of the ontology that the bridge cannot express, empty if there are none */
@@ -539,29 +565,47 @@ public class KoncludeReasoner implements OWLReasoner {
 	}
 
 	/**
-	 * A class is unsatisfiable exactly if it is equivalent to owl:Nothing, which is what the
-	 * bottom node collects. Only a named class can be asked, see the class comment.
+	 * A named class is unsatisfiable exactly if it is equivalent to owl:Nothing, which is what
+	 * the bottom node collects. An anonymous expression is asked of the native side.
 	 */
 	@Override
-	public boolean isSatisfiable(OWLClassExpression classExpression) {
-		final OWLClass named = namedClass(classExpression, "isSatisfiable");
-		return !getBottomClassNode().contains(named);
+	public boolean isSatisfiable(final OWLClassExpression classExpression) {
+		requireClassExpression(classExpression);
+		if (!classExpression.isAnonymous()) {
+			return !getBottomClassNode().contains(classExpression.asOWLClass());
+		}
+		if (!isKnown(classExpression)) {
+			return true;
+		}
+		return guard("isSatisfiable", new NativeCall<Boolean>() {
+			@Override
+			public Boolean call() {
+				return Boolean.valueOf(mQuerying.checkIsOWLClassExpressionSatisfiable(mBridge,
+						classExpressionPointer(classExpression)));
+			}
+		}).booleanValue();
 	}
 
 
 	// --------------------------------------------------------- the class hierarchy
 
 	@Override
-	public NodeSet<OWLClass> getSubClasses(OWLClassExpression classExpression, boolean direct) {
-		final OWLClass named = namedClass(classExpression, "getSubClasses");
-		if (!isKnown(named)) {
+	public NodeSet<OWLClass> getSubClasses(final OWLClassExpression classExpression, final boolean direct) {
+		requireClassExpression(classExpression);
+		if (!isKnown(classExpression)) {
 			return new OWLClassNodeSet();
 		}
 		final SetOfObjectSetCallbackListener callback = new SetOfObjectSetCallbackListener();
 		guard("getSubClasses", new NativeCall<Void>() {
 			@Override
 			public Void call() {
-				mQuerying.queryOWLSubClasses(mBridge, iri(named), named, callback, direct);
+				if (classExpression.isAnonymous()) {
+					mQuerying.queryOWLClassExpressionSubClasses(mBridge,
+							classExpressionPointer(classExpression), callback, direct);
+				} else {
+					OWLClass named = classExpression.asOWLClass();
+					mQuerying.queryOWLSubClasses(mBridge, iri(named), named, callback, direct);
+				}
 				return null;
 			}
 		});
@@ -569,16 +613,22 @@ public class KoncludeReasoner implements OWLReasoner {
 	}
 
 	@Override
-	public NodeSet<OWLClass> getSuperClasses(OWLClassExpression classExpression, boolean direct) {
-		final OWLClass named = namedClass(classExpression, "getSuperClasses");
-		if (!isKnown(named)) {
+	public NodeSet<OWLClass> getSuperClasses(final OWLClassExpression classExpression, final boolean direct) {
+		requireClassExpression(classExpression);
+		if (!isKnown(classExpression)) {
 			return new OWLClassNodeSet();
 		}
 		final SetOfObjectSetCallbackListener callback = new SetOfObjectSetCallbackListener();
 		guard("getSuperClasses", new NativeCall<Void>() {
 			@Override
 			public Void call() {
-				mQuerying.queryOWLSuperClasses(mBridge, iri(named), named, callback, direct);
+				if (classExpression.isAnonymous()) {
+					mQuerying.queryOWLClassExpressionSuperClasses(mBridge,
+							classExpressionPointer(classExpression), callback, direct);
+				} else {
+					OWLClass named = classExpression.asOWLClass();
+					mQuerying.queryOWLSuperClasses(mBridge, iri(named), named, callback, direct);
+				}
 				return null;
 			}
 		});
@@ -586,22 +636,31 @@ public class KoncludeReasoner implements OWLReasoner {
 	}
 
 	@Override
-	public Node<OWLClass> getEquivalentClasses(OWLClassExpression classExpression) {
-		final OWLClass named = namedClass(classExpression, "getEquivalentClasses");
-		if (!isKnown(named)) {
-			return new OWLClassNode(named);
+	public Node<OWLClass> getEquivalentClasses(final OWLClassExpression classExpression) {
+		requireClassExpression(classExpression);
+		final boolean anonymous = classExpression.isAnonymous();
+		if (!isKnown(classExpression)) {
+			return anonymous ? new OWLClassNode() : new OWLClassNode(classExpression.asOWLClass());
 		}
 		final ObjectSetCallbackListener callback = new ObjectSetCallbackListener();
 		guard("getEquivalentClasses", new NativeCall<Void>() {
 			@Override
 			public Void call() {
-				mQuerying.queryOWLEquivalentClasses(mBridge, iri(named), named, callback);
+				if (anonymous) {
+					mQuerying.queryOWLClassExpressionEquivalentClasses(mBridge,
+							classExpressionPointer(classExpression), callback);
+				} else {
+					OWLClass named = classExpression.asOWLClass();
+					mQuerying.queryOWLEquivalentClasses(mBridge, iri(named), named, callback);
+				}
 				return null;
 			}
 		});
 		Set<OWLClass> classes = collect(callback.getObjects(), OWLClass.class);
-		// the interface asks for a node that contains the asked class itself
-		classes.add(named);
+		if (!anonymous) {
+			// the interface asks for a node that contains the asked class itself
+			classes.add(classExpression.asOWLClass());
+		}
 		return new OWLClassNode(classes);
 	}
 
@@ -773,16 +832,22 @@ public class KoncludeReasoner implements OWLReasoner {
 	}
 
 	@Override
-	public NodeSet<OWLNamedIndividual> getInstances(OWLClassExpression classExpression, boolean direct) {
-		final OWLClass named = namedClass(classExpression, "getInstances");
-		if (!isKnown(named)) {
+	public NodeSet<OWLNamedIndividual> getInstances(final OWLClassExpression classExpression, final boolean direct) {
+		requireClassExpression(classExpression);
+		if (!isKnown(classExpression)) {
 			return new OWLNamedIndividualNodeSet();
 		}
 		final SetOfObjectSetCallbackListener callback = new SetOfObjectSetCallbackListener();
 		guard("getInstances", new NativeCall<Void>() {
 			@Override
 			public Void call() {
-				mQuerying.queryOWLInstances(mBridge, iri(named), named, callback, direct);
+				if (classExpression.isAnonymous()) {
+					mQuerying.queryOWLClassExpressionInstances(mBridge,
+							classExpressionPointer(classExpression), callback, direct);
+				} else {
+					OWLClass named = classExpression.asOWLClass();
+					mQuerying.queryOWLInstances(mBridge, iri(named), named, callback, direct);
+				}
 				return null;
 			}
 		});
@@ -859,21 +924,35 @@ public class KoncludeReasoner implements OWLReasoner {
 
 	// ----------------------------------------------------------------- the helpers
 
-	/**
-	 * The queries of the bridge identify the asked entity by its IRI, so an anonymous class
-	 * expression cannot be asked about.
-	 */
-	private OWLClass namedClass(OWLClassExpression classExpression, String method) {
+	private void requireClassExpression(OWLClassExpression classExpression) {
 		checkOpen();
 		if (classExpression == null) {
 			throw new IllegalArgumentException("a class expression is required");
 		}
-		if (classExpression.isAnonymous()) {
-			throw new UnsupportedOperationException(method + " of Konclude can only be asked about a "
-					+ "named class, the queries of the JNI bridge identify a class by its IRI, but "
-					+ "was asked about '" + classExpression + "'");
+	}
+
+	/**
+	 * Builds the expression on the native side and returns its address, for the queries about
+	 * a class expression. Has to run inside a native call, see install, since the building is
+	 * a series of native calls itself. A construct that the bridge cannot express is reported
+	 * by a KoncludeUnsupportedConstructException.
+	 */
+	private long classExpressionPointer(OWLClassExpression classExpression) {
+		return mExpressionTranslator.translateClassExpression(classExpression);
+	}
+
+	/**
+	 * Whether every entity of the expression reached the native side, see isKnown(OWLEntity).
+	 * The datatypes are left out, the built-in ones are known without being mentioned by an
+	 * axiom.
+	 */
+	private boolean isKnown(OWLClassExpression classExpression) {
+		for (OWLEntity entity : classExpression.getSignature()) {
+			if (!entity.isOWLDatatype() && !isKnown(entity)) {
+				return false;
+			}
 		}
-		return classExpression.asOWLClass();
+		return true;
 	}
 
 	private OWLObjectProperty namedObjectProperty(OWLObjectPropertyExpression property, String method) {

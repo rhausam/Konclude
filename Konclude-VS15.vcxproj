@@ -888,6 +888,7 @@
     <ClCompile Include="Source\Control\Interface\JNI\CJNIInstanceManager.cpp" />
     <ClCompile Include="Source\Control\Interface\JNI\CJNIInstanceManagerConfigType.cpp" />
     <ClCompile Include="Source\Control\Interface\JNI\CJNIOntologyRevisionData.cpp" />
+    <ClCompile Include="Source\Control\Interface\JNI\CJNIQueryExpressionBuildingLoader.cpp" />
     <ClCompile Include="Source\Control\Interface\JNI\CJNIQueryProcessor.cpp" />
     <ClCompile Include="Source\Control\Interface\JNI\com_konclude_jnibridge_AxiomExpressionBuildingBridge.cpp" />
     <ClCompile Include="Source\Control\Interface\JNI\com_konclude_jnibridge_KoncludeReasonerBridge.cpp" />
@@ -3776,6 +3777,7 @@
     <ClInclude Include="Source\Control\Interface\JNI\CJNIInstanceManager.h" />
     <ClInclude Include="Source\Control\Interface\JNI\CJNIInstanceManagerConfigType.h" />
     <ClInclude Include="Source\Control\Interface\JNI\CJNIOntologyRevisionData.h" />
+    <ClInclude Include="Source\Control\Interface\JNI\CJNIQueryExpressionBuildingLoader.h" />
     <ClInclude Include="Source\Control\Interface\JNI\CJNIQueryProcessor.h" />
     <ClInclude Include="Source\Control\Interface\JNI\JNISettings.h" />
     <CustomBuild Include="Source\Control\Interface\OWLlink\COWLlinkHttpConnectionHandlerProcessor.h">

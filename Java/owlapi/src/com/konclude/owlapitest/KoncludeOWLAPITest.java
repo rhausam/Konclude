@@ -43,6 +43,8 @@ import java.util.TreeSet;
  * machine, see Java/run-owlapi-test.sh. The exit code is 0 if the scenario succeeded.
  *
  *   hierarchy      the class hierarchy, direct and indirect, and the top and bottom node
+ *   expressions    the questions about an anonymous class expression, as the DL query tab
+ *                  of Protege asks them, and the handling of a fresh entity in one
  *   individuals    the types, the instances, the same individuals and the property values
  *   properties     the object property hierarchy and the same individuals
  *   datatypes      the sub data properties and the datatype restrictions
@@ -124,6 +126,17 @@ public class KoncludeOWLAPITest {
 		}
 	}
 
+	/**
+	 * For an answer that the reasoning engine is known to get wrong, see Java/Readme.md. It is
+	 * reported but does not fail the scenario, and a correct answer is reported as fixed, so
+	 * that the scenario shows when the engine changes.
+	 */
+	private static void checkEngineDefect(String label, Object actual, Object expectedValue) {
+		boolean ok = actual == null ? expectedValue == null : actual.equals(expectedValue);
+		report(label + " = " + actual + (ok ? ", engine defect FIXED" : ", known engine defect, correct is "
+				+ expectedValue));
+	}
+
 	/** for the answers that only have to contain something, the top node for instance */
 	private static void checkContains(String label, Set<String> actual, String... required) {
 		Set<String> missing = new TreeSet<String>(Arrays.asList(required));
@@ -135,12 +148,21 @@ public class KoncludeOWLAPITest {
 	}
 
 	private static void checkThrowsUnsupported(String label, Runnable call) {
+		checkThrows(label, UnsupportedOperationException.class, call);
+	}
+
+	private static void checkThrows(String label, Class<? extends Throwable> expected, Runnable call) {
 		try {
 			call.run();
-			report(label + " did NOT throw, expected an UnsupportedOperationException");
+			report(label + " did NOT throw, expected " + expected.getSimpleName());
 			++sFailures;
-		} catch (UnsupportedOperationException exception) {
-			report(label + " -> UnsupportedOperationException");
+		} catch (RuntimeException exception) {
+			if (expected.isInstance(exception)) {
+				report(label + " -> " + expected.getSimpleName());
+			} else {
+				report(label + " threw " + exception + ", expected " + expected.getSimpleName());
+				++sFailures;
+			}
 		}
 	}
 
@@ -227,6 +249,105 @@ public class KoncludeOWLAPITest {
 					Boolean.FALSE);
 		} finally {
 			reasoner.dispose();
+		}
+	}
+
+	/**
+	 * The questions about anonymous class expressions, which the DL query tab of Protege asks
+	 * and which used to be unsupported, since the bridge identified a class by its IRI. The
+	 * expressions are chosen so that the family ontology decides them: hasChild has Person as
+	 * its domain and range, so 'hasChild some Person' is equivalent to Parent.
+	 */
+	private static void runExpressions() throws Exception {
+		OWLOntology ontology = familyOntology();
+		OWLObjectProperty hasChild = objectProperty("hasChild");
+		OWLClassExpression hasChildPerson = DF.getOWLObjectSomeValuesFrom(hasChild, cls("Person"));
+		OWLClassExpression manWithChild = DF.getOWLObjectIntersectionOf(cls("Man"), hasChildPerson);
+		OWLClassExpression notMan = DF.getOWLObjectComplementOf(cls("Man"));
+		OWLClassExpression manAndWoman = DF.getOWLObjectIntersectionOf(cls("Man"), cls("Woman"));
+		OWLClassExpression womanOrParent = DF.getOWLObjectUnionOf(cls("Woman"), cls("Parent"));
+		OWLClassExpression hasChildWoman = DF.getOWLObjectSomeValuesFrom(hasChild, cls("Woman"));
+		final OWLClassExpression hasChildFresh = DF.getOWLObjectSomeValuesFrom(hasChild, cls("Fresh"));
+
+		final OWLReasoner reasoner = reasonerFor(ontology);
+		try {
+			check("equivalentClasses(hasChild some Person)", names(reasoner.getEquivalentClasses(hasChildPerson)),
+					expected("Parent"));
+			check("subClasses(hasChild some Person, true) ", names(reasoner.getSubClasses(hasChildPerson, true)),
+					expected("Father", "Grandparent", "Mother"));
+			checkContains("subClasses(hasChild some Person, false)", names(reasoner.getSubClasses(hasChildPerson, false)),
+					"Father", "Grandparent", "Mother", "Impossible");
+			check("superClasses(hasChild some Person, true)", names(reasoner.getSuperClasses(hasChildPerson, true)),
+					expected("Person"));
+
+			// the engine loses 'Man' from this expression once 'hasChild some Person' has been
+			// asked about before, as it was above, over OWLlink as well, see Java/Readme.md
+			checkEngineDefect("equivalentClasses(Man and hasChild some Person)", names(reasoner.getEquivalentClasses(manWithChild)),
+					expected("Father"));
+			checkEngineDefect("superClasses(Man and ..., true)  ", names(reasoner.getSuperClasses(manWithChild, true)),
+					expected("Man", "Parent"));
+			checkEngineDefect("superClasses(Man and ..., false) ", names(reasoner.getSuperClasses(manWithChild, false)),
+					expected("Man", "Parent", "Person", "Thing"));
+
+			// the inferred disjoint classes of Protege are the sub classes of the complement
+			check("subClasses(not Man, true)        ", names(reasoner.getSubClasses(notMan, true)),
+					expected("Woman"));
+			checkContains("subClasses(not Man, false)       ", names(reasoner.getSubClasses(notMan, false)),
+					"Woman", "Mother", "Impossible");
+			check("equivalentClasses(not Man)       ", names(reasoner.getEquivalentClasses(notMan)),
+					expected());
+
+			check("isSatisfiable(hasChild some Person)", Boolean.valueOf(reasoner.isSatisfiable(hasChildPerson)),
+					Boolean.TRUE);
+			check("isSatisfiable(Man and Woman)     ", Boolean.valueOf(reasoner.isSatisfiable(manAndWoman)),
+					Boolean.FALSE);
+			// the expression is equivalent to owl:Nothing, which has no strict sub class
+			check("equivalentClasses(Man and Woman) ", names(reasoner.getEquivalentClasses(manAndWoman)),
+					expected("Impossible", "Nothing"));
+			check("subClasses(Man and Woman, false) ", names(reasoner.getSubClasses(manAndWoman, false)),
+					expected());
+
+			check("instances(hasChild some Woman)   ", names(reasoner.getInstances(hasChildWoman, false)),
+					expected("john", "johnny"));
+			NodeSet<OWLNamedIndividual> womenOrParents = reasoner.getInstances(womanOrParent, false);
+			check("instances(Woman or Parent)       ", names(womenOrParents),
+					expected("john", "johnny", "mary"));
+			check("instances(Woman or Parent) nodes ", Integer.valueOf(womenOrParents.getNodes().size()),
+					Integer.valueOf(2));
+			// every instance of the union is an instance of Woman or of Parent, so none is direct,
+			// while nothing named lies below 'hasChild some Woman'
+			check("instances(Woman or Parent, direct)", names(reasoner.getInstances(womanOrParent, true)),
+					expected());
+			check("instances(hasChild some Woman, direct)", names(reasoner.getInstances(hasChildWoman, true)),
+					expected("john", "johnny"));
+
+			// the named case still takes the class hierarchy directly, same answers
+			check("subClasses(Parent, true)         ", names(reasoner.getSubClasses(cls("Parent"), true)),
+					expected("Father", "Grandparent", "Mother"));
+
+			// a fresh entity in an expression is never asked of the native side, with the default
+			// policy ALLOW the answer is the trivial one
+			check("subClasses(hasChild some Fresh)  ", names(reasoner.getSubClasses(hasChildFresh, false)),
+					expected());
+			check("equivalentClasses(hasChild some Fresh)", names(reasoner.getEquivalentClasses(hasChildFresh)),
+					expected());
+			check("isSatisfiable(hasChild some Fresh)", Boolean.valueOf(reasoner.isSatisfiable(hasChildFresh)),
+					Boolean.TRUE);
+			// and the reasoner keeps answering afterwards
+			check("equivalentClasses(hasChild some Person) again", names(reasoner.getEquivalentClasses(hasChildPerson)),
+					expected("Parent"));
+		} finally {
+			reasoner.dispose();
+		}
+
+		final OWLReasoner strictReasoner = new KoncludeReasonerFactory().createReasoner(ontology,
+				new SimpleConfiguration(FreshEntityPolicy.DISALLOW, Long.MAX_VALUE));
+		try {
+			checkThrows("subClasses(hasChild some Fresh) with DISALLOW", FreshEntitiesException.class, new Runnable() {
+				public void run() { strictReasoner.getSubClasses(hasChildFresh, false); }
+			});
+		} finally {
+			strictReasoner.dispose();
 		}
 	}
 
@@ -399,15 +520,6 @@ public class KoncludeOWLAPITest {
 			checkThrowsUnsupported("isEntailed                    ", new Runnable() {
 				public void run() { reasoner.isEntailed(DF.getOWLSubClassOfAxiom(cls("Man"), cls("Person"))); }
 			});
-			// a query about an anonymous class expression cannot be asked either, the bridge
-			// identifies the asked class by its IRI
-			checkThrowsUnsupported("getSubClasses(anonymous)      ", new Runnable() {
-				public void run() {
-					reasoner.getSubClasses(DF.getOWLObjectSomeValuesFrom(
-							objectProperty("hasChild"), cls("Person")), false);
-				}
-			});
-
 			check("isEntailmentCheckingSupported(SUBCLASS_OF)",
 					Boolean.valueOf(reasoner.isEntailmentCheckingSupported(AxiomType.SUBCLASS_OF)),
 					Boolean.FALSE);
@@ -575,6 +687,8 @@ public class KoncludeOWLAPITest {
 
 		if ("hierarchy".equals(scenario)) {
 			runHierarchy();
+		} else if ("expressions".equals(scenario)) {
+			runExpressions();
 		} else if ("individuals".equals(scenario)) {
 			runIndividuals();
 		} else if ("properties".equals(scenario)) {

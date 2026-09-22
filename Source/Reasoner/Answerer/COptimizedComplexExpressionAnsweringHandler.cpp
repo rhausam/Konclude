@@ -1178,8 +1178,11 @@ namespace Konclude {
 								bool superClassNodesComputationRequired = compConQuery->isSuperClassNodesComputationRequired();
 								bool satisfiableComputationRequired = compConQuery->isSatisfiableComputationRequired();
 								bool direct = compConQuery->isDirect();
+								// the realization of the direct sub classes is only needed to subtract their instances
+								// for the direct instances, a direct sub/super classes query does not need it
+								bool subClassRealizationRequired = direct && instanceComputationRequired;
 
-								queryProcessing |= initializeComplexConceptQueryProcessing(queryProcessingData, nullptr, classTermExpOfInt, satisfiableComputationRequired, superClassNodesComputationRequired, subClassNodesComputationRequired, equivalentClassNodesComputationRequired, direct, instanceComputationRequired? -1 : 0, nullptr);
+								queryProcessing |= initializeComplexConceptQueryProcessing(queryProcessingData, nullptr, classTermExpOfInt, satisfiableComputationRequired, superClassNodesComputationRequired, subClassNodesComputationRequired, equivalentClassNodesComputationRequired, subClassRealizationRequired, instanceComputationRequired? -1 : 0, nullptr);
 							}
 						}
 						CComplexAxiomsClassVariablesAnsweringQuery* compAxClassVarQuery = dynamic_cast<CComplexAxiomsClassVariablesAnsweringQuery*>(query);
@@ -4498,7 +4501,7 @@ namespace Konclude {
 				COptimizedComplexConceptStepAnsweringItem* conEqProcStepItem = mOntoAnsweringItem->getConceptEquivalentClassesProcessingStepItem();
 				COptimizedComplexConceptStepAnsweringItem* instancesProcStepItem = mOntoAnsweringItem->getConceptInstancesProcessingStepItem();
 				QList<COptimizedComplexBuildingVariableCompositionsItem*>* buildingVarItemList = mOntoAnsweringItem->getVariableBuildingItemProcessingList();
-				while (!processing && (conSatProcStepItem->hasConceptItemsQueued() || conSuperProcStepItem->hasConceptItemsQueued() || conSubProcStepItem->hasConceptItemsQueued() || conEqProcStepItem->hasConceptItemsQueued() || instancesProcStepItem->hasConceptItemsQueued() || !buildingVarItemList->isEmpty())) {
+				while (!processing && (conSatProcStepItem->hasConceptItemsQueued() || conSuperProcStepItem->hasConceptItemsQueued() || conSubProcStepItem->hasConceptItemsQueued() || conSubRealStepItem->hasConceptItemsQueued() || conEqProcStepItem->hasConceptItemsQueued() || instancesProcStepItem->hasConceptItemsQueued() || !buildingVarItemList->isEmpty())) {
 					
 					
 					processing = createComplexConceptItemCalculation(processing, conSatProcStepItem, answererContext, conSuperProcStepItem, conSubProcStepItem, conSubRealStepItem, conEqProcStepItem, instancesProcStepItem);
@@ -4864,8 +4867,11 @@ namespace Konclude {
 
 
 				if (!processing && conSubRealStepItem->hasConceptItemsQueued()) {
-					COptimizedComplexConceptItem* conceptItem = conSubRealStepItem->getNextQueuedConceptItem();
+					// taken from the queue like the items of the other steps, a finished item that stayed
+					// in front would keep every later item from being processed
+					COptimizedComplexConceptItem* conceptItem = conSubRealStepItem->takeNextQueuedConceptItem();
 					CComplexConceptStepComputationProcess* compStep = conceptItem->getComputationProcess()->getSubClassRealizationProcess(true);
+					compStep->setComputationProcessQueued(false);
 					CHierarchyNode* bottomHierNode = mOntoAnsweringItem->getOntology()->getClassification()->getClassConceptClassification()->getClassConceptTaxonomy()->getBottomHierarchyNode();
 
 					if (!compStep->isComputationProcessFinished()) {
@@ -4881,7 +4887,9 @@ namespace Konclude {
 							}
 
 							if (!reqList.isEmpty()) {
-								CAnsweringMessageDataRequirementCompletedRealization* reqCompMess = new CAnsweringMessageDataRequirementCompletedRealization(conceptItem);
+								// the completion has to finish this step, the realization completion message only
+								// queues the instances step, so a direct query waited for this step for ever
+								CAnsweringMessageDataRequirementCompletedSubClassRealization* reqCompMess = new CAnsweringMessageDataRequirementCompletedSubClassRealization(conceptItem);
 								processRequirements(answererContext, mOntoAnsweringItem->getOntology(), reqList, reqCompMess);
 								processing = true;
 							} else {

@@ -34,9 +34,16 @@ namespace Konclude {
 					mOntRevData = ontRevData;
 					mJNIInstanceManager = jniInstanceManager;
 					mJNICommandProcessor = jniInstanceManager->getJNICommandProcessor();
+					mExpressionOntRev = nullptr;
+					mExpressionBuilder = nullptr;
 				}
 
-				CJNIQueryProcessor::~CJNIQueryProcessor() {					
+				CJNIQueryProcessor::~CJNIQueryProcessor() {
+					// the revision the expressions were built into is left to the reasoner, as the
+					// OWLlink interface leaves the revisions of its complex queries, the reasoner does
+					// not track a revision that is not installed and its ontology shares its data with
+					// the installed one
+					delete mExpressionBuilder;
 				}
 
 
@@ -284,6 +291,263 @@ namespace Konclude {
 						return result != nullptr;
 					}
 					return false;
+				}
+
+
+
+
+
+				CJNIAxiomExpressionVisitingLoader* CJNIQueryProcessor::getClassExpressionBuilder() {
+					if (!mExpressionBuilder) {
+						COntologyRevision* installedOntRev = mOntRevData->getOntologyRevision();
+						mExpressionOntRev = mJNICommandProcessor->getNewOntologyRevision(installedOntRev);
+						if (!mExpressionOntRev) {
+							LOG(ERROR,"::Konclude::JNIQueryProcessor",logTr("Could not create the ontology revision for the class expressions of the queries."),0);
+							return nullptr;
+						}
+						// the installed revision data keeps the entity mapping, so an entity that is
+						// first mentioned in a query is recorded where the results are resolved
+						mExpressionBuilder = new CJNIQueryExpressionBuildingLoader(mJNIInstanceManager,mOntRevData,mExpressionOntRev->getOntology());
+						mExpressionBuilder->initializeBuilding();
+					}
+					return mExpressionBuilder;
+				}
+
+
+				CClassTermExpression* CJNIQueryProcessor::getQueryClassTermExpression(CBuildExpression* classExpression, QString& errorMessage) {
+					if (!classExpression) {
+						errorMessage = QString("No class expression was handed over for the query.");
+						return nullptr;
+					}
+					if (!mExpressionBuilder) {
+						errorMessage = QString("The class expression builder of the querying bridge has not been initialised, so the class expression cannot belong to it.");
+						return nullptr;
+					}
+					CClassTermExpression* classTermExp = dynamic_cast<CClassTermExpression*>(classExpression);
+					if (!classTermExp) {
+						errorMessage = QString("The expression handed over for the query is not a class expression.");
+						return nullptr;
+					}
+					return classTermExp;
+				}
+
+
+				CQueryResult* CJNIQueryProcessor::calculateClassExpressionQuery(CComplexConceptAnsweringQuery* query, QString& errorMessage) {
+					mJNICommandProcessor->calculateOntologyQuery(query);
+					CQueryResult* result = query->getQueryResult();
+					if (query->hasError() || !result) {
+						QStringList errorStringList = query->getErrorStringList();
+						if (errorStringList.isEmpty()) {
+							errorMessage = QString("The query '%1' about a class expression was not answered.").arg(query->getQueryName());
+						} else {
+							errorMessage = QString("The query '%1' about a class expression failed: %2").arg(query->getQueryName()).arg(errorStringList.join("; "));
+						}
+						return nullptr;
+					}
+					return result;
+				}
+
+
+				void CJNIQueryProcessor::visitClassName(const QString& className, CEntityExpressionSetResultVisitingCallback* visitingCallback) {
+					CConcreteOntology* ont = mOntRevData->getOntologyRevision()->getOntology();
+					CClassExpression* classExp = ont->getBuildData()->getClassEntityBuildHash()->value(className,nullptr);
+					if (classExp) {
+						visitingCallback->visitEntityExpression(classExp,ont);
+					}
+				}
+
+
+				void CJNIQueryProcessor::visitIndividualName(const QString& individualName, CEntityExpressionSetResultVisitingCallback* visitingCallback) {
+					CConcreteOntology* ont = mOntRevData->getOntologyRevision()->getOntology();
+					CNamedIndividualExpression* indiExp = ont->getBuildData()->getIndividualEntityBuildHash()->value(individualName,nullptr);
+					if (indiExp) {
+						visitingCallback->visitEntityExpression(indiExp,ont);
+					}
+				}
+
+
+
+				bool CJNIQueryProcessor::checkIsClassExpressionSatisfiable(CBuildExpression* classExpression, bool& satisfiable, QString& errorMessage) {
+					CClassTermExpression* classTermExp = getQueryClassTermExpression(classExpression,errorMessage);
+					if (!classTermExp) {
+						return false;
+					}
+					COntologyRevision* ontRev = mOntRevData->getOntologyRevision();
+					CComplexSatisfiabilityAnsweringQuery* query = new CComplexSatisfiabilityAnsweringQuery(ontRev->getOntology(),mExpressionOntRev->getOntology(),classTermExp,ontRev->getOntologyConfiguration(),QString("JNI-Class-Expression-Satisfiability-Query"));
+					CQueryResult* result = calculateClassExpressionQuery(query,errorMessage);
+					CBooleanQueryResult* boolResult = dynamic_cast<CBooleanQueryResult*>(result);
+					if (boolResult) {
+						satisfiable = boolResult->getResult();
+					} else if (result) {
+						errorMessage = QString("The satisfiability query about a class expression was answered with an unexpected result.");
+					}
+					delete query;
+					return boolResult != nullptr;
+				}
+
+
+				bool CJNIQueryProcessor::computeClassExpressionEquivalentClassNames(CClassTermExpression* classTermExp, QStringList& classNames, QString& errorMessage) {
+					COntologyRevision* ontRev = mOntRevData->getOntologyRevision();
+					CComplexEquivalentClassesAnsweringQuery* query = new CComplexEquivalentClassesAnsweringQuery(ontRev->getOntology(),mExpressionOntRev->getOntology(),classTermExp,ontRev->getOntologyConfiguration(),QString("JNI-Class-Expression-EquivalentClasses-Query"));
+					CQueryResult* result = calculateClassExpressionQuery(query,errorMessage);
+					CClassSetResult* classSetResult = dynamic_cast<CClassSetResult*>(result);
+					if (classSetResult) {
+						for (const QString& className : *classSetResult->getClassesSet()) {
+							classNames.append(className);
+						}
+					} else if (result) {
+						errorMessage = QString("The equivalent classes query about a class expression was answered with an unexpected result.");
+					}
+					delete query;
+					return classSetResult != nullptr;
+				}
+
+
+				bool CJNIQueryProcessor::queryClassExpressionSubSuperClasses(CBuildExpression* classExpression, bool subClasses, bool superClasses, bool direct, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback, QString& errorMessage) {
+					CClassTermExpression* classTermExp = getQueryClassTermExpression(classExpression,errorMessage);
+					if (!classTermExp) {
+						return false;
+					}
+					COntologyRevision* ontRev = mOntRevData->getOntologyRevision();
+					CConcreteOntology* ont = ontRev->getOntology();
+
+					// the complex query reports a class that is equivalent to the expression among its sub
+					// and its super classes, and for the direct ones reports nothing else, while the OWL API
+					// asks for the strict ones. An expression that is equivalent to a class therefore has
+					// the sub and super classes of that class, which the class hierarchy answers directly.
+					QStringList equivalentClassNames;
+					if (!computeClassExpressionEquivalentClassNames(classTermExp,equivalentClassNames,errorMessage)) {
+						return false;
+					}
+					for (const QString& className : equivalentClassNames) {
+						CConcept* concept = ont->getStringMapping()->getConceptFromName(className);
+						if (concept) {
+							CCalculationConfigurationExtension* calcConfig = new CCalculationConfigurationExtension(ontRev->getOntologyConfiguration());
+							CSubSuperClassesResultVisitCallbackQuery* subSuperClassQuery = new CSubSuperClassesResultVisitCallbackQuery(ont,calcConfig,concept,className,subClasses,superClasses,direct);
+							mJNICommandProcessor->calculateOntologyQuery(subSuperClassQuery);
+							CQueryResult* result = subSuperClassQuery->getQueryResult();
+							if (result) {
+								subSuperClassQuery->callbackVisitingClasses(visitingCallback);
+							} else {
+								errorMessage = QString("The sub/super classes query for '%1', which is equivalent to the asked class expression, was not answered.").arg(className);
+							}
+							delete subSuperClassQuery;
+							return result != nullptr;
+						}
+					}
+
+					// the complex query is always asked for all sub or super classes, its direct ones are
+					// not minimal, a class below another one of the answer is reported as direct as well,
+					// so the direct ones are taken from the class hierarchy: a sub class of the answer is
+					// direct if none of its parents is in the answer, a super class if none of its children
+					CComplexConceptAnsweringQuery* query = nullptr;
+					if (subClasses) {
+						query = new CComplexSubClassesAnsweringQuery(ont,mExpressionOntRev->getOntology(),classTermExp,ontRev->getOntologyConfiguration(),QString("JNI-Class-Expression-SubClasses-Query"));
+					} else {
+						query = new CComplexSuperClassesAnsweringQuery(ont,mExpressionOntRev->getOntology(),classTermExp,ontRev->getOntologyConfiguration(),QString("JNI-Class-Expression-SuperClasses-Query"));
+					}
+					query->setDirect(false);
+					CQueryResult* result = calculateClassExpressionQuery(query,errorMessage);
+					CClassSynsetsResult* synsetsResult = dynamic_cast<CClassSynsetsResult*>(result);
+					if (synsetsResult) {
+						QList<CHierarchyNode*> nodeList;
+						QSet<CHierarchyNode*> nodeSet;
+						CTaxonomy* taxonomy = ont->getClassification()->getClassConceptClassification()->getClassConceptTaxonomy();
+						for (CClassSynsetResult* synset : *synsetsResult->getClassSynsetList()) {
+							CHierarchyNode* node = nullptr;
+							for (const QString& className : synset->getEquivalentClassNameList()) {
+								CConcept* concept = ont->getStringMapping()->getConceptFromName(className);
+								if (concept) {
+									node = taxonomy->getHierarchyNode(concept);
+									if (node) {
+										break;
+									}
+								}
+							}
+							if (node && !nodeSet.contains(node)) {
+								nodeSet.insert(node);
+								nodeList.append(node);
+							}
+						}
+						for (CHierarchyNode* node : nodeList) {
+							if (direct) {
+								bool nodeDirect = true;
+								QSet<CHierarchyNode*>* neighbourNodeSet = subClasses ? node->getParentNodeSet() : node->getChildNodeSet();
+								for (CHierarchyNode* neighbourNode : *neighbourNodeSet) {
+									if (nodeSet.contains(neighbourNode)) {
+										nodeDirect = false;
+										break;
+									}
+								}
+								if (!nodeDirect) {
+									continue;
+								}
+							}
+							visitingCallback->startEntityExpressionSet(ont);
+							for (CConcept* concept : *node->getEquivalentConceptList()) {
+								visitingCallback->visitConceptAssociatedEntityExpression(concept,ont);
+							}
+							visitingCallback->endEntityExpressionSet(ont);
+						}
+					} else if (result) {
+						errorMessage = QString("The sub/super classes query about a class expression was answered with an unexpected result.");
+					}
+					delete query;
+					return synsetsResult != nullptr;
+				}
+
+
+				bool CJNIQueryProcessor::queryClassExpressionSubClasses(CBuildExpression* classExpression, bool direct, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback, QString& errorMessage) {
+					return queryClassExpressionSubSuperClasses(classExpression,true,false,direct,visitingCallback,errorMessage);
+				}
+
+
+				bool CJNIQueryProcessor::queryClassExpressionSuperClasses(CBuildExpression* classExpression, bool direct, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback, QString& errorMessage) {
+					return queryClassExpressionSubSuperClasses(classExpression,false,true,direct,visitingCallback,errorMessage);
+				}
+
+
+				bool CJNIQueryProcessor::queryClassExpressionEquivalentClasses(CBuildExpression* classExpression, CEntityExpressionSetResultVisitingCallback* visitingCallback, QString& errorMessage) {
+					CClassTermExpression* classTermExp = getQueryClassTermExpression(classExpression,errorMessage);
+					if (!classTermExp) {
+						return false;
+					}
+					QStringList equivalentClassNames;
+					if (!computeClassExpressionEquivalentClassNames(classTermExp,equivalentClassNames,errorMessage)) {
+						return false;
+					}
+					for (const QString& className : equivalentClassNames) {
+						visitClassName(className,visitingCallback);
+					}
+					return true;
+				}
+
+
+				bool CJNIQueryProcessor::queryClassExpressionInstances(CBuildExpression* classExpression, bool direct, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback, QString& errorMessage) {
+					CClassTermExpression* classTermExp = getQueryClassTermExpression(classExpression,errorMessage);
+					if (!classTermExp) {
+						return false;
+					}
+					COntologyRevision* ontRev = mOntRevData->getOntologyRevision();
+					CComplexIndividualInstancesAnsweringQuery* query = new CComplexIndividualInstancesAnsweringQuery(ontRev->getOntology(),mExpressionOntRev->getOntology(),classTermExp,ontRev->getOntologyConfiguration(),QString("JNI-Class-Expression-Instances-Query"));
+					query->setDirect(direct);
+					query->setFlattened(false);
+					CQueryResult* result = calculateClassExpressionQuery(query,errorMessage);
+					CIndividualSynsetsResult* synsetsResult = dynamic_cast<CIndividualSynsetsResult*>(result);
+					if (synsetsResult) {
+						CConcreteOntology* ont = ontRev->getOntology();
+						for (CIndividualSynsetResult* synset : *synsetsResult->getIndividualSynsetList()) {
+							visitingCallback->startEntityExpressionSet(ont);
+							for (const QString& individualName : synset->getEquivalentIndividualNameList()) {
+								visitIndividualName(individualName,visitingCallback);
+							}
+							visitingCallback->endEntityExpressionSet(ont);
+						}
+					} else if (result) {
+						errorMessage = QString("The instances query about a class expression was answered with an unexpected result.");
+					}
+					delete query;
+					return synsetsResult != nullptr;
 				}
 
 

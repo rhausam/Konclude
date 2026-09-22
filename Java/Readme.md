@@ -1,7 +1,7 @@
 # THE JAVA SIDE OF THE JNI BRIDGE
 
 Konclude contains a JNI bridge in `Source/Control/Interface/JNI`, which is compiled into a
-shared library by `KoncludeLIB.pro` and which exports 84 native entry points. This directory
+shared library by `KoncludeLIB.pro` and which exports 90 native entry points. This directory
 contains the Java counterpart of that bridge, which has never been part of this repository,
 in two layers:
 
@@ -60,6 +60,7 @@ see `OWLAPI_VERSION` in the script.
 | scenario | what it checks |
 | --- | --- |
 | `hierarchy` | the class hierarchy of a small family ontology, direct and indirect, and the top and the bottom node |
+| `expressions` | the questions about anonymous class expressions, as the DL query tab of Protege asks them: equivalent, sub and super classes, satisfiability and instances of `ObjectSomeValuesFrom`, `ObjectIntersectionOf`, `ObjectUnionOf` and `ObjectComplementOf` expressions, and a fresh entity inside one |
 | `individuals` | the types, the instances, the same individuals, the grouping by sameAs and the object property values |
 | `properties` | the object property hierarchy, sub, super and equivalent, direct and indirect |
 | `datatypes` | a sub data property axiom and a datatype restriction, the two constructs whose entry points were mixed up |
@@ -97,8 +98,8 @@ The object that is handed over while an entity is built is remembered by the nat
 reported back by the queries, which is how the entities of a client, the `OWLClass` instances
 of the OWL API for instance, find their way back into the query results.
 
-All 84 entry points are declared, in `KoncludeReasonerBridge` (6),
-`AxiomExpressionBuildingBridge` (66) and `QueryingBridge` (12). The declarations were checked
+All 90 entry points are declared, in `KoncludeReasonerBridge` (6),
+`AxiomExpressionBuildingBridge` (66) and `QueryingBridge` (18). The declarations were checked
 against the generated headers by compiling them with `javac -h` and comparing the result with
 `Source/Control/Interface/JNI/com_konclude_jnibridge_*.h`, which is worth repeating after a
 change of either side.
@@ -111,18 +112,45 @@ pushed, so a caller has to pair them itself.
 
 ## WHAT THE BRIDGE DOES NOT ANSWER
 
-The querying bridge provides 12 queries, which do not cover the `OWLReasoner` interface.
-`KoncludeReasoner` throws an `UnsupportedOperationException` for a question that it cannot
-answer, rather than an empty node set, because an empty node set is a valid answer and a
-caller cannot tell the two apart.
+The querying bridge provides 12 queries about a named entity and 5 about a class expression,
+which do not cover the `OWLReasoner` interface. `KoncludeReasoner` throws an
+`UnsupportedOperationException` for a question that it cannot answer, rather than an empty
+node set, because an empty node set is a valid answer and a caller cannot tell the two apart.
 
 The native side has no query for the disjointness of classes and properties, the domains and
 the ranges of properties, the inverse properties, the data property hierarchy, the data
 property values, the different individuals and the entailment check.
 
-Every query of the bridge identifies the asked entity by its IRI, so a question about an
-anonymous class expression, the sub classes of an `ObjectSomeValuesFrom` for instance, cannot
-be asked either.
+
+## QUESTIONS ABOUT A CLASS EXPRESSION
+
+The 12 queries about a named entity identify it by its IRI, so a question about an anonymous
+class expression, the sub classes of an `ObjectSomeValuesFrom` for instance, could not be asked
+through them, which is what every question of the DL query tab of Protege is, and what its
+inferred disjoint classes rest on, the sub classes of an `ObjectComplementOf`.
+
+For these the querying bridge binds a second `AxiomExpressionBuildingBridge` to itself with
+`initOWLClassExpressionBuilder`. Its `buildOWL...` methods build into a revision of the
+installed ontology that is never installed, so the installed ontology is not written to, and
+the expressions that only a query mentions are kept in a hash of the builder's own, as the
+OWLlink interface does for its complex queries, otherwise the first query would detach a copy
+of the expression hash of the whole ontology from the copy-on-write copy the revision holds.
+The address the builder returns is handed to `checkIsOWLClassExpressionSatisfiable` and to the
+`queryOWLClassExpression...` queries for the sub, super and equivalent classes and the
+instances.
+
+On the native side these are answered by the `CComplex...AnsweringQuery` classes of the OWLlink
+interface, which rebuild the expression in a testing ontology of their own and answer with the
+names of the entities, so `CJNIQueryProcessor` resolves the names in the installed ontology
+and reports the entities through the same callbacks as the named queries. The first such
+question pays for setting up that answering machinery. A question the native side does not
+answer is reported by a `KoncludeReasonerException`.
+
+An entity that the ontology does not mention is never sent to the native side, which would
+answer as if the expression were unsatisfiable and would remember the entity in the revision
+of the builder. `KoncludeReasoner` applies the `FreshEntityPolicy` instead, to a class
+expression as soon as one of its entities is fresh: with `DISALLOW` a `FreshEntitiesException`,
+with `ALLOW` the trivial answer, an empty node set.
 
 
 ## DEFECTS THAT WERE FIXED ON THE NATIVE SIDE
@@ -181,6 +209,37 @@ run. Driving them against the library brought out the following, all of which ar
   reported anything, which only became visible once the query answered at all. The query
   answers with one flat set, like the other `equivalent` queries, so the declaration was
   corrected to `ObjectSetCallbackListener`.
+
+- Every complex query with `direct = true`, the direct sub or super classes or the direct
+  instances of a class expression, never returned, over OWLlink as well. In
+  `COptimizedComplexExpressionAnsweringHandler` the direct flag was handed on as 'sub class
+  realization required', and that step could never run: the loop of
+  `continueCalculationCreation` did not look at its queue, so a concept item queued for it
+  alone was never processed; had it run, the completion message it sent was of the type of the
+  plain realization, whose handling only queues the instances step, so the step would not have
+  been finished either; and it was ordered after the instances step, whose completion queues
+  no further step. The queue is now part of the loop, the item is taken from it like the items
+  of the other steps, the step sends its own completion type and comes before the instances
+  step, and it is only asked for when the instances are, which is the one place that needs the
+  direct sub classes realized, to subtract their instances.
+
+- Konclude's complex queries report a class that is equivalent to the asked expression among
+  its sub and its super classes, and their direct answers are not minimal, a class below
+  another class of the answer is reported as direct as well. `CJNIQueryProcessor` therefore
+  answers an expression that is equivalent to a class from the class hierarchy of that class,
+  and takes the direct sub or super classes of any other expression from the hierarchy as
+  well: those classes of the complete answer none of whose parents, or children, is in it.
+  Fixing this in the engine is tracked as
+  [rhausam/Konclude#12](https://github.com/rhausam/Konclude/issues/12).
+
+  Not fixed, tracked as [rhausam/Konclude#13](https://github.com/rhausam/Konclude/issues/13),
+  and also present over OWLlink, is that the answering engine loses part of an
+  expression once a sub expression of it has been asked about before: after the equivalent
+  classes of `hasChild some Person` the equivalent classes of `Man and (hasChild some Person)`
+  come back empty instead of `Father`, and its super classes lack `Man`. Asked first, the
+  expression is answered correctly. The `expressions` scenario asks in that order on purpose
+  and reports these three answers as known defects of the engine instead of failing, so that
+  it shows when the engine is fixed.
 
 
 ## THE PRECOMPUTATION THAT DID NOT FINISH
