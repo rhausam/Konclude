@@ -483,6 +483,8 @@ namespace Konclude {
 							bottomHierNode->makeParent(itemHierNode);
 						}
 					}
+					// the leaves are the direct parents of the bottom node now, the top node is not
+					tax->removeBypassedTopBottomLink();
 
 
 #ifdef OPTIMIZEDCLASSEXTRACTEDSATURATIONCLASSIFIERDEBUGSTATUSDESCRIPTION
@@ -543,6 +545,9 @@ namespace Konclude {
 					}
 					node->addParentNode(newParentNode);
 					newParentNode->addChildNode(node);
+					// a node with a child is not a leaf, so it must not be made a parent of the
+					// bottom node afterwards; the single direct subsumer path marks this as well
+					subsumedConceptItem->setPredecessorItem(true);
 					if (mTransitiveReductionAddAllPredecessors || resolvedExtSubsumerCount != remainingSubsumingResolvingCount) {
 						resolvedExtSubsumerCount = 0;
 						QList<CHierarchyNode*> predAddList;

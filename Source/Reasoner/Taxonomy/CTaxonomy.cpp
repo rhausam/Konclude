@@ -188,6 +188,15 @@ namespace Konclude {
 				return bottomNode;
 			}
 
+			CTaxonomy *CTaxonomy::removeBypassedTopBottomLink() {
+				if (topNode != bottomNode && bottomNode->hasParentNode(topNode) && bottomNode->getParentNodeSet()->count() > 1) {
+					// the top node remains a predecessor of the bottom node, only the direct link goes
+					bottomNode->removeParent(topNode);
+					topNode->removeChild(bottomNode);
+				}
+				return this;
+			}
+
 
 
 			CHierarchyNode *CTaxonomy::createHierarchyNode(CConcept *concept) {

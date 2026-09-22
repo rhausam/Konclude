@@ -247,6 +247,14 @@ public class KoncludeOWLAPITest {
 					Boolean.TRUE);
 			check("isSatisfiable(Impossible)      ", Boolean.valueOf(reasoner.isSatisfiable(cls("Impossible"))),
 					Boolean.FALSE);
+			// the bottom node is not a direct sub class of owl:Thing beside the roots, and owl:Thing
+			// is not a direct super class of it beside the leaves; the taxonomy used to keep the
+			// link between the two that an empty taxonomy starts with, which is how unsatisfiable
+			// classes came to be shown under owl:Thing in Protege
+			check("subClasses(Thing, direct=true)  ", names(reasoner.getSubClasses(DF.getOWLThing(), true)),
+					expected("Person"));
+			check("superClasses(Nothing, direct=true)", names(reasoner.getSuperClasses(DF.getOWLNothing(), true)),
+					expected("Father", "Grandparent", "Mother"));
 		} finally {
 			reasoner.dispose();
 		}
@@ -409,6 +417,13 @@ public class KoncludeOWLAPITest {
 					expected("hasChild"));
 			checkContains("topObjectPropertyNode               ",
 					names(reasoner.getTopObjectPropertyNode()), "topObjectProperty");
+			// as for the classes, the bottom property is not a direct sub property of the top one
+			check("subObjectProperties(top, direct=true)",
+					names(reasoner.getSubObjectProperties(DF.getOWLTopObjectProperty(), true)),
+					expected("hasChild", "hasParent"));
+			check("superObjectProperties(bottom, true) ",
+					names(reasoner.getSuperObjectProperties(DF.getOWLBottomObjectProperty(), true)),
+					expected("hasParent", "hasSon"));
 		} finally {
 			reasoner.dispose();
 		}

@@ -307,6 +307,43 @@ run. Driving them against the library brought out the following, all of which ar
   it shows when the engine is fixed.
 
 
+- The bottom node was a direct child of the top node in every taxonomy, so `owl:Nothing`
+  and every unsatisfiable class were reported as direct sub classes of `owl:Thing` beside the
+  real roots, and `owl:Thing` as a direct super class of `owl:Nothing` beside the leaves.
+  Protege paints the members of the bottom node under `owl:Thing` for that, which is how it
+  showed with the pizza ontology, where `CheeseyVegetableTopping` and `IceCream` appeared
+  under `owl:Thing` as well as under `owl:Nothing`; HermiT and FaCT++ answer `[DomainConcept,
+  ValuePartition]` for the direct sub classes of `owl:Thing`, Konclude answered those plus
+  the two and `Nothing`. The same held for `owl:bottomObjectProperty` under
+  `owl:topObjectProperty`. The OWLlink route did not show it because the client's local
+  hierarchy cache rebuilds the direct relations itself.
+
+  The cause is in the engine, not in the bridge: `CTaxonomy` and
+  `CParentChildPredecessorHierarchy` make the bottom node a child of the top node when they
+  are created, which is the right hierarchy as long as nothing else exists, and the three
+  classifiers that finish a hierarchy, `COptimizedKPSetClassSubsumptionClassifierThread`,
+  `COptimizedClassExtractedSaturationSubsumptionClassifierThread` and
+  `COptimizedKPSetRoleSubsumptionClassifierThread`, make every leaf a parent of the bottom
+  node without removing that first link. They now call `removeBypassedTopBottomLink`, which
+  drops the direct link once the bottom node has another parent; the top node stays a
+  predecessor of it, so the indirect answers do not change. The incremental classifier copies
+  the links of the previous taxonomy and inherits the fix. The `hierarchy` and `properties`
+  scenarios check the direct sub classes of `owl:Thing` and the direct super classes of
+  `owl:Nothing` since.
+
+  That check brought out a second defect of the same kind in
+  `COptimizedClassExtractedSaturationSubsumptionClassifierThread`, the classifier that
+  handles an ontology whose saturation suffices, which SNOMED CT and the family ontology of
+  the test are. It decides which nodes are leaves, and so parents of the bottom node, by a
+  flag that is set on every class that was made a direct parent of another; its path for a
+  class with several direct parents, `makeParentAddPredeccessors`, linked the parents without
+  setting the flag. A class whose children all have more than one parent, `Man` with its only
+  child `Father`, that is `Man and Parent`, was therefore taken for a leaf and reported as a
+  direct super class of `owl:Nothing`. HermiT answers `[Father, Grandparent, Mother]` for the
+  family ontology, Konclude answered those plus `Man` and `Woman`. The flag is set on that
+  path now, as it is in the other two classifiers.
+
+
 ## THE PRECOMPUTATION THAT DID NOT FINISH
 
 Konclude used to stay in its precomputation for an ontology whose ABox forces two **named**
