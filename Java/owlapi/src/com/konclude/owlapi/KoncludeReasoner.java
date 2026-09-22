@@ -535,7 +535,9 @@ public class KoncludeReasoner implements OWLReasoner {
 	 * for an editor is a window that stops responding with nothing to indicate why.
 	 *
 	 * The progress monitor of the configuration is told about each task, which is what Protege
-	 * shows in its progress window; the bridge reports no progress within a task.
+	 * shows in its progress window. The bridge reports no progress within a task, so the task
+	 * is reported as busy, which Protege paints as an animated bar; a task that is only started
+	 * is painted as a bar that stays at zero.
 	 */
 	@Override
 	public void precomputeInferences(InferenceType... inferenceTypes) {
@@ -548,6 +550,7 @@ public class KoncludeReasoner implements OWLReasoner {
 			}
 			if (InferenceType.CLASS_HIERARCHY == inferenceType) {
 				monitor.reasonerTaskStarted(ReasonerProgressMonitor.CLASSIFYING);
+				monitor.reasonerTaskBusy();
 				try {
 					getSubClasses(thing, true);
 				} finally {
@@ -556,6 +559,7 @@ public class KoncludeReasoner implements OWLReasoner {
 				mPrecomputed.add(inferenceType);
 			} else if (InferenceType.CLASS_ASSERTIONS == inferenceType) {
 				monitor.reasonerTaskStarted(ReasonerProgressMonitor.REALIZING);
+				monitor.reasonerTaskBusy();
 				try {
 					getInstances(thing, true);
 				} finally {

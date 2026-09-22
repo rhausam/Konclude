@@ -138,6 +138,14 @@ is best switched off in the reasoner preferences. `interrupt` releases the calle
 running calculation but cannot stop the calculation itself, so cancelling in the progress
 window returns at once while Konclude works on in the background until it is done.
 
+The bar of the progress window does not move. The bridge reports no progress within a task,
+so the wrapper reports each task as busy, which Protege paints as an indeterminate bar; on
+macOS the Aqua look and feel of the JDK (Liberica 17 was tried) draws an indeterminate bar as
+a flat grey track while the component believes it is animating, so the bar looks the same as
+one that was only started. Reasoners that report numbers, as ELK does, get a bar that fills.
+Konclude computes the numbers, `CClassificationProgress` and `CRealizationProgress` are what
+the command line's `-a` prints, but the bridge has no native that reads them yet.
+
 
 ## THE CONTRACT OF THE NATIVE SIDE
 
