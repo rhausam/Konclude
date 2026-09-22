@@ -535,9 +535,8 @@ public class KoncludeReasoner implements OWLReasoner {
 	 * for an editor is a window that stops responding with nothing to indicate why.
 	 *
 	 * The progress monitor of the configuration is told about each task, which is what Protege
-	 * shows in its progress window. The bridge reports no progress within a task, so the task
-	 * is reported as busy, which Protege paints as an animated bar; a task that is only started
-	 * is painted as a bar that stays at zero.
+	 * shows in its progress window, and while the task runs a ProgressReporter feeds it the
+	 * progress of the native calculations.
 	 */
 	@Override
 	public void precomputeInferences(InferenceType... inferenceTypes) {
@@ -549,26 +548,126 @@ public class KoncludeReasoner implements OWLReasoner {
 				continue;
 			}
 			if (InferenceType.CLASS_HIERARCHY == inferenceType) {
-				monitor.reasonerTaskStarted(ReasonerProgressMonitor.CLASSIFYING);
-				monitor.reasonerTaskBusy();
+				monitor.reasonerTaskStarted(PRECOMPUTING);
+				ProgressReporter reporter = new ProgressReporter(monitor, false);
+				reporter.start();
 				try {
 					getSubClasses(thing, true);
 				} finally {
+					reporter.finish();
 					monitor.reasonerTaskStopped();
 				}
 				mPrecomputed.add(inferenceType);
 			} else if (InferenceType.CLASS_ASSERTIONS == inferenceType) {
 				monitor.reasonerTaskStarted(ReasonerProgressMonitor.REALIZING);
-				monitor.reasonerTaskBusy();
+				ProgressReporter reporter = new ProgressReporter(monitor, true);
+				reporter.start();
 				try {
 					getInstances(thing, true);
 				} finally {
+					reporter.finish();
 					monitor.reasonerTaskStopped();
 				}
 				mPrecomputed.add(inferenceType);
 			}
 			// the other inference types have no query of their own in the bridge, and the OWL API
 			// allows a reasoner to ignore what it does not precompute
+		}
+	}
+
+	/** how often the progress of a running precomputation is read and reported */
+	private static final long PROGRESS_INTERVAL_MILLISECONDS = 250;
+
+	/**
+	 * The task reported for the first phase of a classification, the consistency check and
+	 * the saturation, which Konclude calls the precomputation; ReasonerProgressMonitor.CLASSIFYING
+	 * follows it once the classifier tests. The two are reported as one task after the other,
+	 * as ELK reports its stages, so a window shows which phase it is in.
+	 */
+	public static final String PRECOMPUTING = "Precomputing";
+
+	/**
+	 * Reports the progress of the native calculations to the progress monitor while a
+	 * precomputation runs. It has to be a thread of its own, the reasoner's thread is inside
+	 * the query that triggers the calculation; the progress query of the bridge only reads
+	 * counters of the calculation managers, so it may run beside that query, and it is the
+	 * one native call of a reasoner that does not go through guard().
+	 *
+	 * The counters are those the command line prints with '-a'. A classification starts with
+	 * the precomputation, for which Konclude keeps no count, the saturation is one task and
+	 * the approximated remaining tasks stay at zero, so the monitor is told that the task is
+	 * busy, every interval. Once the classifier tests, its satisfiability and subsumption
+	 * tests done against those to do are reported as value and maximum, under the task
+	 * CLASSIFYING; the total grows a little while the tests run, which a monitor takes as a
+	 * new maximum. On SNOMED CT the precomputation takes 21 of 37 seconds. A realization has
+	 * one count, its tested instantiations, which is zero without individuals.
+	 */
+	private final class ProgressReporter extends Thread {
+
+		private final ReasonerProgressMonitor mMonitor;
+		private final boolean mRealization;
+		private boolean mClassifying = false;
+		private volatile boolean mFinished = false;
+
+		ProgressReporter(ReasonerProgressMonitor monitor, boolean realization) {
+			super("Konclude progress");
+			mMonitor = monitor;
+			mRealization = realization;
+			setDaemon(true);
+		}
+
+		/** stops the reporting; the last report may still be on its way, none follows it */
+		void finish() {
+			mFinished = true;
+			interrupt();
+			try {
+				join();
+			} catch (InterruptedException exception) {
+				Thread.currentThread().interrupt();
+			}
+		}
+
+		@Override
+		public void run() {
+			mMonitor.reasonerTaskBusy();
+			while (!mFinished) {
+				try {
+					Thread.sleep(PROGRESS_INTERVAL_MILLISECONDS);
+				} catch (InterruptedException exception) {
+					break;
+				}
+				if (mFinished) {
+					break;
+				}
+				double[] progress = mQuerying.queryOWLReasoningProgress(mBridge);
+				if (mRealization) {
+					report(progress[QueryingBridge.PROGRESS_REALIZATION_TESTED],
+							progress[QueryingBridge.PROGRESS_REALIZATION_TOTAL]);
+				} else {
+					double tested = progress[QueryingBridge.PROGRESS_CLASSIFICATION_TESTED];
+					double total = progress[QueryingBridge.PROGRESS_CLASSIFICATION_TOTAL];
+					if (!mClassifying && total > 0) {
+						// the classifier has started testing, the precomputation is over
+						mClassifying = true;
+						mMonitor.reasonerTaskStopped();
+						mMonitor.reasonerTaskStarted(ReasonerProgressMonitor.CLASSIFYING);
+					}
+					report(tested, total);
+				}
+			}
+		}
+
+		private boolean isRunning(double done, double total) {
+			return total > 0 && done < total;
+		}
+
+		private void report(double done, double total) {
+			if (isRunning(done, total)) {
+				mMonitor.reasonerTaskProgressChanged((int) Math.min(done, Integer.MAX_VALUE),
+						(int) Math.min(total, Integer.MAX_VALUE));
+			} else {
+				mMonitor.reasonerTaskBusy();
+			}
 		}
 	}
 

@@ -36,6 +36,9 @@ namespace Konclude {
 					mJNICommandProcessor = jniInstanceManager->getJNICommandProcessor();
 					mExpressionOntRev = nullptr;
 					mExpressionBuilder = nullptr;
+					mProgressManagersLookedUp = false;
+					mReasonerManager = nullptr;
+					mClassificationManager = nullptr;
 				}
 
 				CJNIQueryProcessor::~CJNIQueryProcessor() {
@@ -44,6 +47,53 @@ namespace Konclude {
 					// not track a revision that is not installed and its ontology shares its data with
 					// the installed one
 					delete mExpressionBuilder;
+				}
+
+
+				bool CJNIQueryProcessor::queryReasoningProgress(QVector<double>& values) {
+					values.fill(0.,PROGRESS_VALUE_COUNT);
+					if (!mProgressManagersLookedUp) {
+						// the commander registers both managers in its global configuration, which
+						// the command processor asks it for; the lookup goes through the commander's
+						// thread, which answers while a calculation runs on the reasoner's
+						CConfiguration* config = mJNICommandProcessor->getConfiguration();
+						mReasonerManager = CConfigManagerReader::readReasonerManagerConfig(config);
+						mClassificationManager = CConfigManagerReader::readClassificationManagerConfig(config);
+						mProgressManagersLookedUp = mReasonerManager != nullptr || mClassificationManager != nullptr;
+					}
+					if (mReasonerManager) {
+						CCalculationManager* calculationManager = mReasonerManager->getCalculationManager();
+						if (calculationManager) {
+							CConcurrentTaskCalculationEnvironment* calcEnv = dynamic_cast<CConcurrentTaskCalculationEnvironment*>(calculationManager->getCalculationContext());
+							if (calcEnv) {
+								values[0] = (double)calcEnv->getCalculationStatisticTasksProcessedCount();
+								values[1] = calcEnv->getCalculationApproximatedRemainingTasksCount();
+							}
+						}
+						CReasonerManagerThread* managerThread = dynamic_cast<CReasonerManagerThread*>(mReasonerManager);
+						if (managerThread) {
+							CRealizationManager* realizationManager = managerThread->getRealizationManager();
+							if (realizationManager) {
+								CRealizationProgress* realizationProgress = realizationManager->getRealizationProgress();
+								if (realizationProgress) {
+									values[6] = realizationProgress->getProgessPercent();
+									values[7] = (double)realizationProgress->getTestedClasses();
+									values[8] = (double)realizationProgress->getTotalClasses();
+									values[9] = realizationProgress->getRemainingMilliSeconds();
+								}
+							}
+						}
+					}
+					if (mClassificationManager) {
+						CClassificationProgress* classificationProgress = mClassificationManager->getClassificationProgress();
+						if (classificationProgress) {
+							values[2] = classificationProgress->getProgessPercent();
+							values[3] = (double)(classificationProgress->getTestedSatisfiable()+classificationProgress->getTestedSubsumptions());
+							values[4] = (double)(classificationProgress->getTotalSatisfiable()+classificationProgress->getTotalSubsumptions());
+							values[5] = classificationProgress->getRemainingMilliSeconds();
+						}
+					}
+					return mProgressManagersLookedUp;
 				}
 
 

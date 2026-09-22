@@ -60,6 +60,12 @@
 #include "Reasoner/Query/CTypesResultVisitCallbackQuery.h"
 #include "Reasoner/Query/CObjectPropertySourcesTargetsResultVisitCallbackQuery.h"
 
+#include "Control/Command/CConfigManagerReader.h"
+#include "Reasoner/Kernel/Manager/CReasonerManagerThread.h"
+#include "Reasoner/Kernel/Manager/CRealizationManager.h"
+#include "Reasoner/Kernel/Calculation/CConcurrentTaskCalculationEnvironment.h"
+#include "Reasoner/Classifier/CClassificationManager.h"
+
 
 // Logger includes
 #include "Logger/CLogger.h"
@@ -70,6 +76,10 @@ namespace Konclude {
 	using namespace Reasoner::Generator;
 	using namespace Reasoner::Query;
 	using namespace Parser::Expression;
+	using namespace Reasoner::Kernel::Manager;
+	using namespace Reasoner::Kernel::Calculation;
+	using namespace Reasoner::Classifier;
+	using namespace Control::Command;
 
 	namespace Control {
 
@@ -140,6 +150,23 @@ namespace Konclude {
 						bool queryClassExpressionEquivalentClasses(CBuildExpression* classExpression, CEntityExpressionSetResultVisitingCallback* visitingCallback, QString& errorMessage);
 						bool queryClassExpressionInstances(CBuildExpression* classExpression, bool direct, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback, QString& errorMessage);
 
+						/**
+						 * The progress of the calculations of the reasoner, the numbers that the command
+						 * line prints with '-a', see CAnalyseReasonerManager::logQueryProgressUpdates.
+						 * Fills PROGRESS_VALUE_COUNT values: the processed and the approximated remaining
+						 * tasks of the calculation, then the percentage, the tested and the total tests
+						 * and the approximated remaining milliseconds of the classification, and the
+						 * same four of the realization. A value that is not known is 0.
+						 *
+						 * Unlike the queries this only reads counters of the managers, so it may be
+						 * called from another thread while a query is calculated, which is what it is
+						 * for. The managers are looked up once, through the configuration of the
+						 * reasoner commander, which answers that while it calculates.
+						 */
+						bool queryReasoningProgress(QVector<double>& values);
+
+						static const cint64 PROGRESS_VALUE_COUNT = 10;
+
 
 					// protected methods
 					protected:
@@ -160,6 +187,10 @@ namespace Konclude {
 
 						COntologyRevision* mExpressionOntRev;
 						CJNIQueryExpressionBuildingLoader* mExpressionBuilder;
+
+						bool mProgressManagersLookedUp;
+						CReasonerManager* mReasonerManager;
+						CClassificationManager* mClassificationManager;
 
 
 

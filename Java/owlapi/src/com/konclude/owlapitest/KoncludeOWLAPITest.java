@@ -649,6 +649,90 @@ public class KoncludeOWLAPITest {
 		}
 	}
 
+	/** what a progress monitor was told, in order, for the progress scenario */
+	private static class RecordingMonitor implements ReasonerProgressMonitor {
+		final java.util.List<String> tasks = new java.util.ArrayList<String>();
+		int stopped = 0;
+		int busy = 0;
+		int reports = 0;
+		int badReports = 0;
+		int previousValue = -1;
+		int lastValue = -1;
+		int lastMax = -1;
+		public synchronized void reasonerTaskStarted(String name) { tasks.add(name); previousValue = -1; }
+		public synchronized void reasonerTaskStopped() { ++stopped; }
+		public synchronized void reasonerTaskBusy() { ++busy; }
+		public synchronized void reasonerTaskProgressChanged(int value, int max) {
+			++reports;
+			// within a task a value never below the previous one, never above the maximum, which may grow
+			if (value < previousValue || value > max || max <= 0) {
+				++badReports;
+			}
+			previousValue = value;
+			lastValue = value;
+			lastMax = max;
+		}
+	}
+
+	/**
+	 * An ontology of n independent classes with a disjunction each, which the saturation cannot
+	 * decide, so the classifier tests every one of them and its counts climb: 20000 classes
+	 * take about 1.6 seconds of tests. The wide ontology is no use here, the saturation
+	 * classifies it without a test.
+	 */
+	private static OWLOntology disjunctiveOntology(int n) throws OWLOntologyCreationException {
+		OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
+		OWLOntology ontology = manager.createOntology(IRI.create(NS + "disjunctive"));
+		OWLObjectProperty r = objectProperty("r");
+		OWLClass root = cls("Root");
+		Set<OWLAxiom> axioms = new HashSet<OWLAxiom>();
+		for (int i = 0; i < n; i++) {
+			OWLClass a = cls("A" + i);
+			OWLClass b = cls("B" + i);
+			axioms.add(DF.getOWLSubClassOfAxiom(a, root));
+			axioms.add(DF.getOWLSubClassOfAxiom(b, root));
+			axioms.add(DF.getOWLSubClassOfAxiom(cls("C" + i), DF.getOWLObjectIntersectionOf(root,
+					DF.getOWLObjectUnionOf(DF.getOWLObjectSomeValuesFrom(r, a), DF.getOWLObjectSomeValuesFrom(r, b)))));
+			axioms.add(DF.getOWLEquivalentClassesAxiom(cls("D" + i), DF.getOWLObjectIntersectionOf(root,
+					DF.getOWLObjectSomeValuesFrom(r, DF.getOWLObjectUnionOf(a, b)))));
+		}
+		manager.addAxioms(ontology, axioms);
+		return ontology;
+	}
+
+	private static void runProgress() throws Exception {
+		OWLOntology large = disjunctiveOntology(20000);
+		RecordingMonitor monitor = new RecordingMonitor();
+		OWLReasoner reasoner = new KoncludeReasonerFactory().createReasoner(large, new SimpleConfiguration(monitor));
+		try {
+			reasoner.precomputeInferences(InferenceType.CLASS_HIERARCHY, InferenceType.CLASS_ASSERTIONS);
+			check("tasks reported, in order        ", monitor.tasks,
+					Arrays.asList(KoncludeReasoner.PRECOMPUTING, ReasonerProgressMonitor.CLASSIFYING, ReasonerProgressMonitor.REALIZING));
+			check("every task was stopped          ", Integer.valueOf(monitor.stopped), Integer.valueOf(monitor.tasks.size()));
+			check("busy was reported               ", Boolean.valueOf(monitor.busy > 0), Boolean.TRUE);
+			check("progress was reported           ", Boolean.valueOf(monitor.reports > 0), Boolean.TRUE);
+			check("reports out of order or range   ", Integer.valueOf(monitor.badReports), Integer.valueOf(0));
+			report(String.format("%d progress reports, the last %d / %d, %d busy reports",
+					monitor.reports, monitor.lastValue, monitor.lastMax, monitor.busy));
+		} finally {
+			reasoner.dispose();
+		}
+
+		// an ontology the saturation classifies on its own has nothing for the classifier to
+		// test, so only the precomputation is reported, and the tasks still come to an end
+		OWLOntology small = familyOntology();
+		RecordingMonitor quiet = new RecordingMonitor();
+		OWLReasoner quick = new KoncludeReasonerFactory().createReasoner(small, new SimpleConfiguration(quiet));
+		try {
+			quick.precomputeInferences(InferenceType.CLASS_HIERARCHY);
+			check("first task of a small ontology  ", quiet.tasks.get(0), KoncludeReasoner.PRECOMPUTING);
+			check("its tasks were stopped          ", Integer.valueOf(quiet.stopped), Integer.valueOf(quiet.tasks.size()));
+			check("its reports out of order        ", Integer.valueOf(quiet.badReports), Integer.valueOf(0));
+		} finally {
+			quick.dispose();
+		}
+	}
+
 	/**
 	 * An ontology of n classes below Root, each with an existential restriction to the next, so
 	 * that classifying it takes long enough to interrupt.
@@ -898,6 +982,8 @@ public class KoncludeOWLAPITest {
 			runEntailment();
 		} else if ("interrupt".equals(scenario)) {
 			runInterrupt();
+		} else if ("progress".equals(scenario)) {
+			runProgress();
 		} else {
 			System.err.println("unknown scenario '" + scenario + "'");
 			System.exit(2);

@@ -24,8 +24,9 @@ package com.konclude.jnibridge;
  * Asks the native reasoner, corresponds to
  * Source/Control/Interface/JNI/com_konclude_jnibridge_QueryingBridge.cpp.
  *
- * All 18 entry points that the native side declares are declared here: 12 queries about a
- * named entity, and the builder and 5 queries for a class expression.
+ * All 19 entry points that the native side declares are declared here: 12 queries about a
+ * named entity, the builder and 5 queries for a class expression, and the progress of the
+ * calculations.
  *
  * An entity is identified by its IRI, the object beside it is only handed over so that the
  * native side can remember it if the entity has not been built before. The results are not
@@ -157,6 +158,34 @@ public class QueryingBridge {
 
 	public native void queryOWLClassExpressionInstances(KoncludeReasonerBridge bridge,
 			long classExpression, SetOfObjectSetCallbackListener callback, boolean direct);
+
+
+	// ------------------------------------------------------------- progress
+
+	/** the number of values that queryOWLReasoningProgress reports */
+	public static final int PROGRESS_VALUE_COUNT = 10;
+	public static final int PROGRESS_CALCULATION_PROCESSED_TASKS = 0;
+	public static final int PROGRESS_CALCULATION_REMAINING_TASKS = 1;
+	public static final int PROGRESS_CLASSIFICATION_PERCENT = 2;
+	public static final int PROGRESS_CLASSIFICATION_TESTED = 3;
+	public static final int PROGRESS_CLASSIFICATION_TOTAL = 4;
+	public static final int PROGRESS_CLASSIFICATION_REMAINING_MILLISECONDS = 5;
+	public static final int PROGRESS_REALIZATION_PERCENT = 6;
+	public static final int PROGRESS_REALIZATION_TESTED = 7;
+	public static final int PROGRESS_REALIZATION_TOTAL = 8;
+	public static final int PROGRESS_REALIZATION_REMAINING_MILLISECONDS = 9;
+
+	/**
+	 * The progress of the calculations of the native reasoner, the numbers the command line
+	 * prints with '-a': PROGRESS_VALUE_COUNT values indexed by the PROGRESS_ constants, the
+	 * processed and the approximated remaining tasks of the calculation, then the percentage,
+	 * the tested and the total tests and the approximated remaining milliseconds of the
+	 * classification, and the same four of the realization. A value that is not known is 0.
+	 *
+	 * Unlike the queries this may be called from any thread while a query is being answered
+	 * on another, it only reads counters; that is what it is for.
+	 */
+	public native double[] queryOWLReasoningProgress(KoncludeReasonerBridge bridge);
 
 
 	/** only of interest for the smoke test, to show that the native side filled the field */
