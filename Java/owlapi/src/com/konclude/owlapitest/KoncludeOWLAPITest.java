@@ -247,6 +247,14 @@ public class KoncludeOWLAPITest {
 					Boolean.TRUE);
 			check("isSatisfiable(Impossible)      ", Boolean.valueOf(reasoner.isSatisfiable(cls("Impossible"))),
 					Boolean.FALSE);
+			// the bottom node is not a direct sub class of owl:Thing beside the roots, and owl:Thing
+			// is not a direct super class of it beside the leaves; the taxonomy used to keep the
+			// link between the two that an empty taxonomy starts with, which is how unsatisfiable
+			// classes came to be shown under owl:Thing in Protege
+			check("subClasses(Thing, direct=true)  ", names(reasoner.getSubClasses(DF.getOWLThing(), true)),
+					expected("Person"));
+			check("superClasses(Nothing, direct=true)", names(reasoner.getSuperClasses(DF.getOWLNothing(), true)),
+					expected("Father", "Grandparent", "Mother"));
 		} finally {
 			reasoner.dispose();
 		}
@@ -409,6 +417,13 @@ public class KoncludeOWLAPITest {
 					expected("hasChild"));
 			checkContains("topObjectPropertyNode               ",
 					names(reasoner.getTopObjectPropertyNode()), "topObjectProperty");
+			// as for the classes, the bottom property is not a direct sub property of the top one
+			check("subObjectProperties(top, direct=true)",
+					names(reasoner.getSubObjectProperties(DF.getOWLTopObjectProperty(), true)),
+					expected("hasChild", "hasParent"));
+			check("superObjectProperties(bottom, true) ",
+					names(reasoner.getSuperObjectProperties(DF.getOWLBottomObjectProperty(), true)),
+					expected("hasParent", "hasSon"));
 		} finally {
 			reasoner.dispose();
 		}
@@ -665,11 +680,20 @@ public class KoncludeOWLAPITest {
 			plain.dispose();
 		}
 
+		// the family ontology alone was once created, translated and classified within the
+		// 1 ms on a fast machine, so the timed reasoner gets an ontology whose translation alone
+		// takes tens of thousands of native calls, which cannot be done in 1 ms anywhere
 		OWLOntology ontology = familyOntology();
+		OWLOntologyManager manager = ontology.getOWLOntologyManager();
+		Set<OWLAxiom> padding = new HashSet<OWLAxiom>();
+		for (int i = 0; i < 20000; ++i) {
+			padding.add(DF.getOWLSubClassOfAxiom(cls("Padding" + i), cls("Person")));
+		}
+		manager.addAxioms(ontology, padding);
 		try {
 			OWLReasoner reasoner = new KoncludeReasonerFactory()
 					.createReasoner(ontology, new SimpleConfiguration(1L));
-			// the installation is guarded as well, so the time out may already be reported here
+			// the installation is guarded as well, so the time out is expected to be reported here
 			reasoner.getSubClasses(cls("Person"), false);
 			report("nothing overran the 1 ms time out, expected a TimeOutException");
 			++sFailures;

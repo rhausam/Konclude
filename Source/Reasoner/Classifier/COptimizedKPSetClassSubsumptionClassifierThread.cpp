@@ -2683,6 +2683,8 @@ namespace Konclude {
 							bottomHierNode->makeParent(itemHierNode);
 						}
 					}
+					// the leaves are the direct parents of the bottom node now, the top node is not
+					tax->removeBypassedTopBottomLink();
 
 					LOG(INFO,getLogDomain(),logTr("Collect statistics for Ontology '%1'.").arg(ontology->getTerminologyName()),getLogObject());
 

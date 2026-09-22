@@ -191,3 +191,31 @@ jobs:
       # compiles the Java side against the bridge and drives the built library through it
       - name: Run the JNI smoke test
         run: ./Java/run-jni-smoke-test.sh
+
+      # builds the Protege plug-in around the library and runs it inside the OSGi framework of
+      # a Protege installation, see Java/Readme.md. The plug-in carries the library for macOS on
+      # arm64 only, which is what the macOS runner is; the library here depends on the Qt of
+      # Homebrew, which is fine for the test but not for a plug-in to ship.
+      - name: Download Protege
+        if: startsWith(matrix.config.os, 'macos')
+        run: |
+          curl -sSL -o protege.zip https://github.com/protegeproject/protege-distribution/releases/download/protege-5.6.6/Protege-5.6.6-platform-independent.zip
+          unzip -q protege.zip -d protege
+          ls -d protege/*/bundles
+
+      - name: Run the Protege plug-in test
+        if: startsWith(matrix.config.os, 'macos')
+        run: ./Java/run-protege-plugin-test.sh "$(dirname "$(ls -d protege/*/bundles)")" Release
+
+      # a crash of the virtual machine in a native call leaves its report beside the test and
+      # only a summary in the log, so the report is kept for reading
+      - name: Keep the crash reports of the virtual machine
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jvm-crash-reports-${{ matrix.config.os }}
+          path: |
+            hs_err_pid*.log
+            Java/hs_err_pid*.log
+            Java/protege/hs_err_pid*.log
+          if-no-files-found: ignore

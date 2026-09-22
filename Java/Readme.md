@@ -3,13 +3,16 @@
 Konclude contains a JNI bridge in `Source/Control/Interface/JNI`, which is compiled into a
 shared library by `KoncludeLIB.pro` and which exports 90 native entry points. This directory
 contains the Java counterpart of that bridge, which has never been part of this repository,
-in two layers:
+in three layers:
 
 - `Java/src` declares the native methods and drives them from a smoke test. It has no
   dependency beyond the JDK, which is what the CI compiles and runs.
 - `Java/owlapi/src` translates an OWL API ontology into the bridge and implements the OWL API
   `OWLReasoner` interface on top of it, with a headless test of its own. It needs the OWL API
   on the class path.
+- `Java/protege` packages the two as a plug-in of Protege 5.6, an OSGi bundle that registers
+  the reasoner with the reasoner menu and carries the shared library, see THE PROTEGE PLUG-IN
+  below.
 
 
 ## BUILDING AND RUNNING
@@ -43,6 +46,14 @@ jar, it pulls in about fifty dependencies, so the script looks for the class pat
 The wrapper is written against OWL API 4.5.29, which is the version that Protege 5.6 ships,
 see `OWLAPI_VERSION` in the script.
 
+A reasoner that is created without a loading configuration of its own, which is what
+`KoncludeReasonerFactory` does, is initialised with
+`KoncludeReasoner.DEFAULT_LOADING_CONFIGURATION`. That differs from the library's own default
+in one line, `Konclude.Calculation.ProcessorCount=AUTO`: the library, like the command line
+without `-w AUTO`, would otherwise reason on a single processing unit, which classifies
+SNOMED CT in 156 s instead of 35 s. A configuration of a caller's own replaces these
+arguments instead of extending them, so it has to start from that constant.
+
 
 ## SCENARIOS
 
@@ -71,6 +82,60 @@ see `OWLAPI_VERSION` in the script.
 | `timeout` | a call that overruns the configured time out is reported as a `TimeOutException` |
 
 All scenarios pass on macOS on arm64 with Liberica JDK 17 and Qt 5.15.
+
+
+## THE PROTEGE PLUG-IN
+
+`Java/protege` is a Maven project that builds the plug-in as an OSGi bundle, the way the
+FaCT++ plug-in is built: `pom.xml` compiles `Java/src` and `Java/owlapi/src` into it beside
+`KoncludeProtegeReasonerInfo`, which extends Protege's `AbstractProtegeOWLReasonerInfo` and
+hands out `KoncludeReasonerFactory`, and `plugin.xml` registers that class with the extension
+point `org.protege.editor.owl.inference_reasonerfactory`, which is what puts 'Konclude' into
+the reasoner menu. The bundle requires the OWL API and Protege editor bundles that Protege
+ships, so nothing but the classes of this directory and the shared library is packaged.
+
+The shared library travels inside the bundle under `lib/native/<platform>/` and is named by
+the `Bundle-NativeCode` header of the manifest. The OSGi framework unpacks the entry that
+matches the running platform and answers `System.loadLibrary("Konclude")` with it, so
+`KoncludeReasoner.loadNativeLibrary` does not know it is in a plug-in. The header ends in `*`,
+which makes the native code optional: on a platform the bundle has no library for it still
+resolves, the reasoner is still listed, and starting it fails with an `UnsatisfiedLinkError`
+that `KoncludeProtegeReasonerInfo.initialise` has already written into the log of Protege.
+
+The library has to be one that depends on nothing but the system, since Protege has no Qt to
+offer: build `KoncludeLIB.pro` against a static Qt, with `QT-=gui`, `CONFIG-=static staticlib`
+and `CONFIG+=shared dll`, and `otool -L` or `ldd` shows no Qt afterwards. So far this is done
+for macOS on arm64, which is the one platform the plug-in carries a library for; Linux needs a
+static Qt built with position independent code, Windows a static Qt for MSVC. The build takes
+the library from the property `konclude.library.macos-arm64` and fails if the file is missing:
+
+```
+cd Java/protege
+mvn package -Dkonclude.library.macos-arm64=/path/to/libKonclude.dylib
+cp target/konclude-protege-plugin-*.jar /Applications/Protege-5.6.9/plugins/
+```
+
+A change of the plug-in needs a restart of Protege. The plug-in is compiled against Protege
+5.6.6, the last release on Maven Central, and runs in 5.6.9; the byte code targets Java 11,
+which is what the Protege distributions bundle.
+
+`run-protege-plugin-test.sh [<Protege directory>] [<library>]` builds the plug-in and then
+runs it inside the OSGi framework of the given Protege installation rather than on a class
+path: it starts Felix from Protege's `bundles` directory, installs every bundle in there,
+starts the plug-in, which is what makes Felix unpack the library, and drives it from a test
+bundle that requires the plug-in, so that every class is loaded through the bundles as it is
+in Protege. Its `plugin` scenario does what Protege does with a reasoner, creating and
+precomputing on a classification thread and asking from two other threads, and checks the
+tasks reported to the progress monitor and a buffered change; the other scenarios are those
+of `run-owlapi-test.sh`, run through the bundles. All pass against Protege 5.6.9 on macOS on
+arm64.
+
+What the plug-in cannot do yet: the inferred axioms that Protege's export and its displayed
+inferences ask for through the queries listed under WHAT THE BRIDGE DOES NOT ANSWER, the
+disjoint classes, the property domains and ranges and the data property hierarchy among
+them, end in an `UnsupportedOperationException`; the 'Disjoint classes' displayed inference
+is best switched off in the reasoner preferences. `interrupt` cannot stop a running
+calculation, so cancelling in the progress window waits for it to finish.
 
 
 ## THE CONTRACT OF THE NATIVE SIDE
@@ -242,6 +307,43 @@ run. Driving them against the library brought out the following, all of which ar
   it shows when the engine is fixed.
 
 
+- The bottom node was a direct child of the top node in every taxonomy, so `owl:Nothing`
+  and every unsatisfiable class were reported as direct sub classes of `owl:Thing` beside the
+  real roots, and `owl:Thing` as a direct super class of `owl:Nothing` beside the leaves.
+  Protege paints the members of the bottom node under `owl:Thing` for that, which is how it
+  showed with the pizza ontology, where `CheeseyVegetableTopping` and `IceCream` appeared
+  under `owl:Thing` as well as under `owl:Nothing`; HermiT and FaCT++ answer `[DomainConcept,
+  ValuePartition]` for the direct sub classes of `owl:Thing`, Konclude answered those plus
+  the two and `Nothing`. The same held for `owl:bottomObjectProperty` under
+  `owl:topObjectProperty`. The OWLlink route did not show it because the client's local
+  hierarchy cache rebuilds the direct relations itself.
+
+  The cause is in the engine, not in the bridge: `CTaxonomy` and
+  `CParentChildPredecessorHierarchy` make the bottom node a child of the top node when they
+  are created, which is the right hierarchy as long as nothing else exists, and the three
+  classifiers that finish a hierarchy, `COptimizedKPSetClassSubsumptionClassifierThread`,
+  `COptimizedClassExtractedSaturationSubsumptionClassifierThread` and
+  `COptimizedKPSetRoleSubsumptionClassifierThread`, make every leaf a parent of the bottom
+  node without removing that first link. They now call `removeBypassedTopBottomLink`, which
+  drops the direct link once the bottom node has another parent; the top node stays a
+  predecessor of it, so the indirect answers do not change. The incremental classifier copies
+  the links of the previous taxonomy and inherits the fix. The `hierarchy` and `properties`
+  scenarios check the direct sub classes of `owl:Thing` and the direct super classes of
+  `owl:Nothing` since.
+
+  That check brought out a second defect of the same kind in
+  `COptimizedClassExtractedSaturationSubsumptionClassifierThread`, the classifier that
+  handles an ontology whose saturation suffices, which SNOMED CT and the family ontology of
+  the test are. It decides which nodes are leaves, and so parents of the bottom node, by a
+  flag that is set on every class that was made a direct parent of another; its path for a
+  class with several direct parents, `makeParentAddPredeccessors`, linked the parents without
+  setting the flag. A class whose children all have more than one parent, `Man` with its only
+  child `Father`, that is `Man and Parent`, was therefore taken for a leaf and reported as a
+  direct super class of `owl:Nothing`. HermiT answers `[Father, Grandparent, Mother]` for the
+  family ontology, Konclude answered those plus `Man` and `Woman`. The flag is set on that
+  path now, as it is in the other two classifiers.
+
+
 ## THE PRECOMPUTATION THAT DID NOT FINISH
 
 Konclude used to stay in its precomputation for an ontology whose ABox forces two **named**
@@ -369,9 +471,8 @@ Two things to know. The stuck call **keeps running**, the bridge has no way to c
 virtual machine alive, but it holds its library instance and its share of the machine until
 the process ends, so another reasoner should not be started beside it. The reasoner refuses
 to be used after a time out, with an `IllegalStateException`, rather than queueing further
-calls behind the one that is stuck. Without a configured time out no watch dog thread is
-created and the calls happen on the calling thread, so nothing is paid for this unless it is
-asked for.
+calls behind the one that is stuck. The thread the call runs on is the reasoner's own in any
+case, see ONE THREAD PER REASONER below, the time out only limits the wait for it.
 
 The `merges` scenario keeps the fix honest, on the default configuration, and the `timeout`
 scenario covers the watch dog.
@@ -381,10 +482,13 @@ scenario covers the watch dog.
 
 `CJNIHandler` keeps the `JNIEnv` and the method ids of the thread that initialised the
 library instance, so every call of one instance has to happen on the same thread. Mixing
-threads crashes the virtual machine rather than raising an exception, which is why
-`KoncludeReasoner` runs the initialisation, the queries and the closing of an instance all on
-the same watch dog thread when a time out is configured. A caller that drives one reasoner
-from several threads has to serialise the calls itself.
+threads crashes the virtual machine rather than raising an exception. `KoncludeReasoner`
+therefore owns a thread per reasoner and runs the initialisation, every query and the closing
+of its instance on it, whichever thread asks, see `guard`. Protege is the caller this is for:
+it creates the reasoner and precomputes on its classification thread and then asks from the
+event thread and from the threads of its views. The price is a hand over per call, which is
+small against the 0.12 ms a query costs on SNOMED CT. The time out, if one is configured, is
+the limit on waiting for that thread.
 
 
 ## THE CLASSIFICATION THAT LOST SUBSUMPTIONS
@@ -734,6 +838,12 @@ Two runs of SNOMED CT one after the other on the same machine, only that setting
 AUTO : precomputeInferences  35.4 s
 1    : precomputeInferences 192.5 s
 ```
+
+Note that until the plug-in stage the constant was only documentation: `KoncludeReasonerFactory`
+handed an empty configuration to the library, which then applied its own default without
+the line above, so a reasoner that was not given a configuration explicitly ran on one
+processing unit. An empty configuration now means `DEFAULT_LOADING_CONFIGURATION`, see
+`chooseLoadingConfiguration`, so the factory and the plug-in get `AUTO` without saying so.
 
 ## OTHER LIMITATIONS
 

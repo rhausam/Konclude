@@ -92,6 +92,12 @@ import java.util.concurrent.TimeoutException;
  * The first such query pays for the preparation of that machinery. A named class keeps
  * being answered from the class hierarchy directly.
  *
+ * Every native call of a reasoner runs on a thread of its own, see guard: CJNIHandler keeps
+ * the JNIEnv and the method ids of the thread that initialised the library instance, so all
+ * calls of one instance have to happen on that thread, and a caller such as Protege, which
+ * classifies on a worker thread and asks from the event thread, must not have to know that.
+ * A time out of the configuration is applied to the wait for that thread.
+ *
  * An entity that the ontology does not mention is a fresh entity, see FreshEntityPolicy. The
  * native side is never asked about one: with DISALLOW a FreshEntitiesException is thrown, with
  * ALLOW the answer is the trivial one, an empty node set, and this applies to a class
@@ -126,9 +132,10 @@ public class KoncludeReasoner implements OWLReasoner {
 	public static final String NATIVE_LIBRARY_NAME = "Konclude";
 
 	/**
-	 * The loading arguments that initKoncludeLibraryInstance uses when it is handed an empty
-	 * string, spelled out. A non-empty configuration replaces the default loading arguments
-	 * instead of extending them, so an own configuration has to start from this.
+	 * The loading configuration that a reasoner is created with unless a caller hands in one of
+	 * its own, which replaces these arguments instead of extending them, so an own configuration
+	 * has to start from this. An empty configuration means this one; it is not handed to the
+	 * library as it is, because the library's own default lacks the last line.
 	 *
 	 * 'Konclude.Calculation.ProcessorCount' is set to AUTO because the default of the library
 	 * is a single processing unit, as it is for the command line without '-w AUTO'. Classifying
@@ -205,14 +212,15 @@ public class KoncludeReasoner implements OWLReasoner {
 	private KoncludeIndividualMergeInspector mMergeInspector;
 
 	/**
-	 * Runs the native calls if a time out is configured, so that a call that does not return
-	 * can be reported instead of blocking the caller for ever. Null if no time out is set, the
-	 * calls then happen on the calling thread and nothing is paid for the watch dog.
+	 * Runs every native call of this reasoner, so that all of them happen on the one thread
+	 * that initialised the library instance, whichever thread asks, and so that a call that
+	 * does not return can be reported through the time out instead of blocking the caller
+	 * for ever.
 	 */
-	private ExecutorService mWatchdog;
+	private final ExecutorService mReasonerThread;
 
 	/**
-	 * Set once a native call ran into the time out. The call is still running on the watch dog
+	 * Set once a native call ran into the time out. The call is still running on the reasoner
 	 * thread, the bridge cannot cancel it, so the reasoner cannot be used any more.
 	 */
 	private boolean mTimedOut = false;
@@ -240,9 +248,10 @@ public class KoncludeReasoner implements OWLReasoner {
 	}
 
 	/**
-	 * The loading configuration is handed to initKoncludeLibraryInstance. A non-empty string
-	 * replaces the default loading arguments of Konclude instead of extending them, so it also
-	 * has to contain '-JNICommandProcessorLoader'.
+	 * The loading configuration is handed to initKoncludeLibraryInstance, an empty string
+	 * stands for DEFAULT_LOADING_CONFIGURATION. A non-empty string replaces the default loading
+	 * arguments of Konclude instead of extending them, so it also has to contain
+	 * '-JNICommandProcessorLoader'.
 	 */
 	public KoncludeReasoner(OWLOntology rootOntology, OWLReasonerConfiguration configuration,
 			BufferingMode bufferingMode, String loadingConfiguration, MergeSafety mergeSafety) {
@@ -256,18 +265,16 @@ public class KoncludeReasoner implements OWLReasoner {
 		mBufferingMode = bufferingMode != null ? bufferingMode : BufferingMode.BUFFERING;
 		mLoadingConfiguration = loadingConfiguration != null ? loadingConfiguration : "";
 		mMergeSafety = mergeSafety != null ? mergeSafety : MergeSafety.OFF;
-		if (getTimeOut() != Long.MAX_VALUE && getTimeOut() > 0) {
-			mWatchdog = Executors.newSingleThreadExecutor(new ThreadFactory() {
-				@Override
-				public Thread newThread(Runnable runnable) {
-					Thread thread = new Thread(runnable, "Konclude reasoner");
-					// the thread cannot be stopped if a call does not return, so it must not
-					// keep the virtual machine alive
-					thread.setDaemon(true);
-					return thread;
-				}
-			});
-		}
+		mReasonerThread = Executors.newSingleThreadExecutor(new ThreadFactory() {
+			@Override
+			public Thread newThread(Runnable runnable) {
+				Thread thread = new Thread(runnable, "Konclude reasoner");
+				// the thread cannot be stopped if a call does not return, so it must not
+				// keep the virtual machine alive
+				thread.setDaemon(true);
+				return thread;
+			}
+		});
 		rootOntology.getOWLOntologyManager().addOntologyChangeListener(mChangeListener);
 		install();
 	}
@@ -278,10 +285,10 @@ public class KoncludeReasoner implements OWLReasoner {
 	/**
 	 * Translates the ontology into a fresh library instance and opens the querying bridge.
 	 *
-	 * ATTENTION: this runs on the watch dog thread if one exists, because CJNIHandler keeps the
-	 * JNIEnv and the method ids of the thread that initialised the library instance, so every
-	 * call of one instance has to happen on the same thread. Mixing threads ends in a crash of
-	 * the virtual machine, not in an exception.
+	 * ATTENTION: this runs on the reasoner thread, as every native call does, because
+	 * CJNIHandler keeps the JNIEnv and the method ids of the thread that initialised the
+	 * library instance, so every call of one instance has to happen on the same thread. Mixing
+	 * threads ends in a crash of the virtual machine, not in an exception.
 	 */
 	private void install() {
 		guard("install", new NativeCall<Void>() {
@@ -339,12 +346,14 @@ public class KoncludeReasoner implements OWLReasoner {
 			return FULL_COMPLETION_GRAPH_LOADING_CONFIGURATION;
 		}
 		mMergeInspector = null;
+		String configuration = mLoadingConfiguration.isEmpty() ? DEFAULT_LOADING_CONFIGURATION
+				: mLoadingConfiguration;
 		if (mMergeSafety == MergeSafety.OFF) {
-			return mLoadingConfiguration;
+			return configuration;
 		}
 		KoncludeIndividualMergeInspector inspector = new KoncludeIndividualMergeInspector(mRootOntology);
 		if (!inspector.isMergeForced()) {
-			return mLoadingConfiguration;
+			return configuration;
 		}
 		mMergeInspector = inspector;
 		if (!mLoadingConfiguration.isEmpty()) {
@@ -425,11 +434,9 @@ public class KoncludeReasoner implements OWLReasoner {
 			// the closing has to happen on the thread that initialised the instance as well
 			uninstall();
 		}
-		if (mWatchdog != null) {
-			// a stuck call cannot be cancelled, its thread is a daemon so that it does not keep
-			// the virtual machine alive
-			mWatchdog.shutdownNow();
-		}
+		// a stuck call cannot be cancelled, its thread is a daemon so that it does not keep the
+		// virtual machine alive
+		mReasonerThread.shutdownNow();
 	}
 
 	@Override
@@ -507,26 +514,38 @@ public class KoncludeReasoner implements OWLReasoner {
 	}
 
 	/**
-	 * Konclude answers a query by calculating what it needs, there is nothing to precompute
-	 * through the bridge, so this does nothing.
+	 * Konclude computes on demand, so the work of an inference type is triggered with a query
+	 * that cannot be answered without it. Without this the method would return at once and the
+	 * caller would pay for the classification in whichever query happens to arrive first, which
+	 * for an editor is a window that stops responding with nothing to indicate why.
+	 *
+	 * The progress monitor of the configuration is told about each task, which is what Protege
+	 * shows in its progress window; the bridge reports no progress within a task.
 	 */
 	@Override
 	public void precomputeInferences(InferenceType... inferenceTypes) {
 		checkOpen();
-		// Konclude computes on demand, so the work of an inference type is triggered with a query
-		// that cannot be answered without it. Without this the method returns at once and the
-		// caller pays for the classification in whichever query happens to arrive first, which
-		// for an editor is a window that stops responding with nothing to indicate why.
 		OWLClass thing = mDataFactory.getOWLThing();
+		ReasonerProgressMonitor monitor = mConfiguration.getProgressMonitor();
 		for (InferenceType inferenceType : inferenceTypes) {
 			if (mPrecomputed.contains(inferenceType)) {
 				continue;
 			}
 			if (InferenceType.CLASS_HIERARCHY == inferenceType) {
-				getSubClasses(thing, true);
+				monitor.reasonerTaskStarted(ReasonerProgressMonitor.CLASSIFYING);
+				try {
+					getSubClasses(thing, true);
+				} finally {
+					monitor.reasonerTaskStopped();
+				}
 				mPrecomputed.add(inferenceType);
 			} else if (InferenceType.CLASS_ASSERTIONS == inferenceType) {
-				getInstances(thing, true);
+				monitor.reasonerTaskStarted(ReasonerProgressMonitor.REALIZING);
+				try {
+					getInstances(thing, true);
+				} finally {
+					monitor.reasonerTaskStopped();
+				}
 				mPrecomputed.add(inferenceType);
 			}
 			// the other inference types have no query of their own in the bridge, and the OWL API
@@ -1012,8 +1031,9 @@ public class KoncludeReasoner implements OWLReasoner {
 	}
 
 	/**
-	 * Runs a native call, under the time out of the configuration if one is set. Without a
-	 * time out the call happens on the calling thread, so nothing is paid for the watch dog.
+	 * Runs a native call on the reasoner thread and waits for it, under the time out of the
+	 * configuration if one is set. Every native call goes through here, so that all of them
+	 * happen on the thread that initialised the library instance, see the class comment.
 	 *
 	 * ATTENTION: a call that ran into the time out keeps running, the bridge has no way to
 	 * cancel it, so its thread and its share of the machine are lost until the virtual machine
@@ -1021,17 +1041,18 @@ public class KoncludeReasoner implements OWLReasoner {
 	 * behind the one that is stuck.
 	 */
 	private <T> T guard(String method, NativeCall<T> call) {
-		if (mWatchdog == null) {
-			return call.call();
-		}
-		Future<T> future = mWatchdog.submit(new Callable<T>() {
+		Future<T> future = mReasonerThread.submit(new Callable<T>() {
 			@Override
 			public T call() throws Exception {
 				return call.call();
 			}
 		});
 		try {
-			return future.get(getTimeOut(), TimeUnit.MILLISECONDS);
+			long timeOut = getTimeOut();
+			if (timeOut == Long.MAX_VALUE || timeOut <= 0) {
+				return future.get();
+			}
+			return future.get(timeOut, TimeUnit.MILLISECONDS);
 		} catch (TimeoutException exception) {
 			mTimedOut = true;
 			throw new TimeOutException(method + " of Konclude did not return within the configured "
