@@ -39,6 +39,8 @@
 #include "CAnsweringMessageDataCalculationCompletedSubsumptionSuperClass.h"
 #include "CAnsweringMessageDataCalculationCompletedClassSubsumption.h"
 #include "CAnsweringMessageDataCalculationCompletedSubsumptionSubClass.h"
+#include "CAnsweringMessageDataCalculationCompletedLabelCompletion.h"
+#include "CAnsweringMessageDataCalculationRootLabel.h"
 #include "CAnsweringMessageDataCalculationCompletedInstanceIndividual.h"
 #include "CAnsweringMessageDataCalculationCompletedInstanceItem.h"
 #include "COptimizedComplexConceptItemVisitor.h"
@@ -477,6 +479,12 @@ namespace Konclude {
 					bool createSuperClassSubsumptionTest(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode, CAnswererContext* answererContext);
 					bool createSubClassSubsumptionTest(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode, CAnswererContext* answererContext);
 					/*!
+					 *	Runs the satisfiability test of the class whose saturation the decider found unreliable,
+					 *	with the label of the root node reported back, while the sub class search of the concept
+					 *	item waits at the testing node.
+					 */
+					bool createLabelCompletionTest(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode, CConcept* completionConcept, CAnswererContext* answererContext);
+					/*!
 					 *	Decides from the saturation whether the class of the node is subsumed by the concept
 					 *	of the item, see CSaturationSubsumptionDecider; UNDECIDED means a test is needed.
 					 */
@@ -487,6 +495,8 @@ namespace Konclude {
 					 *	whether candidates were added.
 					 */
 					bool addSubClassSubsumptionResult(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode, bool subsumed);
+					//! the decider over the precomputed saturation, null if it is switched off or there is no saturation
+					CSaturationSubsumptionDecider* getSaturationSubsumptionDecider();
 					bool createInvidiualInstanceTest(COptimizedComplexConceptItem* conceptItem, const CIndividualReference& testingIndiRef, CAnswererContext* answererContext);
 					bool createInvidiualItemInstanceTest(COptimizedComplexConceptItem* conceptItem, const CRealizationIndividualInstanceItemReference& testingItemRef, CAnswererContext* answererContext);
 					bool createCandidatePropagationInstanceTest(COptimizedComplexConceptItem* conceptItem, CConceptOfInterestActivationTriggeringData activationTriggeringData, CAnswererContext* answererContext);
@@ -536,6 +546,8 @@ namespace Konclude {
 					bool processSatisfiableCalculationCompleted(CAnsweringMessageDataCalculationCompletedSatisfiable* message, CAnswererContext* answererContext);
 					bool processSuperClassSubsumptionCalculationCompleted(CAnsweringMessageDataCalculationCompletedSubsumptionSuperClass* message, CAnswererContext* answererContext);
 					bool processSubClassSubsumptionCalculationCompleted(CAnsweringMessageDataCalculationCompletedSubsumptionSubClass* message, CAnswererContext* answererContext);
+					bool processLabelCompletionCalculationCompleted(CAnsweringMessageDataCalculationCompletedLabelCompletion* message, CAnswererContext* answererContext);
+					bool processExtractedRootLabel(CAnsweringMessageDataCalculationRootLabel* message, CAnswererContext* answererContext);
 					bool processIndividualInstanceCalculationCompleted(CAnsweringMessageDataCalculationCompletedInstanceIndividual* message, CAnswererContext* answererContext);
 					bool processInstanceEntailmentCalculationCompleted(CAnsweringMessageDataCalculationCompletedInstanceEntailment* message, CAnswererContext* answererContext);
 					bool processClassSumsumptionEntailmentCalculationCompleted(CAnsweringMessageDataCalculationCompletedClassSubsumption* message, CAnswererContext* answererContext);
@@ -812,7 +824,9 @@ namespace Konclude {
 
 					bool mConfExtendedLogging;
 					bool mConfSaturationSubClassDecision;
+					bool mConfSaturationSubClassLabelCompletion;
 					CSaturationSubsumptionDecider* mSaturationSubsumptionDecider;
+					cint64 mLabelCompletionTestCount;
 
 					double mConfConceptItemInstanceCandiateRetrievingSizeIncreaseFactor;
 					double mConfConceptItemInstanceCandiateRetrievingMaxSize;

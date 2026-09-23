@@ -1121,6 +1121,39 @@ classes whose definitions carry data values and the classes referencing them, an
 a class that carries a universal restriction inside a role group fails with -4700, upon which
 every node goes to the tableau, 375 000 jobs and a minute per selection.
 
+### COMPLETING A SATURATION WITH THE TABLEAU, ONCE
+
+A class whose saturation is not reliable, flagged insufficient or critical, or restricted by a
+cardinality or a nominal, no longer sends a tableau test for every query that visits it.
+The decider answers NEEDS_COMPLETION instead, the handler runs one satisfiability test of the
+class conjoined with everything above it in the class hierarchy, and the tableau reports the
+label of the root node of the completion graph, each concept with its polarity and whether it
+was derived without a choice, through the message adapter that already carries the subsumers.
+That completed label stands in for the saturation from then on, on the query side as well as
+for the candidate nodes, and is kept for the life of the ontology. The test is on the class
+with its ancestors because a model need not name every subsumer at its root, a functional
+role can imply one the saturation never derives, and the consequences of those subsumers have
+to be in the label; the named subsumers themselves are read from the class hierarchy, which
+the classification made complete.
+
+Three rules keep it sound. An entry that rests on a choice holds in the model the tableau
+found, not in every model, so it can show a conjunction satisfiable but never unsatisfiable:
+a clash on such an entry, or with a query whose label has one, is left undecided. The
+successors of a completed label are known by their roles only, so a universal restriction
+that could reach one of them, on either side, is left undecided, and so are a functional role
+and a data role with successors on both sides. And an equivalence candidate, the marker the
+absorption leaves for a named class the node may turn out to belong to, is treated as an
+optional class: a merge that stays satisfiable with the class added is satisfiable without it,
+so the candidates of both sides are added, with their saturations, before a merge is called
+satisfiable, and a clash that only appears with them added proves nothing.
+
+Checked against the tableau path with the decision switched off: 400 mixed negated queries
+over pizza, 80 over the 41 000 class subset, and six of the classes of the Protege session on
+the full SNOMED CT, answer for answer. On the full ontology the classes that took 50 to 63 s
+per selection take 10 to 13 s, the others 3 to 5 s, six queries leave 43 nodes to the tableau
+instead of 2.2 million, the 16 700 completion tests run once, and the process stays at 23 GB
+instead of 35. Switchable with `Konclude.Answering.SaturationBasedSubClassLabelCompletion`.
+
 
 The answers were compared with the tableau path on 120 mixed queries over the subset and 400
 over the pizza ontology, and with HermiT on 1 544 queries over pizza, where the one expression

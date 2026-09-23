@@ -43,6 +43,10 @@
 #include "Reasoner/Kernel/Process/CReapplyConceptSaturationLabelSet.h"
 #include "Reasoner/Kernel/Process/CLinkedRoleSaturationSuccessorHash.h"
 #include "Reasoner/Consistiser/CSaturationConceptDataItem.h"
+#include "Reasoner/Taxonomy/CHierarchyNode.h"
+#include "Reasoner/Taxonomy/CTaxonomy.h"
+#include "Reasoner/Classification/CClassification.h"
+#include "Reasoner/Classification/CClassConceptClassification.h"
 
 // Logger includes
 #include "Logger/CLogger.h"
@@ -81,7 +85,19 @@ namespace Konclude {
 					enum Verdict {
 						SUBSUMED,
 						NOT_SUBSUMED,
-						UNDECIDED
+						UNDECIDED,
+						//! the class named by getCompletionConcept has no reliable saturation; once its label is completed, see setCompletedLabel, the decision can be made
+						NEEDS_COMPLETION
+					};
+
+					//! one concept of a completed label, see setCompletedLabel
+					class CCompletedLabelEntry {
+						public:
+							CCompletedLabelEntry() : mConcept(nullptr), mNegated(false), mDeterministic(false) {}
+							CCompletedLabelEntry(CConcept* concept, bool negated, bool deterministic) : mConcept(concept), mNegated(negated), mDeterministic(deterministic) {}
+							CConcept* mConcept;
+							bool mNegated;
+							bool mDeterministic;
 					};
 
 					//! Constructor, for the ontology whose precomputation holds the saturation
@@ -98,9 +114,28 @@ namespace Konclude {
 					 */
 					Verdict decideSubClass(CConcept* subClassConcept, CConcept* queryConcept, bool queryNegation);
 
+					//! after NEEDS_COMPLETION: the class whose label has to be completed
+					CConcept* getCompletionConcept();
+					//! the classes above the class in the class hierarchy, whose consequences a completion test has to include
+					QList<CConcept*> getHierarchyAncestors(CConcept* concept);
+					/*!
+					 *	The label of the root node of a satisfiable completion graph of the class, which stands
+					 *	in for its saturation from now on. An entry that was derived with a choice holds in the
+					 *	model the tableau found, not necessarily in every model, so it can show a conjunction
+					 *	satisfiable but not unsatisfiable.
+					 */
+					void setCompletedLabel(CConcept* concept, const QVector<CCompletedLabelEntry>& entries);
+					//! the class was found unsatisfiable, so it is subsumed by everything
+					void setCompletedLabelUnsatisfiable(CConcept* concept);
+					//! no label could be obtained, the class stays undecided
+					void setCompletionFailed(CConcept* concept);
+					bool hasCompletedLabel(CConcept* concept);
+
 					cint64 getSubsumedCount();
 					cint64 getNotSubsumedCount();
 					cint64 getUndecidedCount();
+					cint64 getCompletionRequestCount();
+					cint64 getCompletedDecisionCount();
 					//! the operator codes of the label concepts that kept a merge from being decided, with their counts
 					QHash<cint64,cint64>* getUndecidedMergeConceptCodeCounts();
 					cint64 getFiredImplicationCount();
@@ -132,6 +167,8 @@ namespace Konclude {
 						LCK_CONJUNCTION,
 						LCK_IMPLICATION,
 						LCK_UNIVERSAL,
+						//! an equivalence candidate: a named class the node may turn out to belong to
+						LCK_CANDIDATE,
 						LCK_UNSAFE
 					};
 					//! what a concept of a saturated label can do when the label is merged with another one
@@ -151,11 +188,16 @@ namespace Konclude {
 					 */
 					class CMergeState {
 						public:
-							CMergeState(const CMergeState* base = nullptr) : mBase(base), mClashed(false), mCurrentPartNode(nullptr) {}
+							CMergeState(const CMergeState* base = nullptr) : mBase(base), mClashed(false), mCurrentPartNode(nullptr), mHasNondeterministic(false) {}
 							bool hasPositive(CConcept* concept) const { return mPositiveSet.contains(concept) || (mBase && mBase->hasPositive(concept)); }
 							bool hasNegative(CConcept* concept) const { return mNegativeSet.contains(concept) || (mBase && mBase->hasNegative(concept)); }
 							bool hasPartNode(CIndividualSaturationProcessNode* node) const { return mPartNodeSet.contains(node) || (mBase && mBase->hasPartNode(node)); }
 							bool hasSuccessorRole(CRole* role) const { return mSuccessorRoleSet.contains(role) || (mBase && mBase->hasSuccessorRole(role)); }
+							//! whether a part came from a completed label with an entry that rests on a choice, so that a clash is no proof
+							bool hasNondeterministic() const { return mHasNondeterministic || (mBase && mBase->hasNondeterministic()); }
+							//! whether a part from a completed label has a successor whose role, or a super role of it, has the tag
+							bool hasCompletedSuccessorRoleTag(cint64 roleTag) const { return mCompletedSuccessorRoleTagSet.contains(roleTag) || (mBase && mBase->hasCompletedSuccessorRoleTag(roleTag)); }
+							bool hasDataRoleTag(cint64 roleTag) const { return mDataRoleTagSet.contains(roleTag) || (mBase && mBase->hasDataRoleTag(roleTag)); }
 							const CMergeState* mBase;
 							QSet<CConcept*> mPositiveSet;
 							QSet<CConcept*> mNegativeSet;
@@ -172,9 +214,41 @@ namespace Konclude {
 							QSet<CIndividualSaturationProcessNode*> mPartNodeSet;
 							bool mClashed;
 							CIndividualSaturationProcessNode* mCurrentPartNode;
+							bool mHasNondeterministic;
+							//! the named classes of the equivalence candidates of the parts, see closeMergeStateWithCandidates
+							QList<CConcept*> mCandidateList;
+							QSet<CConcept*> mAddedCandidateSet;
+							//! the roles of the successors of the parts that came from completed labels, with their super roles
+							QSet<cint64> mCompletedSuccessorRoleTagSet;
+							//! the data roles with successors, of every part
+							QSet<cint64> mDataRoleTagSet;
+					};
+
+					//! the completed label of a class, see setCompletedLabel
+					class CCompletedLabel {
+						public:
+							CCompletedLabel() : mHasNondeterministic(false), mUnsatisfiable(false), mFailed(false) {}
+							bool hasEntry(CConcept* concept, bool negated) const { return (mPolarityHash.value(concept, 0) & (negated ? 2 : 1)) != 0; }
+							bool hasDeterministicEntry(CConcept* concept, bool negated) const { return (mPolarityHash.value(concept, 0) & (negated ? 8 : 4)) != 0; }
+							QVector<CCompletedLabelEntry> mEntries;
+							//! bit 1 positive, 2 negative, 4 positive without a choice, 8 negative without a choice
+							QHash<CConcept*,quint8> mPolarityHash;
+							bool mHasNondeterministic;
+							bool mUnsatisfiable;
+							bool mFailed;
+							//! the roles of the existential restrictions, and the tags of these roles with their super roles
+							QList<CRole*> mSuccessorRoleList;
+							QSet<cint64> mSuccessorRoleTagSet;
+							QSet<cint64> mDataRoleTagSet;
 					};
 					//! closes the state under the implications, false if the merge cannot be decided
 					bool closeMergeState(CMergeState& state);
+					/*!
+					 *	Adds the classes of the equivalence candidates of all parts and closes again, until
+					 *	none is left: a merge that stays satisfiable with a class added is satisfiable without
+					 *	it, so a merge is only called satisfiable once its candidates are in.
+					 */
+					bool closeMergeStateWithCandidates(CMergeState& state);
 					//! the shared side of a conjunction of named classes, null if it cannot be decided
 					const CMergeState* getConjunctionMergeBase(const QList<CConcept*>& conjuncts);
 					//! decides the merge of the node with the base by scanning the node's label only, FALLBACK if an implication would fire
@@ -184,6 +258,22 @@ namespace Konclude {
 					Verdict decideConjunctionSatisfiableClosure(CIndividualSaturationProcessNode* baseNode, const CMergeState* base);
 					bool addMergeLabelConcept(CMergeState& state, CConcept* concept, bool negated, bool derived);
 					bool addMergeNamedClass(CMergeState& state, CConcept* concept);
+					//! adds a completed label as a part of the merge, its successors by their roles only
+					bool addCompletedLabelToMergeState(CMergeState& state, const CCompletedLabel* label);
+					//! like decideEntailed, for a class whose saturation is replaced by its completed label
+					Verdict decideEntailedCompleted(const CCompletedLabel* label, CConcept* concept, bool negated, cint64 depth);
+					//! like the fast scan, for a completed label against the query's merged label
+					Verdict decideCompletedLabelSatisfiable(const CCompletedLabel* label, const CMergeState* base);
+					Verdict decideCompletedLabelSatisfiableClosure(const CCompletedLabel* label, const CMergeState* base);
+					//! the tag of the role and of every super role of it
+					static void collectRoleTagsWithSuperRoles(CRole* role, QSet<cint64>& tagSet);
+					/*!
+					 *	Whether the sub class is below the super class in the class hierarchy, which the
+					 *	classification made complete; UNDECIDED when one of them has no node there.
+					 */
+					Verdict decideNamedSubsumptionFromHierarchy(CConcept* subClassConcept, CConcept* superClassConcept);
+					//! whether a role of the existential restrictions is functional while a part has a successor under it, or a data role that a part has too
+					bool hasSuccessorRoleConflict(const QList<CRole*>& successorRoleList, const QSet<cint64>& dataRoleTagSet, const CMergeState& state);
 					//! whether a self restriction makes a node its own successor under the role
 					bool isSelfLoopOnRole(CConcept* selfConcept, CRole* role);
 					//! whether the node has an active successor under the role whose label lacks the concept
@@ -204,6 +294,13 @@ namespace Konclude {
 					QHash<quint64,CMergeState*> mConjunctionMergeBaseHash;
 					cint64 mFastDecisionCount;
 					cint64 mClosureDecisionCount;
+					QHash<CConcept*,CCompletedLabel*> mCompletedLabelHash;
+					CConcept* mCompletionConcept;
+					//! the class and the saturation node the current decision is about, at the root of the entailment check
+					CConcept* mRootSubClassConcept;
+					CIndividualSaturationProcessNode* mRootBaseNode;
+					cint64 mCompletionRequestCount;
+					cint64 mCompletedDecisionCount;
 
 				// private methods
 				private:
