@@ -799,10 +799,14 @@ namespace Konclude {
 
 							reasoningData->mFinQueryCallback = new CCalcedQueryEvent(this,jobQuery);
 							LOG(INFO,"::Konclude::Reasoner::Kernel::ReasonerManager",logTr("Processing Query '%1'.").arg(query->getQueryName()),this);
+							return;
+						}
 
-
-
-						} 
+						// Each of the following blocks answers one kind of query and calls the callback
+						// that reports it, which hands the query back to its owner, who may delete it at
+						// once, so a block that answered the query has to return: the dynamic_cast of the
+						// next block would read the deleted query. That was a crash on a native thread
+						// in __dynamic_cast, seen on the Linux runners of the CI, see Java/Readme.md.
 
 
 
@@ -820,6 +824,7 @@ namespace Konclude {
 								callback->doCallback();
 							}
 							delete reasoningData;
+							return;
 						}
 
 						CConsistencePremisingQuery* consQuery = dynamic_cast<CConsistencePremisingQuery *>(query);
@@ -848,6 +853,7 @@ namespace Konclude {
 								callback->doCallback();
 							}
 							delete reasoningData;
+							return;
 						}
 
 
@@ -882,6 +888,7 @@ namespace Konclude {
 								callback->doCallback();
 							}
 							delete reasoningData;
+							return;
 						}
 
 
@@ -904,6 +911,7 @@ namespace Konclude {
 								callback->doCallback();
 							}
 							delete reasoningData;
+							return;
 						}
 
 
@@ -927,6 +935,7 @@ namespace Konclude {
 								callback->doCallback();
 							}
 							delete reasoningData;
+							return;
 						}
 
 
@@ -949,6 +958,7 @@ namespace Konclude {
 							if (!confCollectProcessStatistics) {
 								delete reasoningData;
 							}
+							return;
 						}
 					}
 				}

@@ -354,6 +354,47 @@ run. Driving them against the library brought out the following, all of which ar
   family ontology, Konclude answered those plus `Man` and `Woman`. The flag is set on that
   path now, as it is in the other two classifiers.
 
+- The reasoner manager read the requirements of a preparation after it had given them
+  back. `CReasonerManagerThread::continueRequirementProcessing` calls the callback of a
+  finished preparation and only then deletes its `CRequirementPreparingData`, whose
+  `COntologyRequirementPreparingData` destructor asked every requirement it had been handed
+  `isDynamicRequirement()` to find the ones it owns. The callback is what lets the command
+  finish, which releases the caller that owns the other requirements: `prepareOntologyQuerying`
+  of the JNI bridge deletes its `CPreprocessKnowledgeBaseRequirementsForQueryCommand` the
+  moment it is processed, and the command deletes its requirements. Whenever that caller got
+  to run before the reasoner manager's thread reached the destructor, the virtual call went
+  through a freed object. On Linux glibc writes its safe-linking value into a freed chunk,
+  the chunk's own address shifted right by twelve bits, which the JVM's crash report showed
+  as the object's vtable pointer in `__dynamic_cast`; on macOS the freed memory keeps its
+  contents, so nothing was ever seen there. It hit the Ubuntu JNI job of the CI twice in
+  about fifteen runs (runs 35781295520 and 35803550885, both in the smoke test, `hierarchy`
+  and `lifecycles`, both within 20 ms of loading the library) and never in hundreds of runs
+  on the Mac. AddressSanitizer in a Docker container on 2 CPUs did not see it in 600 runs
+  either; six JVMs sharing one and a half CPUs made it appear twice in 600, with the three
+  stacks that name the object, the freeing thread and the reading thread. The preparing data
+  now records the dynamic requirements when they are added, while they are certainly alive,
+  and deletes only those, so it never touches a requirement it does not own.
+
+  With that fixed the same stress run crashed once more in `__dynamic_cast`, this time with
+  a native stack, since the sanitised library keeps its symbols:
+  `CReasonerManagerThread::initiateQueryReasoning`, line 888, which is the other half of the
+  same mistake and the one the CI runs most likely hit, since both died in a query.
+  The function answers a query in one of six blocks, one per kind of query, each of which
+  calls the callback that reports the answer and deletes its reasoning data, and none of
+  which returned: for a taxonomy query, which the sub class queries of the bridge are, the
+  block after it asked `dynamic_cast<CClassificationPremisingQuery*>(query)` of a query that
+  the callback had handed back to the JNI thread, which deletes its queries as soon as they
+  are answered. AddressSanitizer cannot see that read, it happens inside `__dynamic_cast` of
+  the C++ runtime, which is not instrumented; it showed as a plain crash of the JVM. Every
+  block that has answered its query now returns. On the way AddressSanitizer also found
+  `COccurrenceUnsatisfiableCacheEntry` freeing an array made with `new[]` by `delete`, which
+  is fixed as well. The ASan build is worth keeping in mind
+  for the next crash of this kind: `ubuntu:24.04` with `qtbase5-dev` and OpenJDK 17, qmake
+  with `QMAKE_CXXFLAGS+=-fsanitize=address -fno-omit-frame-pointer` and the matching
+  `QMAKE_LFLAGS`, `LD_PRELOAD` of `libasan.so` for the JVM and
+  `ASAN_OPTIONS=handle_segv=0:...:allow_user_segv_handler=1` so that the JVM keeps its own
+  signal handlers.
+
 
 ## THE PRECOMPUTATION THAT DID NOT FINISH
 
