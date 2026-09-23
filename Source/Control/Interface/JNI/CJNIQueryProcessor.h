@@ -155,17 +155,19 @@ namespace Konclude {
 						 * line prints with '-a', see CAnalyseReasonerManager::logQueryProgressUpdates.
 						 * Fills PROGRESS_VALUE_COUNT values: the processed and the approximated remaining
 						 * tasks of the calculation, then the percentage, the tested and the total tests
-						 * and the approximated remaining milliseconds of the classification, and the
-						 * same four of the realization. A value that is not known is 0.
+						 * and the approximated remaining milliseconds of the classification, the same
+						 * four of the realization, and the initialised and the existing saturation nodes
+						 * of the ontology's precomputation, which '-a' does not print. A value that is
+						 * not known is 0.
 						 *
-						 * Unlike the queries this only reads counters of the managers, so it may be
-						 * called from another thread while a query is calculated, which is what it is
-						 * for. The managers are looked up once, through the configuration of the
-						 * reasoner commander, which answers that while it calculates.
+						 * Unlike the queries this only reads counters of the managers and the ontology,
+						 * so it may be called from another thread while a query is calculated, which is
+						 * what it is for. The managers are looked up once, through the configuration of
+						 * the reasoner commander, which answers that while it calculates.
 						 */
 						bool queryReasoningProgress(QVector<double>& values);
 
-						static const cint64 PROGRESS_VALUE_COUNT = 10;
+						static const cint64 PROGRESS_VALUE_COUNT = 12;
 
 
 					// protected methods

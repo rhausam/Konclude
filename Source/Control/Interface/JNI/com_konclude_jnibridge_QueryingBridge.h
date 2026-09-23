@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 #undef com_konclude_jnibridge_QueryingBridge_PROGRESS_VALUE_COUNT
-#define com_konclude_jnibridge_QueryingBridge_PROGRESS_VALUE_COUNT 10L
+#define com_konclude_jnibridge_QueryingBridge_PROGRESS_VALUE_COUNT 12L
 #undef com_konclude_jnibridge_QueryingBridge_PROGRESS_CALCULATION_PROCESSED_TASKS
 #define com_konclude_jnibridge_QueryingBridge_PROGRESS_CALCULATION_PROCESSED_TASKS 0L
 #undef com_konclude_jnibridge_QueryingBridge_PROGRESS_CALCULATION_REMAINING_TASKS
@@ -29,6 +29,10 @@ extern "C" {
 #define com_konclude_jnibridge_QueryingBridge_PROGRESS_REALIZATION_TOTAL 8L
 #undef com_konclude_jnibridge_QueryingBridge_PROGRESS_REALIZATION_REMAINING_MILLISECONDS
 #define com_konclude_jnibridge_QueryingBridge_PROGRESS_REALIZATION_REMAINING_MILLISECONDS 9L
+#undef com_konclude_jnibridge_QueryingBridge_PROGRESS_SATURATION_INITIALIZED_NODES
+#define com_konclude_jnibridge_QueryingBridge_PROGRESS_SATURATION_INITIALIZED_NODES 10L
+#undef com_konclude_jnibridge_QueryingBridge_PROGRESS_SATURATION_NODES
+#define com_konclude_jnibridge_QueryingBridge_PROGRESS_SATURATION_NODES 11L
 /*
  * Class:     com_konclude_jnibridge_QueryingBridge
  * Method:    checkIsOWLOntologyConsistent

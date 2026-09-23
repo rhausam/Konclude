@@ -82,7 +82,7 @@ arguments instead of extending them, so it has to start from that constant.
 | `timeout` | a call that overruns the configured time out is reported as a `TimeOutException` |
 | `entailment` | `isEntailed` for the axiom types the wrapper reduces to its queries, 27 axioms, and the exception for the others |
 | `interrupt` | an idle interrupt changes nothing, a call caught in flight ends in a `ReasonerInterruptedException`, the answers afterwards are complete |
-| `progress` | a precomputation reports its tasks in order and its progress within range to the monitor |
+| `progress` | a precomputation reports its tasks in order, the saturation and the classification each with progress within range, to the monitor |
 
 All scenarios pass on macOS on arm64 with Liberica JDK 17 and Qt 5.15.
 
@@ -141,10 +141,10 @@ is best switched off in the reasoner preferences. `interrupt` releases the calle
 running calculation but cannot stop the calculation itself, so cancelling in the progress
 window returns at once while Konclude works on in the background until it is done.
 
-The bar of the progress window fills while the classifier tests and stays flat before that,
-see PROGRESS below: Konclude keeps no count for the precomputation, which is where SNOMED CT
-spends more than half of its time, so that phase is reported as busy under its own label.
-On macOS a busy task looks like one that was only started: the Aqua look and feel of the
+The bar of the progress window fills twice, once while the saturation initialises its nodes
+and once while the classifier tests, see PROGRESS below; the consistency check between the
+two and a realization without individuals are reported as busy. On macOS a busy task looks
+like one that was only started: the Aqua look and feel of the
 JDK (Liberica 17 was tried) draws an indeterminate bar as a flat grey track while the
 component believes it is animating.
 
@@ -910,31 +910,43 @@ bar from `reasonerTaskProgressChanged(value, max)`. The numbers come from the na
 `queryOWLReasoningProgress` is a 19th entry point of the querying bridge that reads what the
 command line prints with `-a`, the counters of `CClassificationManager::getClassificationProgress`
 and `CRealizationManager::getRealizationProgress` and the task counts of the calculation
-environment, through the managers the commander registers in its configuration. It reads
-counters only, so unlike every other native call it is made from a thread of its own, the
-`ProgressReporter` of `KoncludeReasoner`, every 250 ms while `precomputeInferences` waits
-for the query that triggers the work on the reasoner's thread.
-
-What the monitor is told for SNOMED CT (375k logical axioms), measured on 2026-09-22 from
-the moment the reasoner was created, which itself took 10 s of translation:
-
-```
- 0 s - 19 s   Precomputing   consistency and saturation, busy every 250 ms, no count at all
-19 s - 36 s   Classifying    tests done / tests to do, 11 130 / 404 213 up to 408 311 / 432 984
-36 s - 40 s   Realizing      busy, no individuals, so no count
-```
+environment, through the managers the commander registers in its configuration, and one
+count that `-a` does not print, the saturation's. It reads counters only, so unlike every
+other native call it is made from a thread of its own, the `ProgressReporter` of
+`KoncludeReasoner`, every 250 ms while `precomputeInferences` waits for the query that
+triggers the work on the reasoner's thread.
 
 The saturation is one calculation task, so the task counts that `-a` shows for a tableau
-calculation stay at zero, and the node counter of the saturation algorithm is a local of its
-loop; counting it would need a new path from the algorithm to the precomputation item.
-The wrapper therefore reports the first phase as the task `Precomputing`, busy every
-interval, and starts the task `Classifying` the moment the classifier's total appears, with
-its tests done against those to do; the total grows a little while the tests run, which
-Protege takes as a new maximum. Two tasks one after the other is how ELK reports its stages,
-and Protege keeps the window open across the switch. An ontology that the saturation
-classifies on its own never reaches the second task. The `progress` scenario of the test
-checks the order of the tasks, that every task is stopped, and that every report keeps
-`0 < value <= max` with a value that never falls.
+calculation stay at zero, and its node counter was a local of the algorithm's loop. The
+count now lives on the ontology: `CPrecomputation`, which every `CConcreteOntology` owns,
+carries two atomic counters, the saturation nodes that have been initialised and the nodes
+that exist, and `CCalculationTableauApproximationSaturationTaskHandleAlgorithm` writes both
+at the one place it marks a node initialised, from the processing data box of its task,
+whose ontology is the one being precomputed. The node vector is allocated for every node up
+front, so the total is known from the first report on, 504 683 for SNOMED CT, and the
+initialised count climbs almost linearly with the time, which is what a bar wants. The
+counters are only ever incremented, and a new revision of the ontology starts with a fresh
+`CPrecomputation`.
+
+What the monitor is told for SNOMED CT (375k logical axioms), measured on 2026-09-22 from
+the moment the reasoner was created, which itself took 10 s of translation, on a machine
+with 2 GB free (Protege held 14 GB), so slower than the 19 and 16 s of the busy-only run:
+
+```
+ 0 s - 21 s   Precomputing   saturation nodes initialised / nodes, 4 225 / 504 683 up to 504 681 / 504 683
+21 s - 24 s   Precomputing   the consistency check, the count sits at 504 681 / 504 683
+24 s - 43 s   Classifying    tests done / tests to do, 12 266 / 419 244 up to 443 022 / 445 061
+43 s - 48 s   Realizing      busy, no individuals, so no count
+```
+
+The wrapper reports the first phase as the task `Precomputing` with the saturation count,
+and starts the task `Classifying` the moment the classifier's total appears, with its tests
+done against those to do; that total grows a little while the tests run, which Protege
+takes as a new maximum. Two tasks one after the other is how ELK reports its stages, and
+Protege keeps the window open across the switch. An ontology that the saturation classifies
+on its own never reaches the second task. The `progress` scenario of the test checks the
+order of the tasks, that every task is stopped, that both tasks got a report, and that
+every report keeps `0 < value <= max` with a value that never falls.
 
 ## OTHER LIMITATIONS
 

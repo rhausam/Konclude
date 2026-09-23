@@ -659,11 +659,17 @@ public class KoncludeOWLAPITest {
 		int previousValue = -1;
 		int lastValue = -1;
 		int lastMax = -1;
-		public synchronized void reasonerTaskStarted(String name) { tasks.add(name); previousValue = -1; }
+		/** the reports per task, in the order of the tasks */
+		final java.util.List<Integer> reportsPerTask = new java.util.ArrayList<Integer>();
+		public synchronized void reasonerTaskStarted(String name) { tasks.add(name); reportsPerTask.add(0); previousValue = -1; }
 		public synchronized void reasonerTaskStopped() { ++stopped; }
 		public synchronized void reasonerTaskBusy() { ++busy; }
 		public synchronized void reasonerTaskProgressChanged(int value, int max) {
 			++reports;
+			if (!reportsPerTask.isEmpty()) {
+				int last = reportsPerTask.size() - 1;
+				reportsPerTask.set(last, reportsPerTask.get(last) + 1);
+			}
 			// within a task a value never below the previous one, never above the maximum, which may grow
 			if (value < previousValue || value > max || max <= 0) {
 				++badReports;
@@ -711,9 +717,13 @@ public class KoncludeOWLAPITest {
 			check("every task was stopped          ", Integer.valueOf(monitor.stopped), Integer.valueOf(monitor.tasks.size()));
 			check("busy was reported               ", Boolean.valueOf(monitor.busy > 0), Boolean.TRUE);
 			check("progress was reported           ", Boolean.valueOf(monitor.reports > 0), Boolean.TRUE);
+			// the saturation of 80 000 axioms takes about half a second, two intervals, and the
+			// saturation nodes are counted from its first node on
+			check("reported while precomputing     ", Boolean.valueOf(monitor.reportsPerTask.get(0) > 0), Boolean.TRUE);
+			check("reported while classifying      ", Boolean.valueOf(monitor.reportsPerTask.get(1) > 0), Boolean.TRUE);
 			check("reports out of order or range   ", Integer.valueOf(monitor.badReports), Integer.valueOf(0));
-			report(String.format("%d progress reports, the last %d / %d, %d busy reports",
-					monitor.reports, monitor.lastValue, monitor.lastMax, monitor.busy));
+			report(String.format("%d progress reports, %s per task, the last %d / %d, %d busy reports",
+					monitor.reports, monitor.reportsPerTask, monitor.lastValue, monitor.lastMax, monitor.busy));
 		} finally {
 			reasoner.dispose();
 		}

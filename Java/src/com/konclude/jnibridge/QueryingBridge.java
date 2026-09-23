@@ -163,7 +163,7 @@ public class QueryingBridge {
 	// ------------------------------------------------------------- progress
 
 	/** the number of values that queryOWLReasoningProgress reports */
-	public static final int PROGRESS_VALUE_COUNT = 10;
+	public static final int PROGRESS_VALUE_COUNT = 12;
 	public static final int PROGRESS_CALCULATION_PROCESSED_TASKS = 0;
 	public static final int PROGRESS_CALCULATION_REMAINING_TASKS = 1;
 	public static final int PROGRESS_CLASSIFICATION_PERCENT = 2;
@@ -174,13 +174,17 @@ public class QueryingBridge {
 	public static final int PROGRESS_REALIZATION_TESTED = 7;
 	public static final int PROGRESS_REALIZATION_TOTAL = 8;
 	public static final int PROGRESS_REALIZATION_REMAINING_MILLISECONDS = 9;
+	public static final int PROGRESS_SATURATION_INITIALIZED_NODES = 10;
+	public static final int PROGRESS_SATURATION_NODES = 11;
 
 	/**
 	 * The progress of the calculations of the native reasoner, the numbers the command line
 	 * prints with '-a': PROGRESS_VALUE_COUNT values indexed by the PROGRESS_ constants, the
 	 * processed and the approximated remaining tasks of the calculation, then the percentage,
 	 * the tested and the total tests and the approximated remaining milliseconds of the
-	 * classification, and the same four of the realization. A value that is not known is 0.
+	 * classification, the same four of the realization, and, what '-a' does not print, the
+	 * saturation nodes initialised so far and the saturation nodes that exist, counted by the
+	 * saturation algorithm on the ontology. A value that is not known is 0.
 	 *
 	 * Unlike the queries this may be called from any thread while a query is being answered
 	 * on another, it only reads counters; that is what it is for.

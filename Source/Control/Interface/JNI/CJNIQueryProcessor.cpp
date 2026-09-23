@@ -93,6 +93,12 @@ namespace Konclude {
 							values[5] = classificationProgress->getRemainingMilliSeconds();
 						}
 					}
+					// the saturation counts live on the ontology, the saturation algorithm writes them
+					Reasoner::Consistence::CPrecomputation* precomputation = mOntRevData->getOntologyRevision()->getOntology()->getPrecomputation();
+					if (precomputation) {
+						values[10] = (double)precomputation->getInitializedSaturationNodeCount();
+						values[11] = (double)precomputation->getSaturationNodeCount();
+					}
 					return mProgressManagersLookedUp;
 				}
 

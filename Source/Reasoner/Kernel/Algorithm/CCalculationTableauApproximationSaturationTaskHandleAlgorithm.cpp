@@ -813,6 +813,18 @@ namespace Konclude {
 
 						indiProcSatNode->setInitialized(true);
 
+						// counted for the progress that another thread may read while the saturation
+						// runs, see CPrecomputation; the node vector's count is the nodes that exist so far
+						CProcessingDataBox* progressDataBox = calcAlgContext->getUsedProcessingDataBox();
+						Consistence::CPrecomputation* precomputation = progressDataBox->getOntology()->getPrecomputation();
+						if (precomputation) {
+							precomputation->incInitializedSaturationNodeCount();
+							CIndividualSaturationProcessNodeVector* nodeVector = progressDataBox->getIndividualSaturationProcessNodeVector(false);
+							if (nodeVector) {
+								precomputation->updateSaturationNodeCount(nodeVector->getItemCount());
+							}
+						}
+
 						if (indiProcSatNode->getNominalIndividual() && calcAlgContext->getSatisfiableCalculationTask()->getSaturationIndividualsAnalysationObserver()) {
 							CProcessingDataBox* processingDataBox = calcAlgContext->getUsedProcessingDataBox();
 							CIndividualSaturationProcessNodeLinker* indiProcessNodeLinker = CObjectAllocator< CIndividualSaturationProcessNodeLinker >::allocateAndConstruct(calcAlgContext->getUsedProcessTaskMemoryAllocationManager());
