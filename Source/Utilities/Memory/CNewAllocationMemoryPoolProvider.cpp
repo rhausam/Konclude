@@ -48,6 +48,14 @@ namespace Konclude {
 
 
 			CMemoryPool* CNewAllocationMemoryPoolProvider::acquireMemoryPool(cint64 minPoolSize) {
+				CMemoryPool* recycledPool = CMemoryPoolRecycler::getInstance()->takeMemoryPool(minPoolSize);
+				if (recycledPool) {
+					mStatAllocatedPoolSize += recycledPool->getMemoryBlockSize();
+					mStatDiffPoolSize += recycledPool->getMemoryBlockSize();
+					++mStatAllocatedPoolCount;
+					++mStatDiffPoolCount;
+					return recycledPool;
+				}
 				CMemoryPool* memoryPool = new CMemoryPool();
 				if (!memoryPool) {
 					// not enough memory even for the log message
@@ -74,6 +82,10 @@ namespace Konclude {
 					mStatReleasedPoolSize += tmpMemoryPool->getMemoryBlockSize();
 					mStatDiffPoolSize -= tmpMemoryPool->getMemoryBlockSize();
 					++mStatReleasedPoolCount;
+					tmpMemoryPool->clearNext();
+					if (CMemoryPoolRecycler::getInstance()->giveMemoryPool(tmpMemoryPool)) {
+						continue;
+					}
 					char* memoryBlock = tmpMemoryPool->getMemoryBlockData();
 					delete [] memoryBlock;
 					delete tmpMemoryPool;

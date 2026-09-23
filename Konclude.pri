@@ -2635,6 +2635,7 @@ HEADERS += \
    ./Source/Utilities/Memory/CObjectAllocator.h \
    ./Source/Utilities/Memory/CNewCentralizedLimitedAllocationMemoryPoolProvider.h \
    ./Source/Utilities/Memory/CNewAllocationMemoryPoolProvider.h \
+   ./Source/Utilities/Memory/CMemoryPoolRecycler.h \
    ./Source/Utilities/Memory/CNewAllocationIncreasingMemoryPoolProvider.h \
    ./Source/Utilities/Memory/CMemoryTemporaryAllocationManager.h \
    ./Source/Utilities/Memory/CMemoryPoolProvider.h \
@@ -5239,3 +5240,4 @@ SOURCES += \
    ./Source/Utilities/Memory/CMemoryPoolContainerAllocationManager.cpp \
    ./Source/Utilities/Memory/CMemoryPoolContainer.cpp \
    ./Source/Utilities/Memory/CNewAllocationMemoryPoolProvider.cpp \
+   ./Source/Utilities/Memory/CMemoryPoolRecycler.cpp \

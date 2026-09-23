@@ -84,6 +84,7 @@ namespace Konclude {
 						}
 
 						cint64 freePoolReserveLimit = CConfigDataReader::readConfigInteger(config,"Konclude.Calculation.Memory.TaskProcessorFreePoolReserveLimit",DEFAULT_FREE_POOL_RESERVE_LIMIT);
+						CMemoryPoolRecycler::getInstance()->setLimit(CConfigDataReader::readConfigInteger(config,"Konclude.Calculation.Memory.RecycledPoolLimit",DEFAULT_MEMORY_POOL_RECYCLE_LIMIT));
 
 
 						CCentralizedAllocationConfigProvidedDependendLimitation* allocLimitation = new CCentralizedAllocationConfigProvidedDependendLimitation(configProvider,"Konclude.Calculation.Memory");
