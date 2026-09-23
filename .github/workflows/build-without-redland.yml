@@ -63,15 +63,15 @@ jobs:
           echo `gcc --version`
           echo `qmake --version`
           qmake KoncludeWithoutRedland.pro
-          make -j 2        
-          
+          make -j "$(nproc)"
+
       - name: Compile macOS
         if: startsWith(matrix.config.os, 'macos')
         run: | 
           echo `clang --version`
           echo `qmake --version`
           qmake KoncludeWithoutRedland.pro
-          make -j 2            
+          make -j "$(sysctl -n hw.ncpu)"
 
       - name: List available MSVC toolsets
         if: startsWith(matrix.config.os, 'windows')
@@ -94,13 +94,17 @@ jobs:
         with:
           toolset: '14.29'
 
+      # nmake builds one translation unit at a time, which took 30 minutes for the 2 600 of
+      # Konclude while the other jobs took 10; jom is Qt's parallel drop-in for nmake, so the
+      # Makefiles qmake writes for MSVC need no change
       - name: Compile Windows
         if: startsWith(matrix.config.os, 'windows')
         run: |
+          choco install jom --no-progress -y
           qmake KoncludeWithoutRedland.pro
-          nmake         
-          
-          
+          jom -j "$env:NUMBER_OF_PROCESSORS"
+
+
       - name: Run Examples Ubuntu
         if: startsWith(matrix.config.os, 'ubuntu')
         run: |
@@ -186,7 +190,7 @@ jobs:
         run: |
           echo `qmake --version`
           qmake KoncludeLIB.pro
-          make -j 2
+          make -j "$(nproc 2>/dev/null || sysctl -n hw.ncpu)"
 
       # compiles the Java side against the bridge and drives the built library through it
       - name: Run the JNI smoke test
