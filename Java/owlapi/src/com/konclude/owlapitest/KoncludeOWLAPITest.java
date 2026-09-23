@@ -216,8 +216,15 @@ public class KoncludeOWLAPITest {
 		return ontology;
 	}
 
+	/**
+	 * The loading configuration the scenarios create their reasoners with, empty for the default.
+	 * The 'expressions-tableau' scenario switches the decision of the sub classes of an expression
+	 * from the saturation off, so that the answers of the tableau path stay tested as well.
+	 */
+	private static String sLoadingConfiguration = "";
+
 	private static OWLReasoner reasonerFor(OWLOntology ontology) {
-		return new KoncludeReasonerFactory().createReasoner(ontology);
+		return new KoncludeReasonerFactory(sLoadingConfiguration).createReasoner(ontology);
 	}
 
 
@@ -971,6 +978,10 @@ public class KoncludeOWLAPITest {
 		if ("hierarchy".equals(scenario)) {
 			runHierarchy();
 		} else if ("expressions".equals(scenario)) {
+			runExpressions();
+		} else if ("expressions-tableau".equals(scenario)) {
+			sLoadingConfiguration = KoncludeReasoner.DEFAULT_LOADING_CONFIGURATION
+					+ "+=Konclude.Answering.SaturationBasedSubClassDecision=false ";
 			runExpressions();
 		} else if ("individuals".equals(scenario)) {
 			runIndividuals();

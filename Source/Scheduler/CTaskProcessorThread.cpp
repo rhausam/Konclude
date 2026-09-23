@@ -27,7 +27,7 @@ namespace Konclude {
 
 
 
-		CTaskProcessorThread::CTaskProcessorThread(CTaskHandleAlgorithm* taskHandleAlgo, CTaskEventHandlerBasedDistributionCompletor* distributorCompletor, CConsiderateMemoryPoolProvider* memoryPoolProvider) : CTaskProcessorThreadBase(taskHandleAlgo,"TaskProcesserSchedulerThread") {
+		CTaskProcessorThread::CTaskProcessorThread(CTaskHandleAlgorithm* taskHandleAlgo, CTaskEventHandlerBasedDistributionCompletor* distributorCompletor, CConsiderateMemoryPoolProvider* memoryPoolProvider, cint64 freePoolReserveLimit) : CTaskProcessorThreadBase(taskHandleAlgo,"TaskProcesserSchedulerThread") {
 			mDistributorCompletorCommunicator = new CTaskDistributionCompletorCommunicator(distributorCompletor,this);
 			mMemoryPoolReleaser = new CEventDistributionMemoryPoolReleaser(mDistributorCompletorCommunicator);
 			mMemoryPoolProvider = memoryPoolProvider;
@@ -35,7 +35,7 @@ namespace Konclude {
 				//mMemoryPoolProvider = distributorCompletor->createDistributionMemoryPoolProvider(mMemoryPoolReleaser);
 				mMemoryPoolProvider = new CNewAllocationMemoryPoolProvider();
 			}
-			mMemoryAllocator = new CTaskHandleLimitedReserveMemoryPoolAllocationManager(mMemoryPoolProvider,80000,30);
+			mMemoryAllocator = new CTaskHandleLimitedReserveMemoryPoolAllocationManager(mMemoryPoolProvider,freePoolReserveLimit,30);
 			mTaskProcessorContext = new CTaskProcessorContextBase(this,mMemoryAllocator);
 
 			mDispenseNotificationTag = 0;

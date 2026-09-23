@@ -82,7 +82,7 @@ namespace Konclude {
 			// public methods
 			public:
 				//! Constructor
-				CSingleThreadTaskProcessorUnit(CTaskHandleAlgorithm* taskHandleAlgo, CConsiderateMemoryPoolProvider* memoryPoolProvider = nullptr);
+				CSingleThreadTaskProcessorUnit(CTaskHandleAlgorithm* taskHandleAlgo, CConsiderateMemoryPoolProvider* memoryPoolProvider = nullptr, cint64 freePoolReserveLimit = DEFAULT_FREE_POOL_RESERVE_LIMIT);
 
 				//! Destructor
 				virtual ~CSingleThreadTaskProcessorUnit();

@@ -27,7 +27,7 @@ namespace Konclude {
 
 
 
-		CSingleThreadTaskProcessorUnit::CSingleThreadTaskProcessorUnit(CTaskHandleAlgorithm* taskHandleAlgo, CConsiderateMemoryPoolProvider* memoryPoolProvider) : CThread("TaskProcessingUnitThread") {
+		CSingleThreadTaskProcessorUnit::CSingleThreadTaskProcessorUnit(CTaskHandleAlgorithm* taskHandleAlgo, CConsiderateMemoryPoolProvider* memoryPoolProvider, cint64 freePoolReserveLimit) : CThread("TaskProcessingUnitThread") {
 			mTaskProcessingQueue = nullptr;
 			mTaskCompletionQueue = nullptr;
 			mTaskStatusPropagator = nullptr;
@@ -36,7 +36,7 @@ namespace Konclude {
 			if (!mMemoryPoolProvider) {
 				mMemoryPoolProvider = new CNewAllocationMemoryPoolProvider();
 			}
-			mMemoryAllocator = new CTaskHandleLimitedReserveMemoryPoolAllocationManager(mMemoryPoolProvider,30000,30);
+			mMemoryAllocator = new CTaskHandleLimitedReserveMemoryPoolAllocationManager(mMemoryPoolProvider,freePoolReserveLimit,30);
 			mTaskProcessorContext = new CTaskProcessorContextBase(this,mMemoryAllocator);
 			mTaskHandleAlgo = taskHandleAlgo;
 			mProcessingBlocked = true;

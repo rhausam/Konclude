@@ -83,6 +83,8 @@ namespace Konclude {
 
 				mConfFailOnUnknownEntity = CConfigDataReader::readConfigBoolean(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.FailOnUnknownEntity", false);
 				mConfExtendedLogging = CConfigDataReader::readConfigBoolean(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.ExtendedLogging", false);
+				mConfSaturationSubClassDecision = CConfigDataReader::readConfigBoolean(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.SaturationBasedSubClassDecision", true);
+				mSaturationSubsumptionDecider = nullptr;
 				mConfVariablePreAbsorption = CConfigDataReader::readConfigBoolean(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.QueryAbsorption.Preabsorption", true);
 				mConfRedundantTermReduction = CConfigDataReader::readConfigBoolean(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.RedundantTermElimination", true);
 
@@ -259,6 +261,7 @@ namespace Konclude {
 
 
 			COptimizedComplexExpressionAnsweringHandler::~COptimizedComplexExpressionAnsweringHandler() {
+				delete mSaturationSubsumptionDecider;
 				delete mOntoAnsweringItem;
 				delete mTestingOntologyPreprocessor;
 				delete mTestingOntologyBuilder;
@@ -4842,15 +4845,24 @@ namespace Konclude {
 
 						
 						QList<CHierarchyNode*>* possibleClassNodeTestingList = conceptItem->getPossibleSubClassNodeTestingList();
-						if (possibleClassNodeTestingList && !possibleClassNodeTestingList->isEmpty()) {
+						// the nodes are taken until one needs a test; a node that the saturation decides costs
+						// no job, and for a large ontology that is nearly every node, see issue #19
+						while (!processing && possibleClassNodeTestingList && !possibleClassNodeTestingList->isEmpty()) {
 							CHierarchyNode* testingNode = possibleClassNodeTestingList->takeFirst();
 							QSet<CHierarchyNode*>* maxSubNodeSet = conceptItem->getMaximumSubClassNodeSet();
 							if (maxSubNodeSet && maxSubNodeSet->contains(testingNode)) {
 								conceptItem->getDirectSubClassNodeSet()->insert(testingNode);
-							} else if (createSubClassSubsumptionTest(conceptItem, testingNode, answererContext)) {
-								processing = true;
-								compStep->setComputationProcessProcessing(true);
-								compStep->incCurrentlyRunningComputationCount();
+							} else {
+								CSaturationSubsumptionDecider::Verdict verdict = decideSubClassSubsumptionFromSaturation(conceptItem, testingNode);
+								if (verdict == CSaturationSubsumptionDecider::SUBSUMED) {
+									addSubClassSubsumptionResult(conceptItem, testingNode, true);
+								} else if (verdict == CSaturationSubsumptionDecider::NOT_SUBSUMED) {
+									addSubClassSubsumptionResult(conceptItem, testingNode, false);
+								} else if (createSubClassSubsumptionTest(conceptItem, testingNode, answererContext)) {
+									processing = true;
+									compStep->setComputationProcessProcessing(true);
+									compStep->incCurrentlyRunningComputationCount();
+								}
 							}
 						}
 						if (!possibleClassNodeTestingList || possibleClassNodeTestingList->isEmpty()) {
@@ -10478,6 +10490,17 @@ namespace Konclude {
 			}
 
 			bool COptimizedComplexExpressionAnsweringHandler::finishSubClassCalculationStepProcessing(COptimizedComplexConceptItem* conceptItem, CComplexConceptStepComputationProcess* compStep, CAnswererContext* answererContext) {
+				if (mConfExtendedLogging && mSaturationSubsumptionDecider) {
+					QStringList codeStrings;
+					QHash<cint64,cint64>* codeCounts = mSaturationSubsumptionDecider->getUndecidedMergeConceptCodeCounts();
+					for (QHash<cint64,cint64>::const_iterator it = codeCounts->constBegin(), itEnd = codeCounts->constEnd(); it != itEnd; ++it) {
+						codeStrings.append(QString("%1%2:%3").arg(it.key() % 2 ? "-" : "").arg(it.key() / 2).arg(it.value()));
+					}
+					LOG(INFO, getDomain(), logTr("Saturation decided %1 sub class candidates as subsumed and %2 as not subsumed, %3 undecided, %5 implications fired in merges, merge blocking label concept codes: %4.")
+							.arg(mSaturationSubsumptionDecider->getSubsumedCount()).arg(mSaturationSubsumptionDecider->getNotSubsumedCount())
+							.arg(mSaturationSubsumptionDecider->getUndecidedCount()).arg(codeStrings.join(" ")).arg(mSaturationSubsumptionDecider->getFiredImplicationCount()),this);
+					LOG(INFO, getDomain(), logTr("Saturation merges: %1 by the label scan, %2 by the closure.").arg(mSaturationSubsumptionDecider->getFastDecisionCount()).arg(mSaturationSubsumptionDecider->getClosureDecisionCount()),this);
+				}
 				delete conceptItem->getPossibleSubClassNodeTestingList();
 				conceptItem->setPossibleSubClassNodeTestingList(nullptr);
 				delete conceptItem->getPossibleSubClassTestingNodeSet();
@@ -11470,6 +11493,41 @@ namespace Konclude {
 				return true;
 			}
 
+
+
+
+			CSaturationSubsumptionDecider::Verdict COptimizedComplexExpressionAnsweringHandler::decideSubClassSubsumptionFromSaturation(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode) {
+				if (!mConfSaturationSubClassDecision) {
+					return CSaturationSubsumptionDecider::UNDECIDED;
+				}
+				if (!mSaturationSubsumptionDecider) {
+					mSaturationSubsumptionDecider = new CSaturationSubsumptionDecider(mOntoAnsweringItem->getOntology());
+				}
+				if (!mSaturationSubsumptionDecider->hasSaturation()) {
+					return CSaturationSubsumptionDecider::UNDECIDED;
+				}
+				CConcept* subClassConcept = testingNode->getOneEquivalentConcept();
+				return mSaturationSubsumptionDecider->decideSubClass(subClassConcept, conceptItem->getConcept(), conceptItem->getConceptNegation());
+			}
+
+
+			bool COptimizedComplexExpressionAnsweringHandler::addSubClassSubsumptionResult(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode, bool subsumed) {
+				bool candidatesAdded = false;
+				if (subsumed) {
+					conceptItem->getDirectSubClassNodeSet()->insert(testingNode);
+				} else {
+					// a node that is not subsumed may still have subsumed children
+					for (QSet<CHierarchyNode*>::const_iterator it = testingNode->getChildNodeSet()->constBegin(), itEnd = testingNode->getChildNodeSet()->constEnd(); it != itEnd; ++it) {
+						CHierarchyNode* childNode(*it);
+						if (!conceptItem->getPossibleSubClassTestingNodeSet()->contains(childNode)) {
+							conceptItem->getPossibleSubClassTestingNodeSet()->insert(childNode);
+							conceptItem->getPossibleSubClassNodeTestingList()->append(childNode);
+							candidatesAdded = true;
+						}
+					}
+				}
+				return candidatesAdded;
+			}
 
 
 
@@ -12648,22 +12706,12 @@ namespace Konclude {
 				bool satisfiable = message->getCalculationCallbackContextData()->isSatisfiable();
 				CHierarchyNode* subClassNode = message->getSubClassNode();
 				CComplexConceptStepComputationProcess* compStep = conceptItem->getComputationProcess()->getSubClassNodesComputationProcess(true);
-				if (!satisfiable) {
-					conceptItem->getDirectSubClassNodeSet()->insert(subClassNode);
-				} else {
-					for (QSet<CHierarchyNode*>::const_iterator it = subClassNode->getChildNodeSet()->constBegin(), itEnd = subClassNode->getChildNodeSet()->constEnd(); it != itEnd; ++it) {
-						CHierarchyNode* childNode(*it);
-						if (!conceptItem->getPossibleSubClassTestingNodeSet()->contains(childNode)) {
-							conceptItem->getPossibleSubClassTestingNodeSet()->insert(childNode);
-							conceptItem->getPossibleSubClassNodeTestingList()->append(childNode);
-							if (conceptItem->getPossibleSubClassNodeTestingList()->size() == 1) {
-								if (!compStep->isComputationProcessQueued()) {
-									compStep->setComputationProcessQueued(true);
-									COptimizedComplexConceptStepAnsweringItem* processingStep = mOntoAnsweringItem->getConceptProcessingStepItem(compStep->getComputationType());
-									processingStep->addQueuedConceptItem(conceptItem);
-								}
-							}
-						}
+				// the test says whether the node's class conjoined with the negated concept is satisfiable
+				if (addSubClassSubsumptionResult(conceptItem, subClassNode, !satisfiable)) {
+					if (!compStep->isComputationProcessQueued()) {
+						compStep->setComputationProcessQueued(true);
+						COptimizedComplexConceptStepAnsweringItem* processingStep = mOntoAnsweringItem->getConceptProcessingStepItem(compStep->getComputationType());
+						processingStep->addQueuedConceptItem(conceptItem);
 					}
 				}
 				compStep->incFinishedComputationCount();

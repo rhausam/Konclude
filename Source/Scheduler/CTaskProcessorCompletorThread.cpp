@@ -27,14 +27,14 @@ namespace Konclude {
 
 
 
-		CTaskProcessorCompletorThread::CTaskProcessorCompletorThread(CTaskHandleAlgorithm* taskHandleAlgo, CConsiderateMemoryPoolProvider* memoryPoolProvider) : CTaskProcessorThreadBase(taskHandleAlgo,"TaskProcesserCompletorThread"),CConcreteMemoryPoolDistributor(nullptr) {
+		CTaskProcessorCompletorThread::CTaskProcessorCompletorThread(CTaskHandleAlgorithm* taskHandleAlgo, CConsiderateMemoryPoolProvider* memoryPoolProvider, cint64 freePoolReserveLimit) : CTaskProcessorThreadBase(taskHandleAlgo,"TaskProcesserCompletorThread"),CConcreteMemoryPoolDistributor(nullptr) {
 			mMemoryPoolReleaser = new CDirectDistributionMemoryPoolReleaser(this);
 			mMemoryPoolProvider = memoryPoolProvider;
 			if (!mMemoryPoolProvider) {
 				//mMemoryPoolProvider = CConcreteMemoryPoolDistributor::createDistributionMemoryPoolProvider(mMemoryPoolReleaser);
 				mMemoryPoolProvider = new CNewAllocationMemoryPoolProvider();
 			}
-			mMemoryAllocator = new CTaskHandleLimitedReserveMemoryPoolAllocationManager(mMemoryPoolProvider,80000,30);
+			mMemoryAllocator = new CTaskHandleLimitedReserveMemoryPoolAllocationManager(mMemoryPoolProvider,freePoolReserveLimit,30);
 			mTaskProcessorContext = new CTaskProcessorContextBase(this,mMemoryAllocator);
 
 			mSchedulerCommunicator = nullptr;
