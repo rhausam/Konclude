@@ -43,6 +43,11 @@ namespace Konclude {
 				mFiredImplicationCount = 0;
 				mFastDecisionCount = 0;
 				mClosureDecisionCount = 0;
+				mCompletionConcept = nullptr;
+				mRootSubClassConcept = nullptr;
+				mRootBaseNode = nullptr;
+				mCompletionRequestCount = 0;
+				mCompletedDecisionCount = 0;
 				// the saturation of the ontology, as CPrecomputedSaturationSubsumerExtractor takes it
 				CPrecomputation* precomputation = mOntology->getPrecomputation();
 				if (precomputation) {
@@ -56,6 +61,158 @@ namespace Konclude {
 
 			CSaturationSubsumptionDecider::~CSaturationSubsumptionDecider() {
 				qDeleteAll(mConjunctionMergeBaseHash);
+				qDeleteAll(mCompletedLabelHash);
+			}
+
+
+			CConcept* CSaturationSubsumptionDecider::getCompletionConcept() {
+				return mCompletionConcept;
+			}
+
+
+			QList<CConcept*> CSaturationSubsumptionDecider::getHierarchyAncestors(CConcept* concept) {
+				QList<CConcept*> ancestors;
+				CClassification* classification = mOntology->getClassification();
+				CClassConceptClassification* classClassification = classification ? classification->getClassConceptClassification() : nullptr;
+				CTaxonomy* taxonomy = classClassification ? classClassification->getClassConceptTaxonomy() : nullptr;
+				CHierarchyNode* node = taxonomy ? taxonomy->getHierarchyNode(concept, false) : nullptr;
+				if (node) {
+					for (CConcept* equivalent : *node->getEquivalentConceptList()) {
+						if (equivalent != concept) {
+							ancestors.append(equivalent);
+						}
+					}
+					for (QSet<CHierarchyNode*>::const_iterator it = node->getPredecessorNodeSet()->constBegin(), itEnd = node->getPredecessorNodeSet()->constEnd(); it != itEnd; ++it) {
+						CHierarchyNode* ancestorNode(*it);
+						if (ancestorNode != node && ancestorNode != taxonomy->getTopHierarchyNode()) {
+							for (CConcept* ancestor : *ancestorNode->getEquivalentConceptList()) {
+								ancestors.append(ancestor);
+							}
+						}
+					}
+				}
+				return ancestors;
+			}
+
+
+			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideNamedSubsumptionFromHierarchy(CConcept* subClassConcept, CConcept* superClassConcept) {
+				CClassification* classification = mOntology->getClassification();
+				CClassConceptClassification* classClassification = classification ? classification->getClassConceptClassification() : nullptr;
+				CTaxonomy* taxonomy = classClassification ? classClassification->getClassConceptTaxonomy() : nullptr;
+				if (!taxonomy) {
+					return UNDECIDED;
+				}
+				CHierarchyNode* subNode = taxonomy->getHierarchyNode(subClassConcept, false);
+				CHierarchyNode* superNode = taxonomy->getHierarchyNode(superClassConcept, false);
+				if (!subNode || !superNode) {
+					return UNDECIDED;
+				}
+				if (subNode == superNode || superNode == taxonomy->getTopHierarchyNode() || subNode->getPredecessorNodeSet()->contains(superNode)) {
+					return SUBSUMED;
+				}
+				return NOT_SUBSUMED;
+			}
+
+
+			void CSaturationSubsumptionDecider::setCompletedLabel(CConcept* concept, const QVector<CCompletedLabelEntry>& entries) {
+				CCompletedLabel* label = mCompletedLabelHash.value(concept, nullptr);
+				if (!label) {
+					label = new CCompletedLabel();
+					mCompletedLabelHash.insert(concept, label);
+				}
+				label->mEntries = entries;
+				label->mPolarityHash.clear();
+				label->mSuccessorRoleList.clear();
+				label->mSuccessorRoleTagSet.clear();
+				label->mDataRoleTagSet.clear();
+				label->mHasNondeterministic = false;
+				label->mUnsatisfiable = false;
+				label->mFailed = false;
+				QSet<CRole*> roleSet;
+				for (const CCompletedLabelEntry& entry : entries) {
+					quint8 bits = entry.mNegated ? 2 : 1;
+					if (entry.mDeterministic) {
+						bits |= entry.mNegated ? 8 : 4;
+					} else {
+						label->mHasNondeterministic = true;
+					}
+					label->mPolarityHash[entry.mConcept] |= bits;
+					cint64 opCode = entry.mConcept->getOperatorCode();
+					cint64 absCode = opCode < 0 ? -opCode : opCode;
+					bool existential = (absCode == 5 || absCode == 11) && ((opCode < 0) != entry.mNegated);
+					if (existential || (!entry.mNegated && opCode == CCATLEAST)) {
+						CRole* role = entry.mConcept->getRole();
+						if (role && !roleSet.contains(role)) {
+							roleSet.insert(role);
+							if (role->isDataRole()) {
+								collectRoleTagsWithSuperRoles(role, label->mDataRoleTagSet);
+							} else {
+								label->mSuccessorRoleList.append(role);
+								collectRoleTagsWithSuperRoles(role, label->mSuccessorRoleTagSet);
+							}
+						}
+					}
+				}
+			}
+
+
+			void CSaturationSubsumptionDecider::setCompletedLabelUnsatisfiable(CConcept* concept) {
+				CCompletedLabel* label = mCompletedLabelHash.value(concept, nullptr);
+				if (!label) {
+					label = new CCompletedLabel();
+					mCompletedLabelHash.insert(concept, label);
+				}
+				label->mUnsatisfiable = true;
+			}
+
+
+			void CSaturationSubsumptionDecider::setCompletionFailed(CConcept* concept) {
+				CCompletedLabel* label = mCompletedLabelHash.value(concept, nullptr);
+				if (!label) {
+					label = new CCompletedLabel();
+					mCompletedLabelHash.insert(concept, label);
+				}
+				label->mFailed = true;
+			}
+
+
+			bool CSaturationSubsumptionDecider::hasCompletedLabel(CConcept* concept) {
+				return mCompletedLabelHash.contains(concept);
+			}
+
+
+			void CSaturationSubsumptionDecider::collectRoleTagsWithSuperRoles(CRole* role, QSet<cint64>& tagSet) {
+				tagSet.insert(role->getRoleTag());
+				for (CSortedNegLinker<CRole*>* superIt = role->getIndirectSuperRoleList(); superIt; superIt = superIt->getNext()) {
+					if (!superIt->isNegated()) {
+						tagSet.insert(superIt->getData()->getRoleTag());
+					}
+				}
+			}
+
+
+			bool CSaturationSubsumptionDecider::hasSuccessorRoleConflict(const QList<CRole*>& successorRoleList, const QSet<cint64>& dataRoleTagSet, const CMergeState& state) {
+				// successors under a functional role on both sides would be merged, and what two parts
+				// say about the values of a data role is left to the tableau
+				for (CRole* role : successorRoleList) {
+					if (role->isFunctional() && state.hasSuccessorRole(role)) {
+						mUndecidedMergeConceptCodeCounts[-2000] = mUndecidedMergeConceptCodeCounts.value(-2000, 0) + 1;
+						return true;
+					}
+					for (CSortedNegLinker<CRole*>* superIt = role->getIndirectSuperRoleList(); superIt; superIt = superIt->getNext()) {
+						if (!superIt->isNegated() && superIt->getData()->isFunctional() && state.hasSuccessorRole(superIt->getData())) {
+							mUndecidedMergeConceptCodeCounts[-2000] = mUndecidedMergeConceptCodeCounts.value(-2000, 0) + 1;
+							return true;
+						}
+					}
+				}
+				for (cint64 dataRoleTag : dataRoleTagSet) {
+					if (state.hasDataRoleTag(dataRoleTag)) {
+						mUndecidedMergeConceptCodeCounts[-2400] = mUndecidedMergeConceptCodeCounts.value(-2400, 0) + 1;
+						return true;
+					}
+				}
+				return false;
 			}
 
 
@@ -96,11 +253,30 @@ namespace Konclude {
 
 			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideSubClass(CConcept* subClassConcept, CConcept* queryConcept, bool queryNegation) {
 				Verdict verdict = UNDECIDED;
+				mCompletionConcept = nullptr;
+				mRootSubClassConcept = subClassConcept;
+				mRootBaseNode = nullptr;
 				if (mSatCalcTask && subClassConcept && queryConcept) {
 					bool unsatisfiable = false;
 					bool reliable = false;
 					CIndividualSaturationProcessNode* node = getSaturationNode(subClassConcept, &unsatisfiable, &reliable);
-					if (!node) {
+					mRootBaseNode = node;
+					if (!node || (!unsatisfiable && !reliable)) {
+						// no usable saturation: the class's completed label stands in, or has to be obtained first
+						const CCompletedLabel* label = mCompletedLabelHash.value(subClassConcept, nullptr);
+						if (label) {
+							if (label->mUnsatisfiable) {
+								verdict = SUBSUMED;
+							} else if (!label->mFailed) {
+								verdict = decideEntailedCompleted(label, queryConcept, queryNegation, 0);
+							}
+						} else {
+							mCompletionConcept = subClassConcept;
+							verdict = NEEDS_COMPLETION;
+						}
+						node = nullptr;
+					}
+					if (!node && verdict == UNDECIDED) {
 						// the reasons besides label concepts are counted under negative keys, printed halved
 						// by the handler: -100 no saturation node, -300 insufficient, -400 unprocessed, -500
 						// critical, -600 not completed, -1100 cardinality or nominal flags, -1500 data value,
@@ -123,6 +299,8 @@ namespace Konclude {
 					++mSubsumedCount;
 				} else if (verdict == NOT_SUBSUMED) {
 					++mNotSubsumedCount;
+				} else if (verdict == NEEDS_COMPLETION) {
+					++mCompletionRequestCount;
 				} else {
 					++mUndecidedCount;
 				}
@@ -191,6 +369,11 @@ namespace Konclude {
 					mUndecidedMergeConceptCodeCounts[-1200] = mUndecidedMergeConceptCodeCounts.value(-1200, 0) + 1;
 					return false;
 				}
+				if (repFlags->hasCardinalityRestrictedFlag() || repFlags->hasCardinalityProplematicFlag() || repFlags->hasNominalConnectionFlag()) {
+					// the saturation does not derive what a cardinality or a nominal implies, the tableau does
+					mUndecidedMergeConceptCodeCounts[-2200] = mUndecidedMergeConceptCodeCounts.value(-2200, 0) + 1;
+					return false;
+				}
 				return true;
 			}
 
@@ -254,6 +437,14 @@ namespace Konclude {
 						if (hasLabelConcept(baseNode, concept, false)) {
 							return SUBSUMED;
 						}
+						if (baseNode == mRootBaseNode && mRootSubClassConcept) {
+							// the class hierarchy is complete for named classes, the saturation is not always,
+							// a functional role can imply a subsumer the saturation does not derive
+							Verdict hierarchyVerdict = decideNamedSubsumptionFromHierarchy(mRootSubClassConcept, concept);
+							if (hierarchyVerdict != UNDECIDED) {
+								return hierarchyVerdict;
+							}
+						}
 						// a complete saturation contains every named subsumer, which is how the classifier
 						// derives the class hierarchy from it
 						return reliable ? NOT_SUBSUMED : UNDECIDED;
@@ -262,8 +453,8 @@ namespace Konclude {
 						bool undecided = false;
 						for (CSortedNegLinker<CConcept*>* opIt = opLinker; opIt; opIt = opIt->getNext()) {
 							Verdict opVerdict = decideEntailed(baseNode, reliable, opIt->getData(), opIt->isNegated(), depth + 1);
-							if (opVerdict == NOT_SUBSUMED) {
-								return NOT_SUBSUMED;
+							if (opVerdict == NOT_SUBSUMED || opVerdict == NEEDS_COMPLETION) {
+								return opVerdict;
 							} else if (opVerdict == UNDECIDED) {
 								undecided = true;
 							}
@@ -272,8 +463,9 @@ namespace Konclude {
 					}
 					if (opCode == CCOR) {
 						for (CSortedNegLinker<CConcept*>* opIt = opLinker; opIt; opIt = opIt->getNext()) {
-							if (decideEntailed(baseNode, reliable, opIt->getData(), opIt->isNegated(), depth + 1) == SUBSUMED) {
-								return SUBSUMED;
+							Verdict opVerdict = decideEntailed(baseNode, reliable, opIt->getData(), opIt->isNegated(), depth + 1);
+							if (opVerdict == SUBSUMED || opVerdict == NEEDS_COMPLETION) {
+								return opVerdict;
 							}
 						}
 						// a disjunction can be entailed without any disjunct being entailed
@@ -310,8 +502,8 @@ namespace Konclude {
 									}
 									CIndividualSaturationProcessNode* succNode = succData->mSuccIndiNode;
 									Verdict succVerdict = decideEntailed(succNode, isReliable(succNode), filler, fillerNegation, depth + 1);
-									if (succVerdict == SUBSUMED) {
-										return SUBSUMED;
+									if (succVerdict == SUBSUMED || succVerdict == NEEDS_COMPLETION) {
+										return succVerdict;
 									} else if (succVerdict == UNDECIDED) {
 										undecided = true;
 									}
@@ -344,8 +536,8 @@ namespace Konclude {
 						bool undecided = false;
 						for (CSortedNegLinker<CConcept*>* opIt = opLinker; opIt; opIt = opIt->getNext()) {
 							Verdict opVerdict = decideEntailed(baseNode, reliable, opIt->getData(), !opIt->isNegated(), depth + 1);
-							if (opVerdict == NOT_SUBSUMED) {
-								return NOT_SUBSUMED;
+							if (opVerdict == NOT_SUBSUMED || opVerdict == NEEDS_COMPLETION) {
+								return opVerdict;
 							} else if (opVerdict == UNDECIDED) {
 								undecided = true;
 							}
@@ -359,8 +551,9 @@ namespace Konclude {
 						// subsumed as soon as one conjunct is excluded on its own
 						if (opCode == CCAND) {
 							for (CSortedNegLinker<CConcept*>* opIt = opLinker; opIt; opIt = opIt->getNext()) {
-								if (decideEntailed(baseNode, reliable, opIt->getData(), !opIt->isNegated(), depth + 1) == SUBSUMED) {
-									return SUBSUMED;
+								Verdict opVerdict = decideEntailed(baseNode, reliable, opIt->getData(), !opIt->isNegated(), depth + 1);
+								if (opVerdict == SUBSUMED || opVerdict == NEEDS_COMPLETION) {
+									return opVerdict;
 								}
 							}
 						}
@@ -436,6 +629,9 @@ namespace Konclude {
 					}
 					if (effCode == CCIMPL) {
 						return LCK_IMPLICATION;
+					}
+					if (effCode == CCEQCAND) {
+						return LCK_CANDIDATE;
 					}
 					if (effCode == CCALL || effCode == CCAQALL || effCode == CCIMPLALL || effCode == CCIMPLAQALL) {
 						return LCK_UNIVERSAL;
@@ -547,6 +743,15 @@ namespace Konclude {
 					state.mImplicationList.append(concept);
 					return true;
 				}
+				if (kind == LCK_CANDIDATE) {
+					CSortedNegLinker<CConcept*>* candidateLinker = concept->getOperandList();
+					if (candidateLinker && !candidateLinker->isNegated() && candidateLinker->getData()->hasClassName()) {
+						state.mCandidateList.append(candidateLinker->getData());
+						return true;
+					}
+					mUndecidedMergeConceptCodeCounts[-9000] = mUndecidedMergeConceptCodeCounts.value(-9000, 0) + 1;
+					return false;
+				}
 				if (kind == LCK_UNIVERSAL) {
 					state.mUniversalList.append(CMergeUniversal(concept, negated, derived ? nullptr : state.mCurrentPartNode));
 					return true;
@@ -584,17 +789,26 @@ namespace Konclude {
 				bool unsatisfiable = false;
 				bool reliable = false;
 				CIndividualSaturationProcessNode* baseNode = getSaturationNode(concept, &unsatisfiable, &reliable);
-				if (!baseNode) {
-					mUndecidedMergeConceptCodeCounts[-9200] = mUndecidedMergeConceptCodeCounts.value(-9200, 0) + 1;
-					return false;
-				}
-				if (unsatisfiable) {
+				if (baseNode && unsatisfiable) {
 					state.mClashed = true;
 					return true;
 				}
-				if (!reliable) {
-					mUndecidedMergeConceptCodeCounts[-9400] = mUndecidedMergeConceptCodeCounts.value(-9400, 0) + 1;
-					return false;
+				if (!baseNode || !reliable) {
+					// no usable saturation: the class's completed label stands in, or has to be obtained first
+					const CCompletedLabel* label = mCompletedLabelHash.value(concept, nullptr);
+					if (!label) {
+						mUndecidedMergeConceptCodeCounts[baseNode ? -9400 : -9200] = mUndecidedMergeConceptCodeCounts.value(baseNode ? -9400 : -9200, 0) + 1;
+						mCompletionConcept = concept;
+						return false;
+					}
+					if (label->mUnsatisfiable) {
+						state.mClashed = true;
+						return true;
+					}
+					if (label->mFailed) {
+						return false;
+					}
+					return addCompletedLabelToMergeState(state, label);
 				}
 				CIndividualSaturationProcessNode* repNode = getRepresentativeNode(baseNode);
 				if (state.hasPartNode(repNode)) {
@@ -648,6 +862,14 @@ namespace Konclude {
 								mUndecidedMergeConceptCodeCounts[-2000] = mUndecidedMergeConceptCodeCounts.value(-2000, 0) + 1;
 								return false;
 							}
+							if (role->isDataRole()) {
+								// what two parts say about the values of a data role is left to the tableau
+								if (state.hasDataRoleTag(role->getRoleTag())) {
+									mUndecidedMergeConceptCodeCounts[-2400] = mUndecidedMergeConceptCodeCounts.value(-2400, 0) + 1;
+									return false;
+								}
+								state.mDataRoleTagSet.insert(role->getRoleTag());
+							}
 							state.mSuccessorRoleSet.insert(role);
 						}
 					}
@@ -656,6 +878,33 @@ namespace Konclude {
 				return true;
 			}
 
+
+
+			bool CSaturationSubsumptionDecider::closeMergeStateWithCandidates(CMergeState& state) {
+				bool added = true;
+				while (added && !state.mClashed) {
+					added = false;
+					QList<CConcept*> candidates;
+					for (const CMergeState* part = &state; part; part = part->mBase) {
+						candidates.append(part->mCandidateList);
+					}
+					for (CConcept* candidate : candidates) {
+						if (state.mAddedCandidateSet.contains(candidate) || state.hasPositive(candidate)) {
+							continue;
+						}
+						state.mAddedCandidateSet.insert(candidate);
+						// derived, so that the class brings its saturation along
+						if (!addMergeLabelConcept(state, candidate, false, true)) {
+							return false;
+						}
+						added = true;
+					}
+					if (added && !closeMergeState(state)) {
+						return false;
+					}
+				}
+				return true;
+			}
 
 
 			bool CSaturationSubsumptionDecider::closeMergeState(CMergeState& state) {
@@ -753,6 +1002,11 @@ namespace Konclude {
 						}
 					}
 				}
+				if (!decided && mCompletionConcept) {
+					// the base is built again once the label of the class is completed
+					delete base;
+					return nullptr;
+				}
 				if (!decided) {
 					// an undecidable base is kept as an empty one, so that it is not built again
 					delete base;
@@ -836,6 +1090,7 @@ namespace Konclude {
 				QVarLengthArray<CConcept*,16> implicationArray;
 				QVarLengthArray<QPair<CConcept*,bool>,16> universalArray;
 				QVarLengthArray<CConcept*,4> selfArray;
+				bool candidateSeen = !base->mCandidateList.isEmpty();
 				for (CConceptSaturationDescriptor* conDesIt = labelSet->getConceptSaturationDescriptionLinker(); conDesIt; conDesIt = conDesIt->getNext()) {
 					CConcept* concept = conDesIt->getConcept();
 					bool negated = conDesIt->isNegated();
@@ -843,6 +1098,9 @@ namespace Konclude {
 						return FAST_SUBSUMED;
 					}
 					LabelConceptKind kind = getLabelConceptKind(concept, negated);
+					if (kind == LCK_CANDIDATE) {
+						candidateSeen = true;
+					}
 					if (kind == LCK_UNSAFE) {
 						cint64 codeKey = concept->getOperatorCode() * 2 + (negated ? 1 : 0);
 						mUndecidedMergeConceptCodeCounts[codeKey] = mUndecidedMergeConceptCodeCounts.value(codeKey, 0) + 1;
@@ -894,6 +1152,10 @@ namespace Konclude {
 							mUndecidedMergeConceptCodeCounts[-2000] = mUndecidedMergeConceptCodeCounts.value(-2000, 0) + 1;
 							return FAST_UNDECIDED;
 						}
+						if (roleSuccData && roleSuccData->getSuccessorCount() > 0 && role->isDataRole() && base->hasDataRoleTag(role->getRoleTag())) {
+							mUndecidedMergeConceptCodeCounts[-2400] = mUndecidedMergeConceptCodeCounts.value(-2400, 0) + 1;
+							return FAST_UNDECIDED;
+						}
 					}
 				}
 				// the universal restrictions of the base reach the node's successors and self loops
@@ -924,6 +1186,11 @@ namespace Konclude {
 					if (!role || !opLinker) {
 						return FAST_UNDECIDED;
 					}
+					if (base->hasCompletedSuccessorRoleTag(role->getRoleTag())) {
+						// a successor of a completed part, whose label is not at hand
+						mUndecidedMergeConceptCodeCounts[-5000] = mUndecidedMergeConceptCodeCounts.value(-5000, 0) + 1;
+						return FAST_UNDECIDED;
+					}
 					for (CSortedNegLinker<CConcept*>* opIt = opLinker; opIt; opIt = opIt->getNext()) {
 						bool propagatedNegation = opIt->isNegated() ^ universal.second;
 						for (CIndividualSaturationProcessNode* partNode : base->mPartNodeList) {
@@ -940,6 +1207,10 @@ namespace Konclude {
 						}
 					}
 				}
+				if (candidateSeen) {
+					// the equivalence candidates have to be added before the merge is called satisfiable
+					return FAST_FALLBACK;
+				}
 				return FAST_NOT_SUBSUMED;
 			}
 
@@ -951,19 +1222,27 @@ namespace Konclude {
 				}
 				const CMergeState* base = getConjunctionMergeBase(conjuncts);
 				if (!base) {
-					return UNDECIDED;
+					return mCompletionConcept ? NEEDS_COMPLETION : UNDECIDED;
 				}
 				if (base->mClashed) {
-					// the conjunction has no instance on its own, so nothing has a common instance with it
-					return SUBSUMED;
+					// the conjunction has no instance on its own, so nothing has a common instance with it,
+					// unless the clash rests on a choice of a completed label
+					return base->hasNondeterministic() ? UNDECIDED : SUBSUMED;
 				}
 				FastVerdict fastVerdict = decideConjunctionSatisfiableFast(baseNode, base);
 				if (fastVerdict != FAST_FALLBACK) {
 					++mFastDecisionCount;
+					if (fastVerdict == FAST_SUBSUMED && base->hasNondeterministic()) {
+						return UNDECIDED;
+					}
 					return fastVerdict == FAST_SUBSUMED ? SUBSUMED : fastVerdict == FAST_NOT_SUBSUMED ? NOT_SUBSUMED : UNDECIDED;
 				}
 				++mClosureDecisionCount;
-				return decideConjunctionSatisfiableClosure(baseNode, base);
+				Verdict closureVerdict = decideConjunctionSatisfiableClosure(baseNode, base);
+				if (closureVerdict == UNDECIDED && mCompletionConcept) {
+					return NEEDS_COMPLETION;
+				}
+				return closureVerdict;
 			}
 
 
@@ -991,10 +1270,19 @@ namespace Konclude {
 					decided = closeMergeState(state);
 				}
 				if (state.mClashed) {
-					// everything in the closure is entailed for the conjunction, so a clash is a proof
-					return SUBSUMED;
+					// everything in the closure is entailed for the conjunction, so a clash is a proof,
+					// unless a part came from a completed label with an entry that rests on a choice
+					return state.hasNondeterministic() ? UNDECIDED : SUBSUMED;
 				}
 				if (!decided) {
+					return UNDECIDED;
+				}
+				if (!closeMergeStateWithCandidates(state)) {
+					return UNDECIDED;
+				}
+				if (state.mClashed) {
+					// a clash with a candidate added proves nothing
+					mUndecidedMergeConceptCodeCounts[-9200] = mUndecidedMergeConceptCodeCounts.value(-9200, 0) + 1;
 					return UNDECIDED;
 				}
 				// a universal restriction reaches the successors of the other parts, and the derived ones
@@ -1020,6 +1308,11 @@ namespace Konclude {
 									return UNDECIDED;
 								}
 							}
+						}
+						if (listIndex == 1 && base->hasCompletedSuccessorRoleTag(role->getRoleTag()) || listIndex == 0 && state.mCompletedSuccessorRoleTagSet.contains(role->getRoleTag())) {
+							// a successor of a completed part, whose label is not at hand
+							mUndecidedMergeConceptCodeCounts[-5000] = mUndecidedMergeConceptCodeCounts.value(-5000, 0) + 1;
+							return UNDECIDED;
 						}
 						for (CIndividualSaturationProcessNode* partNode : partNodeList) {
 							if (partNode == universal.mSourceNode) {
@@ -1054,6 +1347,352 @@ namespace Konclude {
 					}
 				}
 				return NOT_SUBSUMED;
+			}
+
+
+
+
+			bool CSaturationSubsumptionDecider::addCompletedLabelToMergeState(CMergeState& state, const CCompletedLabel* label) {
+				// the label already holds every consequence, so nothing is derived from its named
+				// classes; its successors are known by their roles only
+				if (label->mHasNondeterministic) {
+					state.mHasNondeterministic = true;
+				}
+				CIndividualSaturationProcessNode* previousPartNode = state.mCurrentPartNode;
+				state.mCurrentPartNode = nullptr;
+				for (const CCompletedLabelEntry& entry : label->mEntries) {
+					if (!addMergeLabelConcept(state, entry.mConcept, entry.mNegated, false)) {
+						state.mCurrentPartNode = previousPartNode;
+						return false;
+					}
+				}
+				state.mCurrentPartNode = previousPartNode;
+				if (hasSuccessorRoleConflict(label->mSuccessorRoleList, label->mDataRoleTagSet, state)) {
+					return false;
+				}
+				for (CRole* role : label->mSuccessorRoleList) {
+					state.mSuccessorRoleSet.insert(role);
+					for (CSortedNegLinker<CRole*>* superIt = role->getIndirectSuperRoleList(); superIt; superIt = superIt->getNext()) {
+						if (!superIt->isNegated()) {
+							state.mSuccessorRoleSet.insert(superIt->getData());
+						}
+					}
+				}
+				state.mCompletedSuccessorRoleTagSet.unite(label->mSuccessorRoleTagSet);
+				state.mDataRoleTagSet.unite(label->mDataRoleTagSet);
+				return true;
+			}
+
+
+			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideEntailedCompleted(const CCompletedLabel* label, CConcept* concept, bool negated, cint64 depth) {
+				// as decideEntailed, over a completed label: an entry that rests on a choice is present in
+				// one model, so it neither proves the entailment nor the absence of it
+				if (depth > 64) {
+					return UNDECIDED;
+				}
+				cint64 opCode = concept->getOperatorCode();
+				CSortedNegLinker<CConcept*>* opLinker = concept->getOperandList();
+				if (opCode == CCNOT && opLinker) {
+					return decideEntailedCompleted(label, opLinker->getData(), !(opLinker->isNegated() ^ negated), depth + 1);
+				}
+				if (!negated) {
+					if (opCode == CCTOP) {
+						return SUBSUMED;
+					}
+					if (opCode == CCBOTTOM) {
+						return NOT_SUBSUMED;
+					}
+					if (concept->hasClassName()) {
+						if (label->hasDeterministicEntry(concept, false)) {
+							return SUBSUMED;
+						}
+						// a model need not name every subsumer at its root, the class hierarchy does
+						if (mRootSubClassConcept) {
+							Verdict hierarchyVerdict = decideNamedSubsumptionFromHierarchy(mRootSubClassConcept, concept);
+							if (hierarchyVerdict != UNDECIDED) {
+								return hierarchyVerdict;
+							}
+						}
+						return UNDECIDED;
+					}
+					if (opCode == CCAND) {
+						bool undecided = false;
+						for (CSortedNegLinker<CConcept*>* opIt = opLinker; opIt; opIt = opIt->getNext()) {
+							Verdict opVerdict = decideEntailedCompleted(label, opIt->getData(), opIt->isNegated(), depth + 1);
+							if (opVerdict == NOT_SUBSUMED || opVerdict == NEEDS_COMPLETION) {
+								return opVerdict;
+							} else if (opVerdict == UNDECIDED) {
+								undecided = true;
+							}
+						}
+						return undecided ? UNDECIDED : SUBSUMED;
+					}
+					if (opCode == CCOR) {
+						for (CSortedNegLinker<CConcept*>* opIt = opLinker; opIt; opIt = opIt->getNext()) {
+							if (decideEntailedCompleted(label, opIt->getData(), opIt->isNegated(), depth + 1) == SUBSUMED) {
+								return SUBSUMED;
+							}
+						}
+						return UNDECIDED;
+					}
+					if (label->hasDeterministicEntry(concept, false)) {
+						return SUBSUMED;
+					}
+					return UNDECIDED;
+				} else {
+					if (opCode == CCTOP) {
+						return NOT_SUBSUMED;
+					}
+					if (opCode == CCBOTTOM) {
+						return SUBSUMED;
+					}
+					if (opCode == CCOR) {
+						bool undecided = false;
+						for (CSortedNegLinker<CConcept*>* opIt = opLinker; opIt; opIt = opIt->getNext()) {
+							Verdict opVerdict = decideEntailedCompleted(label, opIt->getData(), !opIt->isNegated(), depth + 1);
+							if (opVerdict == NOT_SUBSUMED || opVerdict == NEEDS_COMPLETION) {
+								return opVerdict;
+							} else if (opVerdict == UNDECIDED) {
+								undecided = true;
+							}
+						}
+						return undecided ? UNDECIDED : SUBSUMED;
+					}
+					if (label->hasDeterministicEntry(concept, true)) {
+						return SUBSUMED;
+					}
+					if (concept->hasClassName() || opCode == CCAND) {
+						if (opCode == CCAND) {
+							for (CSortedNegLinker<CConcept*>* opIt = opLinker; opIt; opIt = opIt->getNext()) {
+								Verdict opVerdict = decideEntailedCompleted(label, opIt->getData(), !opIt->isNegated(), depth + 1);
+								if (opVerdict == SUBSUMED || opVerdict == NEEDS_COMPLETION) {
+									return opVerdict;
+								}
+							}
+						}
+						QList<CConcept*> conjuncts;
+						if (collectNamedConjuncts(concept, false, conjuncts, 0)) {
+							const CMergeState* base = getConjunctionMergeBase(conjuncts);
+							if (!base) {
+								return mCompletionConcept ? NEEDS_COMPLETION : UNDECIDED;
+							}
+							if (base->mClashed) {
+								return base->hasNondeterministic() ? UNDECIDED : SUBSUMED;
+							}
+							Verdict labelVerdict = decideCompletedLabelSatisfiable(label, base);
+							if (labelVerdict == UNDECIDED && mCompletionConcept) {
+								return NEEDS_COMPLETION;
+							}
+							return labelVerdict;
+						}
+					}
+					return UNDECIDED;
+				}
+			}
+
+
+			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideCompletedLabelSatisfiable(const CCompletedLabel* label, const CMergeState* base) {
+				// the fast scan over a completed label: a clash proves the subsumption only when neither
+				// side rests on a choice, and a successor of the label is known by its role only, so a
+				// universal restriction that could reach it leaves the merge to the tableau
+				++mCompletedDecisionCount;
+				bool nondeterministic = base->hasNondeterministic() || label->mHasNondeterministic;
+				bool candidateSeen = !base->mCandidateList.isEmpty();
+				QVarLengthArray<CConcept*,16> implicationArray;
+				QVarLengthArray<QPair<CConcept*,bool>,16> universalArray;
+				QVarLengthArray<CConcept*,4> selfArray;
+				struct Presence {
+					const CMergeState* mBase;
+					const CCompletedLabel* mLabel;
+					bool has(CConcept* concept, bool negated) const {
+						return (negated ? mBase->hasNegative(concept) : mBase->hasPositive(concept)) || mLabel->hasEntry(concept, negated);
+					}
+				} presence = { base, label };
+				for (const CCompletedLabelEntry& entry : label->mEntries) {
+					CConcept* concept = entry.mConcept;
+					bool negated = entry.mNegated;
+					if (negated ? base->hasPositive(concept) : base->hasNegative(concept)) {
+						return (nondeterministic || !entry.mDeterministic) ? UNDECIDED : SUBSUMED;
+					}
+					LabelConceptKind kind = getLabelConceptKind(concept, negated);
+					if (kind == LCK_UNSAFE) {
+						cint64 codeKey = concept->getOperatorCode() * 2 + (negated ? 1 : 0);
+						mUndecidedMergeConceptCodeCounts[codeKey] = mUndecidedMergeConceptCodeCounts.value(codeKey, 0) + 1;
+						return UNDECIDED;
+					}
+					if (kind == LCK_CANDIDATE) {
+						candidateSeen = true;
+					}
+					if (kind == LCK_IMPLICATION) {
+						implicationArray.append(concept);
+					} else if (kind == LCK_UNIVERSAL) {
+						universalArray.append(QPair<CConcept*,bool>(concept, negated));
+					} else if (!negated && concept->getOperatorCode() == CCSELF) {
+						selfArray.append(concept);
+					}
+					if (!negated && base->mTriggerImplicationHash.contains(concept)) {
+						for (CConcept* implConcept : base->mTriggerImplicationHash.value(concept)) {
+							CSortedNegLinker<CConcept*>* impliedLinker = implConcept->getOperandList();
+							bool triggered = true;
+							for (CSortedNegLinker<CConcept*>* trigIt = impliedLinker->getNext(); trigIt && triggered; trigIt = trigIt->getNext()) {
+								triggered = presence.has(trigIt->getData(), false);
+							}
+							if (triggered && !presence.has(impliedLinker->getData(), impliedLinker->isNegated())) {
+								return decideCompletedLabelSatisfiableClosure(label, base);
+							}
+						}
+					}
+				}
+				for (CConcept* implConcept : implicationArray) {
+					CSortedNegLinker<CConcept*>* impliedLinker = implConcept->getOperandList();
+					if (!impliedLinker) {
+						continue;
+					}
+					bool triggered = true;
+					for (CSortedNegLinker<CConcept*>* trigIt = impliedLinker->getNext(); trigIt && triggered; trigIt = trigIt->getNext()) {
+						triggered = presence.has(trigIt->getData(), false);
+					}
+					if (triggered && !presence.has(impliedLinker->getData(), impliedLinker->isNegated())) {
+						return decideCompletedLabelSatisfiableClosure(label, base);
+					}
+				}
+				if (hasSuccessorRoleConflict(label->mSuccessorRoleList, label->mDataRoleTagSet, *base)) {
+					return UNDECIDED;
+				}
+				// the universal restrictions of the base reach the label's successors and self loops
+				for (const CMergeUniversal& universal : base->mUniversalList) {
+					CRole* role = universal.mConcept->getRole();
+					CSortedNegLinker<CConcept*>* opLinker = universal.mConcept->getOperandList();
+					if (!role || !opLinker) {
+						return UNDECIDED;
+					}
+					if (label->mSuccessorRoleTagSet.contains(role->getRoleTag())) {
+						mUndecidedMergeConceptCodeCounts[-5000] = mUndecidedMergeConceptCodeCounts.value(-5000, 0) + 1;
+						return UNDECIDED;
+					}
+					for (CSortedNegLinker<CConcept*>* opIt = opLinker; opIt; opIt = opIt->getNext()) {
+						bool propagatedNegation = opIt->isNegated() ^ universal.mNegated;
+						for (CConcept* selfConcept : selfArray) {
+							if (isSelfLoopOnRole(selfConcept, role) && !presence.has(opIt->getData(), propagatedNegation)) {
+								mUndecidedMergeConceptCodeCounts[-6000] = mUndecidedMergeConceptCodeCounts.value(-6000, 0) + 1;
+								return UNDECIDED;
+							}
+						}
+					}
+				}
+				// and the label's universal restrictions reach the successors and self loops of the base
+				for (const QPair<CConcept*,bool>& universal : universalArray) {
+					CRole* role = universal.first->getRole();
+					CSortedNegLinker<CConcept*>* opLinker = universal.first->getOperandList();
+					if (!role || !opLinker) {
+						return UNDECIDED;
+					}
+					if (base->hasCompletedSuccessorRoleTag(role->getRoleTag())) {
+						mUndecidedMergeConceptCodeCounts[-5000] = mUndecidedMergeConceptCodeCounts.value(-5000, 0) + 1;
+						return UNDECIDED;
+					}
+					for (CSortedNegLinker<CConcept*>* opIt = opLinker; opIt; opIt = opIt->getNext()) {
+						bool propagatedNegation = opIt->isNegated() ^ universal.second;
+						for (CIndividualSaturationProcessNode* partNode : base->mPartNodeList) {
+							if (hasSuccessorWithoutConcept(partNode, role, opIt->getData(), propagatedNegation)) {
+								mUndecidedMergeConceptCodeCounts[-5000] = mUndecidedMergeConceptCodeCounts.value(-5000, 0) + 1;
+								return UNDECIDED;
+							}
+						}
+						for (CConcept* selfConcept : base->mSelfConceptSet) {
+							if (isSelfLoopOnRole(selfConcept, role) && !presence.has(opIt->getData(), propagatedNegation)) {
+								mUndecidedMergeConceptCodeCounts[-6000] = mUndecidedMergeConceptCodeCounts.value(-6000, 0) + 1;
+								return UNDECIDED;
+							}
+						}
+					}
+				}
+				if (candidateSeen) {
+					return decideCompletedLabelSatisfiableClosure(label, base);
+				}
+				return NOT_SUBSUMED;
+			}
+
+
+			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideCompletedLabelSatisfiableClosure(const CCompletedLabel* label, const CMergeState* base) {
+				// the closure with a completed label as the node's part
+				++mClosureDecisionCount;
+				CMergeState state(base);
+				if (!addCompletedLabelToMergeState(state, label)) {
+					return UNDECIDED;
+				}
+				if (!closeMergeState(state)) {
+					return UNDECIDED;
+				}
+				if (state.mClashed) {
+					return state.hasNondeterministic() ? UNDECIDED : SUBSUMED;
+				}
+				if (!closeMergeStateWithCandidates(state)) {
+					return UNDECIDED;
+				}
+				if (state.mClashed) {
+					mUndecidedMergeConceptCodeCounts[-9200] = mUndecidedMergeConceptCodeCounts.value(-9200, 0) + 1;
+					return UNDECIDED;
+				}
+				QSet<CConcept*> selfConceptSet = base->mSelfConceptSet + state.mSelfConceptSet;
+				for (cint64 listIndex = 0; listIndex < 2; ++listIndex) {
+					const QList<CMergeUniversal>& universalList = listIndex == 0 ? base->mUniversalList : state.mUniversalList;
+					for (const CMergeUniversal& universal : universalList) {
+						CRole* role = universal.mConcept->getRole();
+						CSortedNegLinker<CConcept*>* opLinker = universal.mConcept->getOperandList();
+						if (!role || !opLinker) {
+							return UNDECIDED;
+						}
+						cint64 roleTag = role->getRoleTag();
+						// a successor known by its role only, or one derived in the closure
+						if (listIndex == 0 && (state.mCompletedSuccessorRoleTagSet.contains(roleTag)) || listIndex == 1 && (base->hasCompletedSuccessorRoleTag(roleTag) || state.mCompletedSuccessorRoleTagSet.contains(roleTag))) {
+							mUndecidedMergeConceptCodeCounts[-5000] = mUndecidedMergeConceptCodeCounts.value(-5000, 0) + 1;
+							return UNDECIDED;
+						}
+						for (CRole* derivedRole : state.mDerivedSuccessorRoleSet) {
+							QSet<cint64> derivedTagSet;
+							collectRoleTagsWithSuperRoles(derivedRole, derivedTagSet);
+							if (derivedTagSet.contains(roleTag)) {
+								mUndecidedMergeConceptCodeCounts[-8000] = mUndecidedMergeConceptCodeCounts.value(-8000, 0) + 1;
+								return UNDECIDED;
+							}
+						}
+						if (listIndex == 1) {
+							for (CSortedNegLinker<CConcept*>* opIt = opLinker; opIt; opIt = opIt->getNext()) {
+								bool propagatedNegation = opIt->isNegated() ^ universal.mNegated;
+								for (CIndividualSaturationProcessNode* partNode : base->mPartNodeList) {
+									if (hasSuccessorWithoutConcept(partNode, role, opIt->getData(), propagatedNegation)) {
+										mUndecidedMergeConceptCodeCounts[-5000] = mUndecidedMergeConceptCodeCounts.value(-5000, 0) + 1;
+										return UNDECIDED;
+									}
+								}
+							}
+						}
+						for (CConcept* selfConcept : selfConceptSet) {
+							if (isSelfLoopOnRole(selfConcept, role)) {
+								for (CSortedNegLinker<CConcept*>* opIt = opLinker; opIt; opIt = opIt->getNext()) {
+									bool propagatedNegation = opIt->isNegated() ^ universal.mNegated;
+									bool present = propagatedNegation ? state.hasNegative(opIt->getData()) : state.hasPositive(opIt->getData());
+									if (!present) {
+										mUndecidedMergeConceptCodeCounts[-6000] = mUndecidedMergeConceptCodeCounts.value(-6000, 0) + 1;
+										return UNDECIDED;
+									}
+								}
+							}
+						}
+					}
+				}
+				return NOT_SUBSUMED;
+			}
+
+
+			cint64 CSaturationSubsumptionDecider::getCompletionRequestCount() {
+				return mCompletionRequestCount;
+			}
+
+
+			cint64 CSaturationSubsumptionDecider::getCompletedDecisionCount() {
+				return mCompletedDecisionCount;
 			}
 
 

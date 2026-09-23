@@ -772,6 +772,8 @@ HEADERS += \
    ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationCompletedVariableBindingConfirmation.h \
    ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationCompletedSubsumptionSuperClass.h \
    ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationCompletedSubsumptionSubClass.h \
+   ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationCompletedLabelCompletion.h \
+   ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationRootLabel.h \
    ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationCompletedSatisfiable.h \
    ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationCompletedInstanceItem.h \
    ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationCompletedInstanceIndividual.h \
@@ -3407,6 +3409,8 @@ SOURCES += \
    ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationCompletedVariableBindingConfirmation.cpp \
    ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationCompletedSubsumptionSuperClass.cpp \
    ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationCompletedSubsumptionSubClass.cpp \
+   ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationCompletedLabelCompletion.cpp \
+   ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationRootLabel.cpp \
    ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationCompletedSatisfiable.cpp \
    ./Source/Reasoner/Answerer/COptimizedComplexBuildingIndividualVariableCompositionsItem.cpp \
    ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationCompletedQueryMaterialization.cpp \

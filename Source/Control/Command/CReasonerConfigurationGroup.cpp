@@ -1750,6 +1750,10 @@ namespace Konclude {
 						"Determines whether the sub classes of a class expression are decided from the precomputed saturation where it suffices, so that only the remaining nodes are tested with the tableau.",
 						new CBooleanConfigType(true)),
 						new CBooleanConfigType(true));
+				addConfigProperty(new CConfigDescription("Konclude.Answering.SaturationBasedSubClassLabelCompletion",
+						"Determines whether a class whose saturation is not reliable enough for the decision of the sub classes of a class expression gets its label completed once with a satisfiability test, instead of a test for every query that visits it, see Konclude.Answering.SaturationBasedSubClassDecision.",
+						new CBooleanConfigType(true)),
+						new CBooleanConfigType(true));
 
 				addConfigProperty(new CConfigDescription("Konclude.Answering.InterpretNonAnswerIndividualVariablesAsAnonymousVariables",
 						"Determines whether non-answer individual variables are interpreted as anonymous variables.",
