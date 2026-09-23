@@ -1053,6 +1053,26 @@ visits on the smaller subset, 134 stay undecided, all because of equivalence can
 that the decider does not interpret. The remaining cost is a few microseconds per visited node,
 mostly in the search's own bookkeeping of the candidates.
 
+On the full SNOMED CT with additions, 374 710 classes, one class selection in Protege with the
+'Disjoint classes' display on, which asks `not C`, takes 2.7 to 7.4 s against 16 s with the
+decision off, and the process stays at its size over 30 selections. The remaining cost there
+is the nodes that carry data values, which the merge leaves to the tableau.
+
+Two things went wrong on that ontology before they were found on it, both races between the
+decider on the handler's thread and the tableau tasks of the same query, both fatal only under
+the burst of tasks the decider produces, since the tasks it leaves are all of one kind. The
+successor data getter of a saturation node, `getLinkedRoleSuccessorData`, ignores its create
+flag and reaches into the node's hash with the subscript operator, which detaches a shared hash
+into a copy allocated in the node's memory context; the decider reads through the constant
+lookup instead. And the lookups of the datatype value space triggering map, which the ontology
+shares with the testing ontologies of the queries, called the non constant `lowerBound`, which
+detaches the map, from every task that initialises a node with a data value; two tasks
+detaching it at once corrupted it, and the tasks then crashed the virtual machine in the value
+space triggering, on up to fourteen threads at once. They call the constant overload now. The
+first showed as a gigabyte of growth per query on the full ontology, over a hundred gigabytes
+in an afternoon of Protege, the second as a crash in the first query on a fresh start, in about
+every second run.
+
 The answers were compared with the tableau path on 120 mixed queries over the subset and 400
 over the pizza ontology, and with HermiT on 1 544 queries over pizza, where the one expression
 they differ on is HermiT's: for the sub classes of `hasBase some ThinAndCrispyBase` HermiT and

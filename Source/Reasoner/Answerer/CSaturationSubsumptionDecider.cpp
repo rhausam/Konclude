@@ -279,8 +279,10 @@ namespace Konclude {
 						CIndividualSaturationProcessNode* repNode = getRepresentativeNode(baseNode);
 						CLinkedRoleSaturationSuccessorHash* succHash = repNode->getLinkedRoleSuccessorHash(false);
 						if (succHash && succHash->hasLinkedRoleSuccessorData(role)) {
-							// the successors are linked under every super role, so the role itself suffices
-							CLinkedRoleSaturationSuccessorData* roleSuccData = succHash->getLinkedRoleSuccessorData(role, false);
+							// the successors are linked under every super role, so the role itself suffices;
+							// looked up without the getter, whose subscript access modifies the node's hash
+							// from this thread while the tableau tasks read it
+							CLinkedRoleSaturationSuccessorData* roleSuccData = succHash->getLinkedRoleSuccessorHash()->value(role);
 							CPROCESSMAP<cint64,CSaturationSuccessorData*>* succMap = roleSuccData ? roleSuccData->getSuccessorNodeDataMap(false) : nullptr;
 							if (succMap) {
 								for (CPROCESSMAP<cint64,CSaturationSuccessorData*>::const_iterator it = succMap->constBegin(), itEnd = succMap->constEnd(); it != itEnd; ++it) {
@@ -459,7 +461,9 @@ namespace Konclude {
 				if (!succHash || !succHash->hasLinkedRoleSuccessorData(role)) {
 					return false;
 				}
-				CLinkedRoleSaturationSuccessorData* roleSuccData = succHash->getLinkedRoleSuccessorData(role, false);
+				// looked up without the getter, whose subscript access modifies the node's hash from
+				// this thread while the tableau tasks read it
+				CLinkedRoleSaturationSuccessorData* roleSuccData = succHash->getLinkedRoleSuccessorHash()->value(role);
 				CPROCESSMAP<cint64,CSaturationSuccessorData*>* succMap = roleSuccData ? roleSuccData->getSuccessorNodeDataMap(false) : nullptr;
 				if (!succMap) {
 					return false;
