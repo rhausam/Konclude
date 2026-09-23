@@ -593,14 +593,16 @@ public class KoncludeReasoner implements OWLReasoner {
 	 * counters of the calculation managers, so it may run beside that query, and it is the
 	 * one native call of a reasoner that does not go through guard().
 	 *
-	 * The counters are those the command line prints with '-a'. A classification starts with
-	 * the precomputation, for which Konclude keeps no count, the saturation is one task and
-	 * the approximated remaining tasks stay at zero, so the monitor is told that the task is
-	 * busy, every interval. Once the classifier tests, its satisfiability and subsumption
-	 * tests done against those to do are reported as value and maximum, under the task
-	 * CLASSIFYING; the total grows a little while the tests run, which a monitor takes as a
-	 * new maximum. On SNOMED CT the precomputation takes 21 of 37 seconds. A realization has
-	 * one count, its tested instantiations, which is zero without individuals.
+	 * The counters are those the command line prints with '-a', plus one it does not. A
+	 * classification starts with the precomputation, whose time is the saturation; the
+	 * saturation algorithm counts the nodes it has initialised against the nodes that exist,
+	 * which are reported under the task PRECOMPUTING, both growing while the saturation
+	 * creates successors. Once the classifier tests, its satisfiability and subsumption
+	 * tests done against those to do are reported under the task CLASSIFYING; that total
+	 * grows a little as well, which a monitor takes as a new maximum. The monitor is told
+	 * that the task is busy while there is no count, at the very start and in between. On
+	 * SNOMED CT the precomputation takes 19 of 36 seconds. A realization has one count, its
+	 * tested instantiations, which is zero without individuals.
 	 */
 	private final class ProgressReporter extends Thread {
 
@@ -652,7 +654,12 @@ public class KoncludeReasoner implements OWLReasoner {
 						mMonitor.reasonerTaskStopped();
 						mMonitor.reasonerTaskStarted(ReasonerProgressMonitor.CLASSIFYING);
 					}
-					report(tested, total);
+					if (mClassifying) {
+						report(tested, total);
+					} else {
+						report(progress[QueryingBridge.PROGRESS_SATURATION_INITIALIZED_NODES],
+								progress[QueryingBridge.PROGRESS_SATURATION_NODES]);
+					}
 				}
 			}
 		}
