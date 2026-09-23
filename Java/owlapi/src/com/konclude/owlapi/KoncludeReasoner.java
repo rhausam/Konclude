@@ -44,6 +44,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -218,6 +219,8 @@ public class KoncludeReasoner implements OWLReasoner {
 	 * for ever.
 	 */
 	private final ExecutorService mReasonerThread;
+	/** the calls that wait for the reasoner's thread, so that interrupt() can release them */
+	private final Set<Future<?>> mInFlight = Collections.synchronizedSet(new HashSet<Future<?>>());
 
 	/**
 	 * Set once a native call ran into the time out. The call is still running on the reasoner
@@ -511,6 +514,18 @@ public class KoncludeReasoner implements OWLReasoner {
 	/** the bridge has no way to cancel a running calculation, so this does nothing */
 	@Override
 	public void interrupt() {
+		// The native side has no way to abandon a calculation, so this releases the callers that
+		// wait for one, each with a ReasonerInterruptedException, while the calculation itself runs
+		// on to its end on the reasoner's thread. A call made afterwards queues behind it. For
+		// Protege that is the difference between a cancel button that returns and one that waits
+		// for the classification of a large ontology to finish.
+		Future<?>[] pending;
+		synchronized (mInFlight) {
+			pending = mInFlight.toArray(new Future<?>[0]);
+		}
+		for (Future<?> future : pending) {
+			future.cancel(true);
+		}
 	}
 
 	/**
@@ -520,7 +535,8 @@ public class KoncludeReasoner implements OWLReasoner {
 	 * for an editor is a window that stops responding with nothing to indicate why.
 	 *
 	 * The progress monitor of the configuration is told about each task, which is what Protege
-	 * shows in its progress window; the bridge reports no progress within a task.
+	 * shows in its progress window, and while the task runs a ProgressReporter feeds it the
+	 * progress of the native calculations.
 	 */
 	@Override
 	public void precomputeInferences(InferenceType... inferenceTypes) {
@@ -532,24 +548,126 @@ public class KoncludeReasoner implements OWLReasoner {
 				continue;
 			}
 			if (InferenceType.CLASS_HIERARCHY == inferenceType) {
-				monitor.reasonerTaskStarted(ReasonerProgressMonitor.CLASSIFYING);
+				monitor.reasonerTaskStarted(PRECOMPUTING);
+				ProgressReporter reporter = new ProgressReporter(monitor, false);
+				reporter.start();
 				try {
 					getSubClasses(thing, true);
 				} finally {
+					reporter.finish();
 					monitor.reasonerTaskStopped();
 				}
 				mPrecomputed.add(inferenceType);
 			} else if (InferenceType.CLASS_ASSERTIONS == inferenceType) {
 				monitor.reasonerTaskStarted(ReasonerProgressMonitor.REALIZING);
+				ProgressReporter reporter = new ProgressReporter(monitor, true);
+				reporter.start();
 				try {
 					getInstances(thing, true);
 				} finally {
+					reporter.finish();
 					monitor.reasonerTaskStopped();
 				}
 				mPrecomputed.add(inferenceType);
 			}
 			// the other inference types have no query of their own in the bridge, and the OWL API
 			// allows a reasoner to ignore what it does not precompute
+		}
+	}
+
+	/** how often the progress of a running precomputation is read and reported */
+	private static final long PROGRESS_INTERVAL_MILLISECONDS = 250;
+
+	/**
+	 * The task reported for the first phase of a classification, the consistency check and
+	 * the saturation, which Konclude calls the precomputation; ReasonerProgressMonitor.CLASSIFYING
+	 * follows it once the classifier tests. The two are reported as one task after the other,
+	 * as ELK reports its stages, so a window shows which phase it is in.
+	 */
+	public static final String PRECOMPUTING = "Precomputing";
+
+	/**
+	 * Reports the progress of the native calculations to the progress monitor while a
+	 * precomputation runs. It has to be a thread of its own, the reasoner's thread is inside
+	 * the query that triggers the calculation; the progress query of the bridge only reads
+	 * counters of the calculation managers, so it may run beside that query, and it is the
+	 * one native call of a reasoner that does not go through guard().
+	 *
+	 * The counters are those the command line prints with '-a'. A classification starts with
+	 * the precomputation, for which Konclude keeps no count, the saturation is one task and
+	 * the approximated remaining tasks stay at zero, so the monitor is told that the task is
+	 * busy, every interval. Once the classifier tests, its satisfiability and subsumption
+	 * tests done against those to do are reported as value and maximum, under the task
+	 * CLASSIFYING; the total grows a little while the tests run, which a monitor takes as a
+	 * new maximum. On SNOMED CT the precomputation takes 21 of 37 seconds. A realization has
+	 * one count, its tested instantiations, which is zero without individuals.
+	 */
+	private final class ProgressReporter extends Thread {
+
+		private final ReasonerProgressMonitor mMonitor;
+		private final boolean mRealization;
+		private boolean mClassifying = false;
+		private volatile boolean mFinished = false;
+
+		ProgressReporter(ReasonerProgressMonitor monitor, boolean realization) {
+			super("Konclude progress");
+			mMonitor = monitor;
+			mRealization = realization;
+			setDaemon(true);
+		}
+
+		/** stops the reporting; the last report may still be on its way, none follows it */
+		void finish() {
+			mFinished = true;
+			interrupt();
+			try {
+				join();
+			} catch (InterruptedException exception) {
+				Thread.currentThread().interrupt();
+			}
+		}
+
+		@Override
+		public void run() {
+			mMonitor.reasonerTaskBusy();
+			while (!mFinished) {
+				try {
+					Thread.sleep(PROGRESS_INTERVAL_MILLISECONDS);
+				} catch (InterruptedException exception) {
+					break;
+				}
+				if (mFinished) {
+					break;
+				}
+				double[] progress = mQuerying.queryOWLReasoningProgress(mBridge);
+				if (mRealization) {
+					report(progress[QueryingBridge.PROGRESS_REALIZATION_TESTED],
+							progress[QueryingBridge.PROGRESS_REALIZATION_TOTAL]);
+				} else {
+					double tested = progress[QueryingBridge.PROGRESS_CLASSIFICATION_TESTED];
+					double total = progress[QueryingBridge.PROGRESS_CLASSIFICATION_TOTAL];
+					if (!mClassifying && total > 0) {
+						// the classifier has started testing, the precomputation is over
+						mClassifying = true;
+						mMonitor.reasonerTaskStopped();
+						mMonitor.reasonerTaskStarted(ReasonerProgressMonitor.CLASSIFYING);
+					}
+					report(tested, total);
+				}
+			}
+		}
+
+		private boolean isRunning(double done, double total) {
+			return total > 0 && done < total;
+		}
+
+		private void report(double done, double total) {
+			if (isRunning(done, total)) {
+				mMonitor.reasonerTaskProgressChanged((int) Math.min(done, Integer.MAX_VALUE),
+						(int) Math.min(total, Integer.MAX_VALUE));
+			} else {
+				mMonitor.reasonerTaskBusy();
+			}
 		}
 	}
 
@@ -925,19 +1043,188 @@ public class KoncludeReasoner implements OWLReasoner {
 
 	// ------------------------------------------------------------- the entailment
 
+	/**
+	 * The axiom types whose entailment can be decided with the queries the bridge offers: a class
+	 * inclusion is entailed when the class and the complement of its super class have no common
+	 * instance, which the satisfiability check of an anonymous expression decides, and the other
+	 * types are reduced to that or to the instance, property and individual queries.
+	 */
+	private static final Set<AxiomType<?>> ENTAILMENT_CHECKING_TYPES = Collections.unmodifiableSet(
+			new HashSet<AxiomType<?>>(java.util.Arrays.<AxiomType<?>>asList(
+					AxiomType.SUBCLASS_OF, AxiomType.EQUIVALENT_CLASSES, AxiomType.DISJOINT_CLASSES,
+					AxiomType.OBJECT_PROPERTY_DOMAIN, AxiomType.OBJECT_PROPERTY_RANGE,
+					AxiomType.SUB_OBJECT_PROPERTY, AxiomType.EQUIVALENT_OBJECT_PROPERTIES,
+					AxiomType.CLASS_ASSERTION, AxiomType.OBJECT_PROPERTY_ASSERTION,
+					AxiomType.SAME_INDIVIDUAL, AxiomType.DIFFERENT_INDIVIDUALS,
+					AxiomType.DECLARATION)));
+
 	@Override
 	public boolean isEntailed(OWLAxiom axiom) {
-		throw unsupported("isEntailed");
+		checkOpen();
+		if (axiom == null) {
+			throw new IllegalArgumentException("an axiom is required");
+		}
+		if (!isEntailmentCheckingSupported(axiom.getAxiomType())) {
+			throw new UnsupportedEntailmentTypeException(axiom);
+		}
+		if (!isConsistent()) {
+			throw new InconsistentOntologyException();
+		}
+		OWLAxiom plain = axiom.getAxiomWithoutAnnotations();
+		if (plain instanceof OWLSubClassOfAxiom) {
+			OWLSubClassOfAxiom sub = (OWLSubClassOfAxiom) plain;
+			return isSubClassOf(sub.getSubClass(), sub.getSuperClass());
+		}
+		if (plain instanceof OWLEquivalentClassesAxiom) {
+			List<OWLClassExpression> classes = new ArrayList<OWLClassExpression>(
+					((OWLEquivalentClassesAxiom) plain).getClassExpressions());
+			for (int i = 1; i < classes.size(); i++) {
+				if (!isSubClassOf(classes.get(i - 1), classes.get(i))
+						|| !isSubClassOf(classes.get(i), classes.get(i - 1))) {
+					return false;
+				}
+			}
+			return true;
+		}
+		if (plain instanceof OWLDisjointClassesAxiom) {
+			List<OWLClassExpression> classes = new ArrayList<OWLClassExpression>(
+					((OWLDisjointClassesAxiom) plain).getClassExpressions());
+			for (int i = 0; i < classes.size(); i++) {
+				for (int j = i + 1; j < classes.size(); j++) {
+					if (isSatisfiable(mDataFactory.getOWLObjectIntersectionOf(classes.get(i), classes.get(j)))) {
+						return false;
+					}
+				}
+			}
+			return true;
+		}
+		if (plain instanceof OWLObjectPropertyDomainAxiom) {
+			// the domain is C when everything with a successor is a C
+			OWLObjectPropertyDomainAxiom domain = (OWLObjectPropertyDomainAxiom) plain;
+			return isSubClassOf(mDataFactory.getOWLObjectSomeValuesFrom(domain.getProperty(), mDataFactory.getOWLThing()),
+					domain.getDomain());
+		}
+		if (plain instanceof OWLObjectPropertyRangeAxiom) {
+			// the range is C when nothing has a successor outside C
+			OWLObjectPropertyRangeAxiom range = (OWLObjectPropertyRangeAxiom) plain;
+			return !isSatisfiable(mDataFactory.getOWLObjectSomeValuesFrom(range.getProperty(),
+					mDataFactory.getOWLObjectComplementOf(range.getRange())));
+		}
+		if (plain instanceof OWLSubObjectPropertyOfAxiom) {
+			OWLSubObjectPropertyOfAxiom sub = (OWLSubObjectPropertyOfAxiom) plain;
+			OWLObjectPropertyExpression subProperty = sub.getSubProperty();
+			OWLObjectPropertyExpression superProperty = sub.getSuperProperty();
+			if (subProperty.isAnonymous() || superProperty.isAnonymous()) {
+				throw new UnsupportedEntailmentTypeException(axiom);
+			}
+			if (subProperty.equals(superProperty) || superProperty.isOWLTopObjectProperty()
+					|| subProperty.isOWLBottomObjectProperty()) {
+				return true;
+			}
+			return getSuperObjectProperties(subProperty, false).containsEntity(superProperty)
+					|| getEquivalentObjectProperties(subProperty).contains(superProperty);
+		}
+		if (plain instanceof OWLEquivalentObjectPropertiesAxiom) {
+			List<OWLObjectPropertyExpression> properties = new ArrayList<OWLObjectPropertyExpression>(
+					((OWLEquivalentObjectPropertiesAxiom) plain).getProperties());
+			for (OWLObjectPropertyExpression property : properties) {
+				if (property.isAnonymous()) {
+					throw new UnsupportedEntailmentTypeException(axiom);
+				}
+			}
+			for (int i = 1; i < properties.size(); i++) {
+				if (!properties.get(i).equals(properties.get(0))
+						&& !getEquivalentObjectProperties(properties.get(0)).contains(properties.get(i))) {
+					return false;
+				}
+			}
+			return true;
+		}
+		if (plain instanceof OWLClassAssertionAxiom) {
+			OWLClassAssertionAxiom assertion = (OWLClassAssertionAxiom) plain;
+			if (assertion.getIndividual().isAnonymous()) {
+				throw new UnsupportedEntailmentTypeException(axiom);
+			}
+			if (assertion.getClassExpression().isOWLThing()) {
+				return true;
+			}
+			return getInstances(assertion.getClassExpression(), false)
+					.containsEntity(assertion.getIndividual().asOWLNamedIndividual());
+		}
+		if (plain instanceof OWLObjectPropertyAssertionAxiom) {
+			OWLObjectPropertyAssertionAxiom assertion = ((OWLObjectPropertyAssertionAxiom) plain).getSimplified();
+			if (assertion.getProperty().isAnonymous() || assertion.getSubject().isAnonymous()
+					|| assertion.getObject().isAnonymous()) {
+				throw new UnsupportedEntailmentTypeException(axiom);
+			}
+			return getObjectPropertyValues(assertion.getSubject().asOWLNamedIndividual(), assertion.getProperty())
+					.containsEntity(assertion.getObject().asOWLNamedIndividual());
+		}
+		if (plain instanceof OWLSameIndividualAxiom) {
+			List<OWLIndividual> individuals = new ArrayList<OWLIndividual>(
+					((OWLSameIndividualAxiom) plain).getIndividuals());
+			for (OWLIndividual individual : individuals) {
+				if (individual.isAnonymous()) {
+					throw new UnsupportedEntailmentTypeException(axiom);
+				}
+			}
+			Node<OWLNamedIndividual> same = getSameIndividuals(individuals.get(0).asOWLNamedIndividual());
+			for (int i = 1; i < individuals.size(); i++) {
+				if (!same.contains(individuals.get(i).asOWLNamedIndividual())) {
+					return false;
+				}
+			}
+			return true;
+		}
+		if (plain instanceof OWLDifferentIndividualsAxiom) {
+			// two individuals are different when their nominals cannot share an instance
+			List<OWLIndividual> individuals = new ArrayList<OWLIndividual>(
+					((OWLDifferentIndividualsAxiom) plain).getIndividuals());
+			for (OWLIndividual individual : individuals) {
+				if (individual.isAnonymous()) {
+					throw new UnsupportedEntailmentTypeException(axiom);
+				}
+			}
+			for (int i = 0; i < individuals.size(); i++) {
+				for (int j = i + 1; j < individuals.size(); j++) {
+					if (isSatisfiable(mDataFactory.getOWLObjectIntersectionOf(
+							mDataFactory.getOWLObjectOneOf(individuals.get(i)),
+							mDataFactory.getOWLObjectOneOf(individuals.get(j))))) {
+						return false;
+					}
+				}
+			}
+			return true;
+		}
+		if (plain instanceof OWLDeclarationAxiom) {
+			// a declaration says nothing that could fail to hold
+			return true;
+		}
+		throw new UnsupportedEntailmentTypeException(axiom);
+	}
+
+	/** C is a sub class of D when C and not D have no common instance */
+	private boolean isSubClassOf(OWLClassExpression subClass, OWLClassExpression superClass) {
+		if (superClass.isOWLThing() || subClass.isOWLNothing() || subClass.equals(superClass)) {
+			return true;
+		}
+		return !isSatisfiable(mDataFactory.getOWLObjectIntersectionOf(subClass,
+				mDataFactory.getOWLObjectComplementOf(superClass)));
 	}
 
 	@Override
 	public boolean isEntailed(Set<? extends OWLAxiom> axioms) {
-		throw unsupported("isEntailed");
+		for (OWLAxiom axiom : axioms) {
+			if (!isEntailed(axiom)) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	@Override
 	public boolean isEntailmentCheckingSupported(AxiomType<?> axiomType) {
-		return false;
+		return ENTAILMENT_CHECKING_TYPES.contains(axiomType);
 	}
 
 
@@ -1047,12 +1334,16 @@ public class KoncludeReasoner implements OWLReasoner {
 				return call.call();
 			}
 		});
+		mInFlight.add(future);
 		try {
 			long timeOut = getTimeOut();
 			if (timeOut == Long.MAX_VALUE || timeOut <= 0) {
 				return future.get();
 			}
 			return future.get(timeOut, TimeUnit.MILLISECONDS);
+		} catch (CancellationException exception) {
+			throw new ReasonerInterruptedException(method + " of Konclude was interrupted, the "
+					+ "calculation runs on to its end on the reasoner's thread");
 		} catch (TimeoutException exception) {
 			mTimedOut = true;
 			throw new TimeOutException(method + " of Konclude did not return within the configured "
@@ -1071,6 +1362,8 @@ public class KoncludeReasoner implements OWLReasoner {
 				throw (Error) cause;
 			}
 			throw new IllegalStateException(cause);
+		} finally {
+			mInFlight.remove(future);
 		}
 	}
 

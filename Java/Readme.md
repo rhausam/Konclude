@@ -80,6 +80,9 @@ arguments instead of extending them, so it has to start from that constant.
 | `lifecycle` | three reasoners in one virtual machine, and `flush` after a change of the ontology |
 | `merges` | an ABox that forces two individuals to be merged, which the precomputation used to hang on |
 | `timeout` | a call that overruns the configured time out is reported as a `TimeOutException` |
+| `entailment` | `isEntailed` for the axiom types the wrapper reduces to its queries, 27 axioms, and the exception for the others |
+| `interrupt` | an idle interrupt changes nothing, a call caught in flight ends in a `ReasonerInterruptedException`, the answers afterwards are complete |
+| `progress` | a precomputation reports its tasks in order and its progress within range to the monitor |
 
 All scenarios pass on macOS on arm64 with Liberica JDK 17 and Qt 5.15.
 
@@ -134,8 +137,16 @@ What the plug-in cannot do yet: the inferred axioms that Protege's export and it
 inferences ask for through the queries listed under WHAT THE BRIDGE DOES NOT ANSWER, the
 disjoint classes, the property domains and ranges and the data property hierarchy among
 them, end in an `UnsupportedOperationException`; the 'Disjoint classes' displayed inference
-is best switched off in the reasoner preferences. `interrupt` cannot stop a running
-calculation, so cancelling in the progress window waits for it to finish.
+is best switched off in the reasoner preferences. `interrupt` releases the caller of a
+running calculation but cannot stop the calculation itself, so cancelling in the progress
+window returns at once while Konclude works on in the background until it is done.
+
+The bar of the progress window fills while the classifier tests and stays flat before that,
+see PROGRESS below: Konclude keeps no count for the precomputation, which is where SNOMED CT
+spends more than half of its time, so that phase is reported as busy under its own label.
+On macOS a busy task looks like one that was only started: the Aqua look and feel of the
+JDK (Liberica 17 was tried) draws an indeterminate bar as a flat grey track while the
+component believes it is animating.
 
 
 ## THE CONTRACT OF THE NATIVE SIDE
@@ -467,7 +478,8 @@ OWLReasoner reasoner = new KoncludeReasonerFactory()
 ```
 
 Two things to know. The stuck call **keeps running**, the bridge has no way to cancel it and
-`interrupt()` is a no-op on the native side; its thread is a daemon so it does not keep the
+`interrupt()` only releases the callers that wait for the reasoner's thread, each with a
+`ReasonerInterruptedException`, while the calculation runs on; its thread is a daemon so it does not keep the
 virtual machine alive, but it holds its library instance and its share of the machine until
 the process ends, so another reasoner should not be started beside it. The reasoner refuses
 to be used after a time out, with an `IllegalStateException`, rather than queueing further
@@ -844,6 +856,85 @@ handed an empty configuration to the library, which then applied its own default
 the line above, so a reasoner that was not given a configuration explicitly ran on one
 processing unit. An empty configuration now means `DEFAULT_LOADING_CONFIGURATION`, see
 `chooseLoadingConfiguration`, so the factory and the plug-in get `AUTO` without saying so.
+
+## ENTAILMENT CHECKING, INTERRUPTION AND PROGRESS
+
+The first two were the gaps between the wrapper and ELK 0.6.0 on the methods Protege calls, measured
+on 2026-09-22 against the `ElkReasoner` classes of ELK 0.4.3 and 0.6.0 and the bytecode of
+every Protege bundle: ELK answers `isEntailed` for some axiom types and stops a calculation
+on `interrupt`, the wrapper did neither. Everything else Protege asks for is either answered
+by both or by neither, and what neither answers, the data properties, disjointness, domains,
+ranges and inverses, Protege tolerates: `DisplayedInferencePreferences.executeTask` catches
+the `UnsupportedOperationException` and switches that optional inference off, which is how
+ELK has always been usable there.
+
+### ENTAILMENT
+
+The bridge has no entailment query, but every axiom type that ELK 0.6.0 checks can be decided
+with the queries it has, now that anonymous class expressions are answered. A class inclusion
+`C SubClassOf D` holds when `C and not D` is unsatisfiable, and the other types reduce to that
+or to the instance, property and individual queries:
+
+```
+SubClassOf, EquivalentClasses, DisjointClasses   satisfiability of an intersection
+ObjectPropertyDomain, ObjectPropertyRange        'p some Thing' below the domain, 'p some not C' unsatisfiable
+SubObjectPropertyOf, EquivalentObjectProperties  the property hierarchy, named properties only
+ClassAssertion, ObjectPropertyAssertion          the instances and the property values
+SameIndividual                                   the same individuals
+DifferentIndividuals                             satisfiability of an intersection of two nominals
+Declaration                                      always entailed
+```
+
+`isEntailmentCheckingSupported` names exactly these, everything else ends in an
+`UnsupportedEntailmentTypeException`, as does an inverse property expression or an anonymous
+individual inside one of them. An inconsistent ontology ends in an
+`InconsistentOntologyException`. The `entailment` scenario of the test checks 27 axioms
+against the family ontology, including expressions on both sides of an inclusion.
+
+### INTERRUPTION
+
+`interrupt()` cancels the calls that wait for the reasoner's thread, each of which ends in a
+`ReasonerInterruptedException`. The calculation itself cannot be abandoned, the native side
+has no way to stop one, so it runs on to its end on the reasoner's thread and a call made in
+the meantime queues behind it. For Protege that is the difference between a cancel button
+that returns and one that waits for the classification of a large ontology to finish. The
+`interrupt` scenario of the test checks that an idle interrupt changes nothing, that a call
+caught in flight ends in that exception and no other, and that the reasoner answers correctly
+afterwards.
+
+### PROGRESS
+
+Protege's progress window paints a task that is only started as a bar that stays at zero,
+switches to an indeterminate bar when the reasoner reports the task as busy, and fills the
+bar from `reasonerTaskProgressChanged(value, max)`. The numbers come from the native side:
+`queryOWLReasoningProgress` is a 19th entry point of the querying bridge that reads what the
+command line prints with `-a`, the counters of `CClassificationManager::getClassificationProgress`
+and `CRealizationManager::getRealizationProgress` and the task counts of the calculation
+environment, through the managers the commander registers in its configuration. It reads
+counters only, so unlike every other native call it is made from a thread of its own, the
+`ProgressReporter` of `KoncludeReasoner`, every 250 ms while `precomputeInferences` waits
+for the query that triggers the work on the reasoner's thread.
+
+What the monitor is told for SNOMED CT (375k logical axioms), measured on 2026-09-22 from
+the moment the reasoner was created, which itself took 10 s of translation:
+
+```
+ 0 s - 19 s   Precomputing   consistency and saturation, busy every 250 ms, no count at all
+19 s - 36 s   Classifying    tests done / tests to do, 11 130 / 404 213 up to 408 311 / 432 984
+36 s - 40 s   Realizing      busy, no individuals, so no count
+```
+
+The saturation is one calculation task, so the task counts that `-a` shows for a tableau
+calculation stay at zero, and the node counter of the saturation algorithm is a local of its
+loop; counting it would need a new path from the algorithm to the precomputation item.
+The wrapper therefore reports the first phase as the task `Precomputing`, busy every
+interval, and starts the task `Classifying` the moment the classifier's total appears, with
+its tests done against those to do; the total grows a little while the tests run, which
+Protege takes as a new maximum. Two tasks one after the other is how ELK reports its stages,
+and Protege keeps the window open across the switch. An ontology that the saturation
+classifies on its own never reaches the second task. The `progress` scenario of the test
+checks the order of the tasks, that every task is stopped, and that every report keeps
+`0 < value <= max` with a value that never falls.
 
 ## OTHER LIMITATIONS
 

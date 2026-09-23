@@ -95,6 +95,7 @@ public class KoncludeProtegePluginScenarios {
 	/** counts the tasks that the reasoner reports, as the progress window of Protege shows them */
 	private static class CountingMonitor implements ReasonerProgressMonitor {
 		final AtomicInteger started = new AtomicInteger();
+		final AtomicInteger busy = new AtomicInteger();
 		final AtomicInteger stopped = new AtomicInteger();
 		@Override public void reasonerTaskStarted(String taskName) {
 			System.out.println("  task started: " + taskName);
@@ -102,7 +103,8 @@ public class KoncludeProtegePluginScenarios {
 		}
 		@Override public void reasonerTaskStopped() { stopped.incrementAndGet(); }
 		@Override public void reasonerTaskProgressChanged(int value, int max) { }
-		@Override public void reasonerTaskBusy() { }
+		// Protege paints a task that is started but never reported busy as a bar that stays at zero
+		@Override public void reasonerTaskBusy() { busy.incrementAndGet(); }
 	}
 
 	private static void runPlugin() throws Exception {
@@ -158,6 +160,7 @@ public class KoncludeProtegePluginScenarios {
 		check("class hierarchy precomputed", reasoner.isPrecomputed(InferenceType.CLASS_HIERARCHY), true);
 		check("class assertions precomputed", reasoner.isPrecomputed(InferenceType.CLASS_ASSERTIONS), true);
 		check("tasks reported to the progress monitor", monitor.started.get(), 2);
+		check("tasks reported as busy", monitor.busy.get(), 2);
 		check("tasks reported as stopped", monitor.stopped.get(), 2);
 
 		// and asks from the event thread, which here is the caller's thread

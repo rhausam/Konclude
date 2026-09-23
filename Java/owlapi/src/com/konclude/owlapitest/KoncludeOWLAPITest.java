@@ -504,6 +504,255 @@ public class KoncludeOWLAPITest {
 		}
 	}
 
+	private static void runEntailment() throws Exception {
+		OWLOntology ontology = familyOntology();
+		OWLObjectProperty hasChild = objectProperty("hasChild");
+		OWLObjectProperty hasSon = objectProperty("hasSon");
+		final OWLReasoner reasoner = reasonerFor(ontology);
+		try {
+			check("supported(SUBCLASS_OF)          ",
+					Boolean.valueOf(reasoner.isEntailmentCheckingSupported(AxiomType.SUBCLASS_OF)), Boolean.TRUE);
+			check("supported(DISJOINT_CLASSES)     ",
+					Boolean.valueOf(reasoner.isEntailmentCheckingSupported(AxiomType.DISJOINT_CLASSES)), Boolean.TRUE);
+
+			// named classes, an inferred one, a wrong one, and one that needs the complement
+			check("Father subClassOf Person        ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLSubClassOfAxiom(cls("Father"), cls("Person")))), Boolean.TRUE);
+			check("Person subClassOf Father        ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLSubClassOfAxiom(cls("Person"), cls("Father")))), Boolean.FALSE);
+			check("Man subClassOf Thing            ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLSubClassOfAxiom(cls("Man"), DF.getOWLThing()))), Boolean.TRUE);
+			check("Impossible subClassOf Woman     ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLSubClassOfAxiom(cls("Impossible"), cls("Woman")))), Boolean.TRUE);
+			// anonymous expressions on both sides
+			check("Man and hasChild some Person subClassOf Father", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLSubClassOfAxiom(DF.getOWLObjectIntersectionOf(cls("Man"),
+							DF.getOWLObjectSomeValuesFrom(hasChild, cls("Person"))), cls("Father")))), Boolean.TRUE);
+			check("Parent equivalent to Person and hasChild some Person", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLEquivalentClassesAxiom(cls("Parent"), DF.getOWLObjectIntersectionOf(cls("Person"),
+							DF.getOWLObjectSomeValuesFrom(hasChild, cls("Person")))))), Boolean.TRUE);
+			check("Father equivalent to Mother     ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLEquivalentClassesAxiom(cls("Father"), cls("Mother")))), Boolean.FALSE);
+			check("Father disjoint with Mother     ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLDisjointClassesAxiom(cls("Father"), cls("Mother")))), Boolean.TRUE);
+			check("Father disjoint with Parent     ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLDisjointClassesAxiom(cls("Father"), cls("Parent")))), Boolean.FALSE);
+
+			// properties
+			check("hasChild domain Person          ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLObjectPropertyDomainAxiom(hasChild, cls("Person")))), Boolean.TRUE);
+			check("hasChild domain Man             ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLObjectPropertyDomainAxiom(hasChild, cls("Man")))), Boolean.FALSE);
+			check("hasChild range Person           ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLObjectPropertyRangeAxiom(hasChild, cls("Person")))), Boolean.TRUE);
+			check("hasChild range Woman            ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLObjectPropertyRangeAxiom(hasChild, cls("Woman")))), Boolean.FALSE);
+			check("hasSon subPropertyOf hasChild   ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLSubObjectPropertyOfAxiom(hasSon, hasChild))), Boolean.TRUE);
+			check("hasChild subPropertyOf hasSon   ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLSubObjectPropertyOfAxiom(hasChild, hasSon))), Boolean.FALSE);
+
+			// individuals
+			check("john : Man                      ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLClassAssertionAxiom(cls("Man"), individual("john")))), Boolean.TRUE);
+			check("john : Father                   ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLClassAssertionAxiom(cls("Father"), individual("john")))), Boolean.TRUE);
+			check("john : Woman                    ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLClassAssertionAxiom(cls("Woman"), individual("john")))), Boolean.FALSE);
+			check("john : hasChild some Woman      ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLClassAssertionAxiom(DF.getOWLObjectSomeValuesFrom(hasChild, cls("Woman")),
+							individual("john")))), Boolean.TRUE);
+			check("john hasChild mary              ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLObjectPropertyAssertionAxiom(hasChild, individual("john"), individual("mary")))), Boolean.TRUE);
+			check("mary hasChild john              ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLObjectPropertyAssertionAxiom(hasChild, individual("mary"), individual("john")))), Boolean.FALSE);
+			check("john same as johnny             ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLSameIndividualAxiom(individual("john"), individual("johnny")))), Boolean.TRUE);
+			check("john same as mary               ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLSameIndividualAxiom(individual("john"), individual("mary")))), Boolean.FALSE);
+			check("john different from mary        ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLDifferentIndividualsAxiom(individual("john"), individual("mary")))), Boolean.TRUE);
+			check("john different from johnny      ", Boolean.valueOf(reasoner.isEntailed(
+					DF.getOWLDifferentIndividualsAxiom(individual("john"), individual("johnny")))), Boolean.FALSE);
+
+			// a set is entailed when each of its axioms is
+			check("set of two entailed axioms      ", Boolean.valueOf(reasoner.isEntailed(new HashSet<OWLAxiom>(Arrays.<OWLAxiom>asList(
+					DF.getOWLSubClassOfAxiom(cls("Father"), cls("Person")),
+					DF.getOWLClassAssertionAxiom(cls("Man"), individual("john")))))), Boolean.TRUE);
+			check("set with one wrong axiom        ", Boolean.valueOf(reasoner.isEntailed(new HashSet<OWLAxiom>(Arrays.<OWLAxiom>asList(
+					DF.getOWLSubClassOfAxiom(cls("Father"), cls("Person")),
+					DF.getOWLSubClassOfAxiom(cls("Person"), cls("Father")))))), Boolean.FALSE);
+		} finally {
+			reasoner.dispose();
+		}
+	}
+
+	/**
+	 * interrupt() releases a caller that waits for the reasoner's thread. Whether the call below
+	 * is still in flight when the interrupt arrives is a race on a small ontology, so both
+	 * outcomes are accepted; what has to hold is that nothing else is thrown and that the
+	 * reasoner answers correctly afterwards.
+	 */
+	private static void runInterrupt() throws Exception {
+		OWLOntology ontology = familyOntology();
+		final OWLReasoner reasoner = reasonerFor(ontology);
+		try {
+			reasoner.interrupt();
+			check("answers after an idle interrupt ", names(reasoner.getSubClasses(cls("Person"), true)),
+					expected("Man", "Parent", "Woman"));
+
+		} finally {
+			reasoner.dispose();
+		}
+
+		// a call caught in flight: the family ontology is classified in a millisecond, so a
+		// larger one is built whose classification takes long enough for the interrupt to land
+		OWLOntology large = wideOntology(4000);
+		final OWLReasoner slow = reasonerFor(large);
+		try {
+			final Throwable[] thrown = new Throwable[1];
+			final long[] released = new long[1];
+			final java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+			Thread caller = new Thread(new Runnable() {
+				public void run() {
+					try {
+						started.countDown();
+						slow.precomputeInferences(InferenceType.CLASS_HIERARCHY);
+					} catch (Throwable t) {
+						thrown[0] = t;
+					}
+					released[0] = System.nanoTime();
+				}
+			});
+			caller.start();
+			started.await();
+			// interrupt until the caller is released: the call is in flight from the moment it is
+			// handed to the reasoner's thread, and it takes far longer than the interval here
+			long interrupted = 0;
+			while (caller.isAlive()) {
+				interrupted = System.nanoTime();
+				slow.interrupt();
+				Thread.sleep(1);
+			}
+			caller.join();
+			check("the call in flight was interrupted", Boolean.valueOf(thrown[0] != null), Boolean.TRUE);
+			if (thrown[0] != null) {
+				check("what an interrupted call throws ", thrown[0].getClass(), ReasonerInterruptedException.class);
+				report(String.format("the caller was released %.1f ms after the last interrupt", (released[0] - interrupted) / 1e6));
+			}
+			// the calculation ran on and later calls queue behind it, so the answer is complete:
+			// the 4000 classes, their 4000 defined counterparts and owl:Nothing
+			check("answers after the interrupt     ", Integer.valueOf(slow.getSubClasses(cls("Root"), false).getFlattened().size()),
+					Integer.valueOf(8001));
+		} finally {
+			slow.dispose();
+		}
+	}
+
+	/** what a progress monitor was told, in order, for the progress scenario */
+	private static class RecordingMonitor implements ReasonerProgressMonitor {
+		final java.util.List<String> tasks = new java.util.ArrayList<String>();
+		int stopped = 0;
+		int busy = 0;
+		int reports = 0;
+		int badReports = 0;
+		int previousValue = -1;
+		int lastValue = -1;
+		int lastMax = -1;
+		public synchronized void reasonerTaskStarted(String name) { tasks.add(name); previousValue = -1; }
+		public synchronized void reasonerTaskStopped() { ++stopped; }
+		public synchronized void reasonerTaskBusy() { ++busy; }
+		public synchronized void reasonerTaskProgressChanged(int value, int max) {
+			++reports;
+			// within a task a value never below the previous one, never above the maximum, which may grow
+			if (value < previousValue || value > max || max <= 0) {
+				++badReports;
+			}
+			previousValue = value;
+			lastValue = value;
+			lastMax = max;
+		}
+	}
+
+	/**
+	 * An ontology of n independent classes with a disjunction each, which the saturation cannot
+	 * decide, so the classifier tests every one of them and its counts climb: 20000 classes
+	 * take about 1.6 seconds of tests. The wide ontology is no use here, the saturation
+	 * classifies it without a test.
+	 */
+	private static OWLOntology disjunctiveOntology(int n) throws OWLOntologyCreationException {
+		OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
+		OWLOntology ontology = manager.createOntology(IRI.create(NS + "disjunctive"));
+		OWLObjectProperty r = objectProperty("r");
+		OWLClass root = cls("Root");
+		Set<OWLAxiom> axioms = new HashSet<OWLAxiom>();
+		for (int i = 0; i < n; i++) {
+			OWLClass a = cls("A" + i);
+			OWLClass b = cls("B" + i);
+			axioms.add(DF.getOWLSubClassOfAxiom(a, root));
+			axioms.add(DF.getOWLSubClassOfAxiom(b, root));
+			axioms.add(DF.getOWLSubClassOfAxiom(cls("C" + i), DF.getOWLObjectIntersectionOf(root,
+					DF.getOWLObjectUnionOf(DF.getOWLObjectSomeValuesFrom(r, a), DF.getOWLObjectSomeValuesFrom(r, b)))));
+			axioms.add(DF.getOWLEquivalentClassesAxiom(cls("D" + i), DF.getOWLObjectIntersectionOf(root,
+					DF.getOWLObjectSomeValuesFrom(r, DF.getOWLObjectUnionOf(a, b)))));
+		}
+		manager.addAxioms(ontology, axioms);
+		return ontology;
+	}
+
+	private static void runProgress() throws Exception {
+		OWLOntology large = disjunctiveOntology(20000);
+		RecordingMonitor monitor = new RecordingMonitor();
+		OWLReasoner reasoner = new KoncludeReasonerFactory().createReasoner(large, new SimpleConfiguration(monitor));
+		try {
+			reasoner.precomputeInferences(InferenceType.CLASS_HIERARCHY, InferenceType.CLASS_ASSERTIONS);
+			check("tasks reported, in order        ", monitor.tasks,
+					Arrays.asList(KoncludeReasoner.PRECOMPUTING, ReasonerProgressMonitor.CLASSIFYING, ReasonerProgressMonitor.REALIZING));
+			check("every task was stopped          ", Integer.valueOf(monitor.stopped), Integer.valueOf(monitor.tasks.size()));
+			check("busy was reported               ", Boolean.valueOf(monitor.busy > 0), Boolean.TRUE);
+			check("progress was reported           ", Boolean.valueOf(monitor.reports > 0), Boolean.TRUE);
+			check("reports out of order or range   ", Integer.valueOf(monitor.badReports), Integer.valueOf(0));
+			report(String.format("%d progress reports, the last %d / %d, %d busy reports",
+					monitor.reports, monitor.lastValue, monitor.lastMax, monitor.busy));
+		} finally {
+			reasoner.dispose();
+		}
+
+		// an ontology the saturation classifies on its own has nothing for the classifier to
+		// test, so only the precomputation is reported, and the tasks still come to an end
+		OWLOntology small = familyOntology();
+		RecordingMonitor quiet = new RecordingMonitor();
+		OWLReasoner quick = new KoncludeReasonerFactory().createReasoner(small, new SimpleConfiguration(quiet));
+		try {
+			quick.precomputeInferences(InferenceType.CLASS_HIERARCHY);
+			check("first task of a small ontology  ", quiet.tasks.get(0), KoncludeReasoner.PRECOMPUTING);
+			check("its tasks were stopped          ", Integer.valueOf(quiet.stopped), Integer.valueOf(quiet.tasks.size()));
+			check("its reports out of order        ", Integer.valueOf(quiet.badReports), Integer.valueOf(0));
+		} finally {
+			quick.dispose();
+		}
+	}
+
+	/**
+	 * An ontology of n classes below Root, each with an existential restriction to the next, so
+	 * that classifying it takes long enough to interrupt.
+	 */
+	private static OWLOntology wideOntology(int n) throws OWLOntologyCreationException {
+		OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
+		OWLOntology ontology = manager.createOntology(IRI.create(NS + "wide"));
+		OWLObjectProperty next = objectProperty("next");
+		Set<OWLAxiom> axioms = new HashSet<OWLAxiom>();
+		for (int i = 0; i < n; i++) {
+			OWLClass c = cls("C" + i);
+			axioms.add(DF.getOWLSubClassOfAxiom(c, cls("Root")));
+			axioms.add(DF.getOWLSubClassOfAxiom(c, DF.getOWLObjectSomeValuesFrom(next, cls("C" + ((i + 1) % n)))));
+			axioms.add(DF.getOWLEquivalentClassesAxiom(cls("D" + i),
+					DF.getOWLObjectIntersectionOf(cls("Root"), DF.getOWLObjectSomeValuesFrom(next, c))));
+		}
+		manager.addAxioms(ontology, axioms);
+		return ontology;
+	}
+
 	private static void runUnsupported() throws Exception {
 		OWLOntology ontology = familyOntology();
 		final OWLReasoner reasoner = reasonerFor(ontology);
@@ -532,11 +781,11 @@ public class KoncludeOWLAPITest {
 			checkThrowsUnsupported("getDifferentIndividuals       ", new Runnable() {
 				public void run() { reasoner.getDifferentIndividuals(individual("john")); }
 			});
-			checkThrowsUnsupported("isEntailed                    ", new Runnable() {
-				public void run() { reasoner.isEntailed(DF.getOWLSubClassOfAxiom(cls("Man"), cls("Person"))); }
+			checkThrows("isEntailed(HasKey)              ", UnsupportedEntailmentTypeException.class, new Runnable() {
+				public void run() { reasoner.isEntailed(DF.getOWLHasKeyAxiom(cls("Person"), objectProperty("hasChild"))); }
 			});
-			check("isEntailmentCheckingSupported(SUBCLASS_OF)",
-					Boolean.valueOf(reasoner.isEntailmentCheckingSupported(AxiomType.SUBCLASS_OF)),
+			check("isEntailmentCheckingSupported(HAS_KEY)",
+					Boolean.valueOf(reasoner.isEntailmentCheckingSupported(AxiomType.HAS_KEY)),
 					Boolean.FALSE);
 			check("individualNodeSetPolicy       ", reasoner.getIndividualNodeSetPolicy(),
 					IndividualNodeSetPolicy.BY_SAME_AS);
@@ -729,6 +978,12 @@ public class KoncludeOWLAPITest {
 			runMerges();
 		} else if ("timeout".equals(scenario)) {
 			runTimeout();
+		} else if ("entailment".equals(scenario)) {
+			runEntailment();
+		} else if ("interrupt".equals(scenario)) {
+			runInterrupt();
+		} else if ("progress".equals(scenario)) {
+			runProgress();
 		} else {
 			System.err.println("unknown scenario '" + scenario + "'");
 			System.exit(2);

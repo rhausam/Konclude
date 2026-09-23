@@ -162,7 +162,7 @@ cat > "$BUILD_DIR/logback.xml" <<LOGBACK
 LOGBACK
 
 FAILED_SCENARIOS=""
-for scenario in plugin hierarchy expressions individuals properties datatypes inconsistency unsupported lifecycle merges timeout; do
+for scenario in plugin hierarchy expressions individuals properties datatypes inconsistency unsupported lifecycle merges timeout entailment interrupt progress; do
 	echo
 	echo "--------------------------------------------------------------------------"
 	CACHE_DIR="$BUILD_DIR/felix-cache-$scenario"

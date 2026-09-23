@@ -7,6 +7,28 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#undef com_konclude_jnibridge_QueryingBridge_PROGRESS_VALUE_COUNT
+#define com_konclude_jnibridge_QueryingBridge_PROGRESS_VALUE_COUNT 10L
+#undef com_konclude_jnibridge_QueryingBridge_PROGRESS_CALCULATION_PROCESSED_TASKS
+#define com_konclude_jnibridge_QueryingBridge_PROGRESS_CALCULATION_PROCESSED_TASKS 0L
+#undef com_konclude_jnibridge_QueryingBridge_PROGRESS_CALCULATION_REMAINING_TASKS
+#define com_konclude_jnibridge_QueryingBridge_PROGRESS_CALCULATION_REMAINING_TASKS 1L
+#undef com_konclude_jnibridge_QueryingBridge_PROGRESS_CLASSIFICATION_PERCENT
+#define com_konclude_jnibridge_QueryingBridge_PROGRESS_CLASSIFICATION_PERCENT 2L
+#undef com_konclude_jnibridge_QueryingBridge_PROGRESS_CLASSIFICATION_TESTED
+#define com_konclude_jnibridge_QueryingBridge_PROGRESS_CLASSIFICATION_TESTED 3L
+#undef com_konclude_jnibridge_QueryingBridge_PROGRESS_CLASSIFICATION_TOTAL
+#define com_konclude_jnibridge_QueryingBridge_PROGRESS_CLASSIFICATION_TOTAL 4L
+#undef com_konclude_jnibridge_QueryingBridge_PROGRESS_CLASSIFICATION_REMAINING_MILLISECONDS
+#define com_konclude_jnibridge_QueryingBridge_PROGRESS_CLASSIFICATION_REMAINING_MILLISECONDS 5L
+#undef com_konclude_jnibridge_QueryingBridge_PROGRESS_REALIZATION_PERCENT
+#define com_konclude_jnibridge_QueryingBridge_PROGRESS_REALIZATION_PERCENT 6L
+#undef com_konclude_jnibridge_QueryingBridge_PROGRESS_REALIZATION_TESTED
+#define com_konclude_jnibridge_QueryingBridge_PROGRESS_REALIZATION_TESTED 7L
+#undef com_konclude_jnibridge_QueryingBridge_PROGRESS_REALIZATION_TOTAL
+#define com_konclude_jnibridge_QueryingBridge_PROGRESS_REALIZATION_TOTAL 8L
+#undef com_konclude_jnibridge_QueryingBridge_PROGRESS_REALIZATION_REMAINING_MILLISECONDS
+#define com_konclude_jnibridge_QueryingBridge_PROGRESS_REALIZATION_REMAINING_MILLISECONDS 9L
 /*
  * Class:     com_konclude_jnibridge_QueryingBridge
  * Method:    checkIsOWLOntologyConsistent
@@ -150,6 +172,14 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLClassE
  */
 JNIEXPORT void JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLClassExpressionInstances
   (JNIEnv *, jobject, jobject, jlong, jobject, jboolean);
+
+/*
+ * Class:     com_konclude_jnibridge_QueryingBridge
+ * Method:    queryOWLReasoningProgress
+ * Signature: (Lcom/konclude/jnibridge/KoncludeReasonerBridge;)[D
+ */
+JNIEXPORT jdoubleArray JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLReasoningProgress
+  (JNIEnv *, jobject, jobject);
 
 #ifdef __cplusplus
 }

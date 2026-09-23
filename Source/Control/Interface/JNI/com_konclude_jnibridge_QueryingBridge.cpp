@@ -52,6 +52,25 @@ JNIEXPORT jboolean JNICALL Java_com_konclude_jnibridge_QueryingBridge_checkIsOWL
 }
 
 
+JNIEXPORT jdoubleArray JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLReasoningProgress(JNIEnv* jenv, jobject processorObj, jobject bridgeObj) {
+	// called from another thread than the queries while one of them runs, so nothing of the
+	// handler's thread bound state is used, only the field ids, which are valid on any thread
+	QVector<double> values(CJNIQueryProcessor::PROGRESS_VALUE_COUNT,0.);
+	CJNIInstanceManager* jniInstanceManager = CJNIHandler::getJNIInstanceManager(jenv,bridgeObj);
+	if (jniInstanceManager) {
+		CJNIQueryProcessor* processor = jniInstanceManager->getJNIHandler()->getQueryingBridgeNativeData(jenv,processorObj);
+		if (processor) {
+			processor->queryReasoningProgress(values);
+		}
+	}
+	jdoubleArray array = jenv->NewDoubleArray(values.size());
+	if (array) {
+		jenv->SetDoubleArrayRegion(array,0,values.size(),values.constData());
+	}
+	return array;
+}
+
+
 
 JNIEXPORT void JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLSubClasses(JNIEnv* jenv, jobject processorObj, jobject bridgeObj, jstring jstr, jobject clsObj, jobject jvisitCallback, jboolean direct) {
 	CJNIInstanceManager* jniInstanceManager = CJNIHandler::getJNIInstanceManager(jenv,bridgeObj);
