@@ -106,6 +106,13 @@ which makes the native code optional: on a platform the bundle has no library fo
 resolves, the reasoner is still listed, and starting it fails with an `UnsatisfiedLinkError`
 that `KoncludeProtegeReasonerInfo.initialise` has already written into the log of Protege.
 
+Every native call that takes 50 ms or longer is written to the log at INFO with its duration,
+and for a question about a class expression with the expression, for instance 'Konclude:
+getSubClasses of ObjectComplementOf(<http://snomed.info/id/84753008>) took 63184 ms'; the
+questions about named classes take a fraction of a millisecond and stay at DEBUG. A slow
+class selection in Protege is thereby attributed at once: the log of 2026-09-23 showed one
+such call per selection and the call itself taking the time, which ruled out the views.
+
 The library has to be one that depends on nothing but the system, since Protege has no Qt to
 offer: build `KoncludeLIB.pro` against a static Qt, with `QT-=gui`, `CONFIG-=static staticlib`
 and `CONFIG+=shared dll`, and `otool -L` or `ldd` shows no Qt afterwards. So far this is done
@@ -1090,6 +1097,29 @@ fresh allocations. On the full ontology with the decision off, 10 selections wen
 22 to 56 GB before and stay between 20 and 22 GB now. The limit does not show in the
 classification of the full ontology: five runs each with 1 000 and with 80 000 pools on the
 same binary spread from 44.6 to 48.7 s regardless of the value.
+
+The pools that leave a thread's reserve now go to a store shared by the whole process,
+`CMemoryPoolRecycler`, from which every pool provider serves its next acquisitions before it
+allocates, so the pools the answering thread takes for its tests are the ones the processing
+threads gave back a moment earlier. Without it each provider handed released pools straight
+to the allocator, which keeps them in the cache of the releasing thread while the acquiring
+thread takes fresh pages from the system; Protege after fifteen selections held 33 GB of such
+empty blocks, most of them swapped out. The store keeps up to 20 000 pools, a gigabyte, and is
+settable with `Konclude.Calculation.Memory.RecycledPoolLimit`.
+
+The statistics line the handler writes with extended logging on, 'Saturation decided ... merge
+blocking label concept codes', names the operator codes of the label concepts that kept a
+merge undecided and, under negative keys, the other reasons: -100 the class has no saturation
+node, -300 its saturation is insufficient, -400 unprocessed, -500 critical, -600 not
+completed, -1100 cardinality or nominal flags, -1500 a data value, -1600 an integrated
+nominal, -1700 no label, -1000 a functional role with successors on both sides, -2500 and
+-3000 universal restrictions reaching successors and self loops, -3500 a derived successor;
+and for the query side, whose merged label could not be built at all, -4600 no node, -4700
+unreliable, -4800 flags, -4900 a data value or nominal, -5000 no label. On the full SNOMED CT
+with additions the 17 000 nodes a `not C` query leaves to the tableau are all -300, the
+classes whose definitions carry data values and the classes referencing them, and a query for
+a class that carries a universal restriction inside a role group fails with -4700, upon which
+every node goes to the tableau, 375 000 jobs and a minute per selection.
 
 
 The answers were compared with the tableau path on 120 mixed queries over the subset and 400

@@ -125,6 +125,10 @@ namespace Konclude {
 						"Maximum number of memory pools (about 50 KB each) that each task processing thread keeps in reserve for reuse after tasks have finished; pools beyond this number are returned to the system.",
 						new CIntegerConfigType(1000)),
 						new CIntegerConfigType(1000));
+				addConfigProperty(new CConfigDescription("Konclude.Calculation.Memory.RecycledPoolLimit",
+						"Maximum number of released memory pools (about 50 KB each) that the process keeps for reuse across its threads; pools beyond this number are returned to the system.",
+						new CIntegerConfigType(20000)),
+						new CIntegerConfigType(20000));
 
 
 				addConfigProperty(new CConfigDescription("Konclude.Calculation.DatatypeReasoning",

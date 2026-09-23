@@ -35,6 +35,8 @@ import org.semanticweb.owlapi.reasoner.impl.OWLNamedIndividualNodeSet;
 import org.semanticweb.owlapi.reasoner.impl.OWLObjectPropertyNode;
 import org.semanticweb.owlapi.reasoner.impl.OWLObjectPropertyNodeSet;
 import org.semanticweb.owlapi.util.Version;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -578,6 +580,15 @@ public class KoncludeReasoner implements OWLReasoner {
 	/** how often the progress of a running precomputation is read and reported */
 	private static final long PROGRESS_INTERVAL_MILLISECONDS = 250;
 
+	private static final Logger LOGGER = LoggerFactory.getLogger(KoncludeReasoner.class);
+
+	/**
+	 * A native call that takes at least this long is logged at INFO with its duration, so that
+	 * a host such as Protege shows in its log which questions cost the time. The questions
+	 * about named classes take a fraction of a millisecond and stay at DEBUG.
+	 */
+	private static final long SLOW_CALL_MILLISECONDS = 50;
+
 	/**
 	 * The task reported for the first phase of a classification, the consistency check and
 	 * the saturation, which Konclude calls the precomputation; ReasonerProgressMonitor.CLASSIFYING
@@ -721,7 +732,7 @@ public class KoncludeReasoner implements OWLReasoner {
 		if (!isKnown(classExpression)) {
 			return true;
 		}
-		return guard("isSatisfiable", new NativeCall<Boolean>() {
+		return guard(describe("isSatisfiable", classExpression), new NativeCall<Boolean>() {
 			@Override
 			public Boolean call() {
 				return Boolean.valueOf(mQuerying.checkIsOWLClassExpressionSatisfiable(mBridge,
@@ -740,7 +751,7 @@ public class KoncludeReasoner implements OWLReasoner {
 			return new OWLClassNodeSet();
 		}
 		final SetOfObjectSetCallbackListener callback = new SetOfObjectSetCallbackListener();
-		guard("getSubClasses", new NativeCall<Void>() {
+		guard(describe("getSubClasses", classExpression), new NativeCall<Void>() {
 			@Override
 			public Void call() {
 				if (classExpression.isAnonymous()) {
@@ -763,7 +774,7 @@ public class KoncludeReasoner implements OWLReasoner {
 			return new OWLClassNodeSet();
 		}
 		final SetOfObjectSetCallbackListener callback = new SetOfObjectSetCallbackListener();
-		guard("getSuperClasses", new NativeCall<Void>() {
+		guard(describe("getSuperClasses", classExpression), new NativeCall<Void>() {
 			@Override
 			public Void call() {
 				if (classExpression.isAnonymous()) {
@@ -787,7 +798,7 @@ public class KoncludeReasoner implements OWLReasoner {
 			return anonymous ? new OWLClassNode() : new OWLClassNode(classExpression.asOWLClass());
 		}
 		final ObjectSetCallbackListener callback = new ObjectSetCallbackListener();
-		guard("getEquivalentClasses", new NativeCall<Void>() {
+		guard(describe("getEquivalentClasses", classExpression), new NativeCall<Void>() {
 			@Override
 			public Void call() {
 				if (anonymous) {
@@ -1335,6 +1346,7 @@ public class KoncludeReasoner implements OWLReasoner {
 	 * behind the one that is stuck.
 	 */
 	private <T> T guard(String method, NativeCall<T> call) {
+		final long start = System.nanoTime();
 		Future<T> future = mReasonerThread.submit(new Callable<T>() {
 			@Override
 			public T call() throws Exception {
@@ -1371,7 +1383,25 @@ public class KoncludeReasoner implements OWLReasoner {
 			throw new IllegalStateException(cause);
 		} finally {
 			mInFlight.remove(future);
+			long milliseconds = (System.nanoTime() - start) / 1000000L;
+			if (milliseconds >= SLOW_CALL_MILLISECONDS) {
+				LOGGER.info("Konclude: {} took {} ms", method, milliseconds);
+			} else if (LOGGER.isDebugEnabled()) {
+				LOGGER.debug("Konclude: {} took {} ms", method, milliseconds);
+			}
 		}
+	}
+
+	/** the name of a query in the log: with the expression when it is anonymous */
+	private static String describe(String method, OWLClassExpression classExpression) {
+		if (!classExpression.isAnonymous()) {
+			return method;
+		}
+		String expression = classExpression.toString();
+		if (expression.length() > 200) {
+			expression = expression.substring(0, 200) + "...";
+		}
+		return method + " of " + expression;
 	}
 
 	/** the objects that the native side reported, without the ones of another type */

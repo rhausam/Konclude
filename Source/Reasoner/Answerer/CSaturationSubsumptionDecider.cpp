@@ -100,6 +100,16 @@ namespace Konclude {
 					bool unsatisfiable = false;
 					bool reliable = false;
 					CIndividualSaturationProcessNode* node = getSaturationNode(subClassConcept, &unsatisfiable, &reliable);
+					if (!node) {
+						// the reasons besides label concepts are counted under negative keys, printed halved
+						// by the handler: -100 no saturation node, -300 insufficient, -400 unprocessed, -500
+						// critical, -600 not completed, -1100 cardinality or nominal flags, -1500 data value,
+						// -1600 nominal integrated, -1700 no label, -1000 functional role, -2500 and -3000
+						// universal restrictions reaching successors and self loops, -3500 derived successor,
+						// and for the query side -4600 no node, -4700 unreliable, -4800 flags, -4900 data
+						// value or nominal, -5000 no label
+						mUndecidedMergeConceptCodeCounts[-200] = mUndecidedMergeConceptCodeCounts.value(-200, 0) + 1;
+					}
 					if (node) {
 						if (unsatisfiable) {
 							// an unsatisfiable class is subsumed by everything
@@ -166,15 +176,19 @@ namespace Konclude {
 				CIndividualSaturationProcessNodeStatusFlags* baseFlags = baseNode->getIndirectStatusFlags();
 				CIndividualSaturationProcessNodeStatusFlags* repFlags = repNode->getIndirectStatusFlags();
 				if (baseFlags->hasInsufficientFlag() || repFlags->hasInsufficientFlag()) {
+					mUndecidedMergeConceptCodeCounts[-600] = mUndecidedMergeConceptCodeCounts.value(-600, 0) + 1;
 					return false;
 				}
 				if (baseFlags->hasUnprocessedFlag() || repFlags->hasUnprocessedFlag()) {
+					mUndecidedMergeConceptCodeCounts[-800] = mUndecidedMergeConceptCodeCounts.value(-800, 0) + 1;
 					return false;
 				}
 				if (baseFlags->hasCriticalFlag() || repFlags->hasCriticalFlag()) {
+					mUndecidedMergeConceptCodeCounts[-1000] = mUndecidedMergeConceptCodeCounts.value(-1000, 0) + 1;
 					return false;
 				}
 				if (!repNode->isCompleted()) {
+					mUndecidedMergeConceptCodeCounts[-1200] = mUndecidedMergeConceptCodeCounts.value(-1200, 0) + 1;
 					return false;
 				}
 				return true;
@@ -571,6 +585,7 @@ namespace Konclude {
 				bool reliable = false;
 				CIndividualSaturationProcessNode* baseNode = getSaturationNode(concept, &unsatisfiable, &reliable);
 				if (!baseNode) {
+					mUndecidedMergeConceptCodeCounts[-9200] = mUndecidedMergeConceptCodeCounts.value(-9200, 0) + 1;
 					return false;
 				}
 				if (unsatisfiable) {
@@ -578,6 +593,7 @@ namespace Konclude {
 					return true;
 				}
 				if (!reliable) {
+					mUndecidedMergeConceptCodeCounts[-9400] = mUndecidedMergeConceptCodeCounts.value(-9400, 0) + 1;
 					return false;
 				}
 				CIndividualSaturationProcessNode* repNode = getRepresentativeNode(baseNode);
@@ -591,9 +607,11 @@ namespace Konclude {
 
 				CIndividualSaturationProcessNodeStatusFlags* flags = repNode->getIndirectStatusFlags();
 				if (flags->hasCardinalityRestrictedFlag() || flags->hasCardinalityProplematicFlag() || flags->hasNominalConnectionFlag()) {
+					mUndecidedMergeConceptCodeCounts[-9600] = mUndecidedMergeConceptCodeCounts.value(-9600, 0) + 1;
 					return false;
 				}
 				if (repNode->hasDataValueApplied() || repNode->hasNominalIntegrated()) {
+					mUndecidedMergeConceptCodeCounts[-9800] = mUndecidedMergeConceptCodeCounts.value(-9800, 0) + 1;
 					return false;
 				}
 				CIndividualSaturationProcessNode* node = baseNode;
@@ -610,6 +628,7 @@ namespace Konclude {
 				}
 				CReapplyConceptSaturationLabelSet* labelSet = repNode->getReapplyConceptSaturationLabelSet(false);
 				if (!labelSet) {
+					mUndecidedMergeConceptCodeCounts[-10000] = mUndecidedMergeConceptCodeCounts.value(-10000, 0) + 1;
 					return false;
 				}
 				for (CConceptSaturationDescriptor* conDesIt = labelSet->getConceptSaturationDescriptionLinker(); conDesIt; conDesIt = conDesIt->getNext()) {
@@ -757,13 +776,20 @@ namespace Konclude {
 				CIndividualSaturationProcessNode* repNode = getRepresentativeNode(baseNode);
 				CIndividualSaturationProcessNodeStatusFlags* flags = repNode->getIndirectStatusFlags();
 				if (flags->hasCardinalityRestrictedFlag() || flags->hasCardinalityProplematicFlag() || flags->hasNominalConnectionFlag()) {
+					mUndecidedMergeConceptCodeCounts[-2200] = mUndecidedMergeConceptCodeCounts.value(-2200, 0) + 1;
 					return FAST_UNDECIDED;
 				}
-				if (repNode->hasDataValueApplied() || repNode->hasNominalIntegrated()) {
+				if (repNode->hasDataValueApplied()) {
+					mUndecidedMergeConceptCodeCounts[-3000] = mUndecidedMergeConceptCodeCounts.value(-3000, 0) + 1;
+					return FAST_UNDECIDED;
+				}
+				if (repNode->hasNominalIntegrated()) {
+					mUndecidedMergeConceptCodeCounts[-3200] = mUndecidedMergeConceptCodeCounts.value(-3200, 0) + 1;
 					return FAST_UNDECIDED;
 				}
 				CReapplyConceptSaturationLabelSet* labelSet = repNode->getReapplyConceptSaturationLabelSet(false);
 				if (!labelSet) {
+					mUndecidedMergeConceptCodeCounts[-3400] = mUndecidedMergeConceptCodeCounts.value(-3400, 0) + 1;
 					return FAST_UNDECIDED;
 				}
 				QVarLengthArray<CConcept*,4> substituteArray;
