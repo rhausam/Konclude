@@ -121,6 +121,10 @@ namespace Konclude {
 						"Sets the memory allocation increasing size for the calculation.",
 						new CIntegerConfigType(1024*1024*512)),
 						new CIntegerConfigType(1024*1024*512));
+				addConfigProperty(new CConfigDescription("Konclude.Calculation.Memory.TaskProcessorFreePoolReserveLimit",
+						"Maximum number of memory pools (about 50 KB each) that each task processing thread keeps in reserve for reuse after tasks have finished; pools beyond this number are returned to the system.",
+						new CIntegerConfigType(1000)),
+						new CIntegerConfigType(1000));
 
 
 				addConfigProperty(new CConfigDescription("Konclude.Calculation.DatatypeReasoning",

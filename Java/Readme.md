@@ -1055,8 +1055,8 @@ mostly in the search's own bookkeeping of the candidates.
 
 On the full SNOMED CT with additions, 374 710 classes, one class selection in Protege with the
 'Disjoint classes' display on, which asks `not C`, takes 2.7 to 7.4 s against 16 s with the
-decision off, and the process stays at its size over 30 selections. The remaining cost there
-is the nodes that carry data values, which the merge leaves to the tableau.
+decision off. The remaining cost there is the nodes that carry data values, which the merge
+leaves to the tableau.
 
 Two things went wrong on that ontology before they were found on it, both races between the
 decider on the handler's thread and the tableau tasks of the same query, both fatal only under
@@ -1069,9 +1069,28 @@ shares with the testing ontologies of the queries, called the non constant `lowe
 detaches the map, from every task that initialises a node with a data value; two tasks
 detaching it at once corrupted it, and the tasks then crashed the virtual machine in the value
 space triggering, on up to fourteen threads at once. They call the constant overload now. The
-first showed as a gigabyte of growth per query on the full ontology, over a hundred gigabytes
-in an afternoon of Protege, the second as a crash in the first query on a fresh start, in about
-every second run.
+first was found while looking for the memory growth described next, the second showed as a
+crash in the first query on a fresh start, in about every second run.
+
+The growth itself was older than the decider and is not a leak but a reserve. Each task
+processing thread keeps the memory pools of the tasks it completes in a free list, to reuse
+them for the tasks it creates itself, and only returns pools to the system once the list holds
+more than a fixed number of them. That number was 80 000 pools of about 50 KB, 5 GB per
+thread, and the tests of a query are created on the answering thread, whose pools flow into
+those lists and are never drawn from them again. So every test a query ran added its pools to
+some thread's reserve, and a Protege session on the full ontology climbed by 15 to 20 GB per
+`not C` query with the decision off, and by about a gigabyte with it on, until all sixteen
+threads held their 5 GB and the process levelled off near 100 GB, most of it compressed. The
+limit is 1 000 pools per thread now, 50 MB, and is settable with
+`Konclude.Calculation.Memory.TaskProcessorFreePoolReserveLimit`. On the 41 000 class subset
+with the decision off, 20 selections went from 3 to 25 GB before and stay at 3.7 GB now, and
+each query got faster, since the pools it needs come from the free lists instead of from
+fresh allocations. On the full ontology with the decision off, 10 selections went from
+21 to 99 GB before and from 25 to 29 GB now, and with the decision on, 30 selections went from
+22 to 56 GB before and stay between 20 and 22 GB now. The limit does not show in the
+classification of the full ontology: five runs each with 1 000 and with 80 000 pools on the
+same binary spread from 44.6 to 48.7 s regardless of the value.
+
 
 The answers were compared with the tableau path on 120 mixed queries over the subset and 400
 over the pizza ontology, and with HermiT on 1 544 queries over pizza, where the one expression

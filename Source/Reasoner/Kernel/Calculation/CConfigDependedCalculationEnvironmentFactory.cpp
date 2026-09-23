@@ -83,6 +83,8 @@ namespace Konclude {
 							}
 						}
 
+						cint64 freePoolReserveLimit = CConfigDataReader::readConfigInteger(config,"Konclude.Calculation.Memory.TaskProcessorFreePoolReserveLimit",DEFAULT_FREE_POOL_RESERVE_LIMIT);
+
 
 						CCentralizedAllocationConfigProvidedDependendLimitation* allocLimitation = new CCentralizedAllocationConfigProvidedDependendLimitation(configProvider,"Konclude.Calculation.Memory");
 						taskContext->setAllocationLimitation(allocLimitation);
@@ -95,7 +97,7 @@ namespace Konclude {
 						if (taskProcessorCount <= 1) {
 							CTaskHandleAlgorithm* taskHandleAlg = mTaskHandleAlgBuilder->createTaskHandleAlgorithm();
 							CConsiderateMemoryPoolProvider* memProv = new CNewCentralizedLimitedAllocationMemoryPoolProvider(allocLimitation->getLimitator());
-							CSingleThreadTaskProcessorUnit* singlePocessUnit = new CSingleThreadTaskProcessorUnit(taskHandleAlg,memProv);
+							CSingleThreadTaskProcessorUnit* singlePocessUnit = new CSingleThreadTaskProcessorUnit(taskHandleAlg,memProv,freePoolReserveLimit);
 							singlePocessUnit->startProcessing();
 							taskContext->initSingleTaskProcessor(singlePocessUnit);
 							singlePocessUnit->installCallbackExecuter(callbackExecuter);
@@ -105,8 +107,8 @@ namespace Konclude {
 							CTaskHandleAlgorithm* schedulerTaskHandleAlg = mTaskHandleAlgBuilder->createTaskHandleAlgorithm();
 							CConsiderateMemoryPoolProvider* compMemProv = new CNewCentralizedLimitedAllocationMemoryPoolProvider(allocLimitation->getLimitator());
 							CConsiderateMemoryPoolProvider* schedMemProv = new CNewCentralizedLimitedAllocationMemoryPoolProvider(allocLimitation->getLimitator());
-							CTaskProcessorCompletorThread* completorUnit = new CTaskProcessorCompletorThread(completorTaskHandleAlg,compMemProv);
-							CTaskProcessorSchedulerThread* schedulerUnit = new CTaskProcessorSchedulerThread(schedulerTaskHandleAlg,completorUnit,schedMemProv);
+							CTaskProcessorCompletorThread* completorUnit = new CTaskProcessorCompletorThread(completorTaskHandleAlg,compMemProv,freePoolReserveLimit);
+							CTaskProcessorSchedulerThread* schedulerUnit = new CTaskProcessorSchedulerThread(schedulerTaskHandleAlg,completorUnit,schedMemProv,freePoolReserveLimit);
 							completorUnit->installScheduler(schedulerUnit);
 							schedulerUnit->installScheduler(schedulerUnit);
 							completorUnit->installCallbackExecuter(callbackExecuter);
@@ -120,7 +122,7 @@ namespace Konclude {
 							while (taskProcessorCount-- > 2) {
 								CTaskHandleAlgorithm* taskHandleAlg = mTaskHandleAlgBuilder->createTaskHandleAlgorithm();
 								CConsiderateMemoryPoolProvider* memProv = new CNewCentralizedLimitedAllocationMemoryPoolProvider(allocLimitation->getLimitator());
-								CTaskProcessorThread* taskProcessor = new CTaskProcessorThread(taskHandleAlg,completorUnit,memProv);
+								CTaskProcessorThread* taskProcessor = new CTaskProcessorThread(taskHandleAlg,completorUnit,memProv,freePoolReserveLimit);
 								taskProcessor->installScheduler(schedulerUnit);
 								taskProcessor->installCallbackExecuter(callbackExecuter);
 								taskProcessor->installStatusPropagator(taskStatusPropagator);
