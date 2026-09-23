@@ -131,7 +131,7 @@ if ! find "$JAVA_DIR/src" "$JAVA_DIR/owlapi/src" -name '*.java' -print0 \
 fi
 
 FAILED_SCENARIOS=""
-for scenario in hierarchy expressions individuals properties datatypes inconsistency unsupported lifecycle merges timeout entailment interrupt progress; do
+for scenario in hierarchy expressions expressions-tableau individuals properties datatypes inconsistency unsupported lifecycle merges timeout entailment interrupt progress; do
 	echo
 	echo "--------------------------------------------------------------------------"
 	if ! "$JAVA" -cp "$OWLAPI_CP:$BUILD_DIR" -Djava.library.path="$LIBRARY_DIR" \

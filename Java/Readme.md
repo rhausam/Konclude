@@ -71,6 +71,7 @@ arguments instead of extending them, so it has to start from that constant.
 | scenario | what it checks |
 | --- | --- |
 | `hierarchy` | the class hierarchy of a small family ontology, direct and indirect, and the top and the bottom node |
+| `expressions-tableau` | the `expressions` checks with the decision of the sub classes from the saturation switched off, so that the tableau path stays tested, see SUB CLASSES OF AN EXPRESSION FROM THE SATURATION |
 | `expressions` | the questions about anonymous class expressions, as the DL query tab of Protege asks them: equivalent, sub and super classes, satisfiability and instances of `ObjectSomeValuesFrom`, `ObjectIntersectionOf`, `ObjectUnionOf` and `ObjectComplementOf` expressions, and a fresh entity inside one |
 | `individuals` | the types, the instances, the same individuals, the grouping by sameAs and the object property values |
 | `properties` | the object property hierarchy, sub, super and equivalent, direct and indirect |
@@ -988,6 +989,77 @@ Protege keeps the window open across the switch. An ontology that the saturation
 on its own never reaches the second task. The `progress` scenario of the test checks the
 order of the tasks, that every task is stopped, that both tasks got a report, and that
 every report keeps `0 < value <= max` with a value that never falls.
+
+## SUB CLASSES OF AN EXPRESSION FROM THE SATURATION
+
+A query about a class expression, the sub classes of `not C` that Protege's 'Disjoint classes'
+display asks for every class it shows, or the `p some C` of the DL query tab, used to take
+0.7 s on a 41 000 class subset of SNOMED CT and 2.4 s on a 148 000 class one, where FaCT++
+takes 30 ms. Issue rhausam/Konclude#19 records the analysis. The search itself was already
+what FaCT++ and HermiT do, top down from the direct super classes of the expression into the
+children of every node that is not subsumed, but every visited node was a tableau job, about
+30 000 per query, because a node not subsumed by the expression can still have subsumed
+children. FaCT++ decides almost every visit from its cached pseudo models instead.
+
+`CSaturationSubsumptionDecider` in `Source/Reasoner/Answerer` does the same from the
+saturation that the precomputation builds for every named class and that the classifier reads
+its subsumers from. `COptimizedComplexExpressionAnsweringHandler` asks it before it creates a
+sub class test, and creates the test only for an `UNDECIDED` answer, so a verdict is never a
+guess: whenever the saturation of a node is marked insufficient, critical or unprocessed, or
+the expression or the label leaves the fragment below, the tableau decides as before.
+`Konclude.Answering.SaturationBasedSubClassDecision=false` switches it off, which the
+`expressions-tableau` scenario uses to keep the tableau path tested.
+
+For a positive expression `E` the structure of `E` is matched against the label of the node:
+a named class is entailed when it is in the label, a conjunction when all its operands are, an
+existential restriction when a successor under the role, which the saturation links under
+every super role, satisfies the filler, and not entailed when none does and the role is not
+involved in chains or transitivity, which the preprocessing compiles away. Universal and
+cardinality restrictions, nominals and data ranges are only recognised when the label carries
+the very concept.
+
+For a negated expression `not C`, with `C` a conjunction of named classes, the question is
+whether the node's class and `C` have a common instance. The labels of both are merged and
+the merge is closed under the rules the saturation applies at a node: a conjunction adds its
+operands, an implication whose triggers are all present adds its conclusion, the first operand
+of the implication concept, and a named class that is derived brings its saturation along. A
+concept that ends up positive and negated is a clash, which is how an absorbed disjointness
+surfaces, and proves the subsumption. Otherwise the closure with the successors of both parts
+is a model, and the subsumption does not hold, unless a universal restriction of one part,
+including the automaton transitions of the role chains, reaches a successor of the other part
+that lacks its operand, a functional role has successors on both sides, or a label holds a
+construct only the tableau handles, a disjunction, a cardinality restriction, a nominal, data
+or a branch trigger. The side of `C` is built once per query and shared, and a node is decided
+by one scan of its own label without copying it; the closure only runs when an implication
+would fire, which is rare.
+
+Two details of the saturation matter for the soundness and cost a day each to find: the
+operator codes of the basic constructors come in sign pairs that the negation flag of a label
+entry flips, an existential restriction is stored as a negated universal one, so the effective
+operator has to be taken before a label concept is classified; and a trigger of an implication
+counts when its concept is in the label positively, whatever the negation flag of the trigger's
+operand says, see `insertConceptReapplicationReturnTriggered`.
+
+What it does on the 41 149 class subset, one query per class, mean over 200:
+
+```
+                              before   after
+not C                         685 ms    97 ms
+p some C                      400 ms    30 ms
+```
+
+and on the 148 000 class subset `not C` went from 2.4 s to 0.5 s. Of the 24 000 nodes a query
+visits on the smaller subset, 134 stay undecided, all because of equivalence candidate concepts
+that the decider does not interpret. The remaining cost is a few microseconds per visited node,
+mostly in the search's own bookkeeping of the candidates.
+
+The answers were compared with the tableau path on 120 mixed queries over the subset and 400
+over the pizza ontology, and with HermiT on 1 544 queries over pizza, where the one expression
+they differ on is HermiT's: for the sub classes of `hasBase some ThinAndCrispyBase` HermiT and
+FaCT++ leave out ThinAndCrispyPizza and report RealItalianPizza, a sub class of it, as direct,
+while their own entailment checks confirm the subsumption. Konclude's answer is the right one,
+with the decider on and off.
+
 
 ## OTHER LIMITATIONS
 

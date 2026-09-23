@@ -29,6 +29,7 @@
 #include "CAnsweringHandler.h"
 #include "CComplexQueryExpressionProcessingData.h"
 #include "COptimizedComplexExpressionOntologyAnsweringItem.h"
+#include "CSaturationSubsumptionDecider.h"
 #include "CAnsweringMessageDataCalculationCompletedSatisfiable.h"
 #include "CAnswererContext.h"
 #include "CAnsweringCalculationHandler.h"
@@ -475,6 +476,17 @@ namespace Konclude {
 					bool createSatisfiabilityTest(COptimizedComplexConceptItem* conceptItem, CAnswererContext* answererContext);
 					bool createSuperClassSubsumptionTest(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode, CAnswererContext* answererContext);
 					bool createSubClassSubsumptionTest(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode, CAnswererContext* answererContext);
+					/*!
+					 *	Decides from the saturation whether the class of the node is subsumed by the concept
+					 *	of the item, see CSaturationSubsumptionDecider; UNDECIDED means a test is needed.
+					 */
+					CSaturationSubsumptionDecider::Verdict decideSubClassSubsumptionFromSaturation(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode);
+					/*!
+					 *	Records the outcome of a sub class test of the node: a subsumed node joins the direct
+					 *	sub class set, the children of a node that is not subsumed become candidates. Returns
+					 *	whether candidates were added.
+					 */
+					bool addSubClassSubsumptionResult(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode, bool subsumed);
 					bool createInvidiualInstanceTest(COptimizedComplexConceptItem* conceptItem, const CIndividualReference& testingIndiRef, CAnswererContext* answererContext);
 					bool createInvidiualItemInstanceTest(COptimizedComplexConceptItem* conceptItem, const CRealizationIndividualInstanceItemReference& testingItemRef, CAnswererContext* answererContext);
 					bool createCandidatePropagationInstanceTest(COptimizedComplexConceptItem* conceptItem, CConceptOfInterestActivationTriggeringData activationTriggeringData, CAnswererContext* answererContext);
@@ -799,6 +811,8 @@ namespace Konclude {
 
 
 					bool mConfExtendedLogging;
+					bool mConfSaturationSubClassDecision;
+					CSaturationSubsumptionDecider* mSaturationSubsumptionDecider;
 
 					double mConfConceptItemInstanceCandiateRetrievingSizeIncreaseFactor;
 					double mConfConceptItemInstanceCandiateRetrievingMaxSize;

@@ -727,6 +727,7 @@ HEADERS += \
    ./Source/Reasoner/Answerer/COptimizedComplexConceptInstanziatedIndividualItemHasher.h \
    ./Source/Reasoner/Answerer/COptimizedComplexConceptInstanziatedIndividualItemHash.h \
    ./Source/Reasoner/Answerer/COptimizedComplexExpressionAnsweringHandler.h \
+   ./Source/Reasoner/Answerer/CSaturationSubsumptionDecider.h \
    ./Source/Reasoner/Answerer/CConfigurationAnsweringHandlerFactory.h \
    ./Source/Reasoner/Answerer/CAnsweringMessageDataCalculationCompletedQueryMaterialization.h \
    ./Source/Reasoner/Answerer/CEntailmentVariableBuildingItemData.h \
@@ -2653,7 +2654,8 @@ HEADERS += \
    ./Source/Utilities/Memory/CAllocationLimitationProvider.h \
    ./Source/Utilities/Memory/CMemoryPoolAllocationManager.h \
    ./Source/Utilities/Memory/CMemoryPoolContainer.h \
-
+
+
 SOURCES += \
    ./Source/CKoncludeInfo.cpp \
    ./Source/mainLoader.cpp \
@@ -3429,6 +3431,7 @@ SOURCES += \
    ./Source/Reasoner/Answerer/CAnswererContext.cpp \
    ./Source/Reasoner/Answerer/COptimizedComplexCompositionAnsweringHandler.cpp \
    ./Source/Reasoner/Answerer/COptimizedComplexExpressionAnsweringHandler.cpp \
+   ./Source/Reasoner/Answerer/CSaturationSubsumptionDecider.cpp \
    ./Source/Reasoner/Answerer/COptimizedComplexCompositionOntologyAnsweringItem.cpp \
    ./Source/Reasoner/Answerer/CComplexQueryCompositionProcessingData.cpp \
    ./Source/Reasoner/Answerer/CComplexQueryProcessingData.cpp \

@@ -1738,6 +1738,11 @@ namespace Konclude {
 						new CBooleanConfigType(false)),
 						new CBooleanConfigType(false));
 
+				addConfigProperty(new CConfigDescription("Konclude.Answering.SaturationBasedSubClassDecision",
+						"Determines whether the sub classes of a class expression are decided from the precomputed saturation where it suffices, so that only the remaining nodes are tested with the tableau.",
+						new CBooleanConfigType(true)),
+						new CBooleanConfigType(true));
+
 				addConfigProperty(new CConfigDescription("Konclude.Answering.InterpretNonAnswerIndividualVariablesAsAnonymousVariables",
 						"Determines whether non-answer individual variables are interpreted as anonymous variables.",
 						new CBooleanConfigType(false)),
