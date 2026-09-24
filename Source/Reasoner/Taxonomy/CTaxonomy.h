@@ -30,6 +30,7 @@
 #include "CHierarchy.h"
 
 // Other includes
+#include "Reasoner/Ontology/CIRIName.h"
 
 
 // Logger includes
@@ -92,6 +93,9 @@ namespace Konclude {
 					virtual bool isComplete();
 
 					virtual CTaxonomy *setTaxonomyComplete(bool completed = true);
+					//! orders the equivalent concepts of every node by name, so that a node is always named by the same concept
+					virtual bool orderEquivalentConcepts();
+					static bool conceptNameLessThan(CConcept* concept1, CConcept* concept2);
 
 					virtual bool isActiveNode(CHierarchyNode *node);
 					virtual CTaxonomy *setActiveNode(CHierarchyNode *node, bool nodeActive = true);
