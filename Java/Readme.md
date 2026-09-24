@@ -1161,9 +1161,29 @@ over pizza, 80 over the 41 000 class subset, and six of the classes of the Prote
 the full SNOMED CT, answer for answer. On the full ontology the classes that took 50 to 63 s
 per selection take 5 to 8 s, the first of them with the 16 700 completion tests, which run
 once, the others 2.5 to 5 s; six queries leave 43 nodes to the tableau instead of 2.2 million,
-and the process stays at 21 GB instead of 35. What remains are the merges an implication of
-the query's side fires in, about 50 000 per selection, each of which copies the node's label
-into the closure. Switchable with `Konclude.Answering.SaturationBasedSubClassLabelCompletion`.
+and the process stays at 21 GB instead of 35. The merges an implication fires in, about 50 000
+per selection, read the node's label in place instead of copying it into the closure, and the
+closure looks only at the implications of the query's side that wait for a trigger the node
+supplies, through the trigger hash the query's label already has, instead of walking its whole
+implication list; the heavy classes are at 5 to 7 s with that. Switchable with
+`Konclude.Answering.SaturationBasedSubClassLabelCompletion`.
+
+### THE EVENT CHANNEL THAT LOST EVENTS
+
+Stress runs of the comparisons, twelve at a time, hung once and crashed once on the way. The
+channel that hands events from one thread to another, `CEventLinkerChannel`, was lock free
+and stopped its walk over the posted list at the address of the last event it had taken. Once
+the pools of finished events are reused at once, which the shared store of released pools
+made the common case, the next event is often allocated at exactly that address, the walk
+stops before it, and every event posted since is lost, which is the hang; the poster writing
+the marker while the receiver reads it is the crash. The list is now taken whole with an
+atomic exchange and pushed with compare-and-swap, so no address of a taken event is compared
+with anything, and a receiver that finds its channel empty writes nothing, since it polls its
+channels in a tight loop and a write on every poll bounced the cache line between it and the
+posters, which cost the full classification 15 s. Measured against the same tree without the
+change, three rounds each: 42.4, 42.4 and 45.1 s with it, 43.5, 43.9 and 45.8 s without.
+Twelve stress runs of the comparison that hung and crashed before pass with it, as do both
+test suites and the full classification with its 1 238 944 subclass axioms.
 
 
 The answers were compared with the tableau path on 120 mixed queries over the subset and 400
