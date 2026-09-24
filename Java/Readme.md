@@ -1147,12 +1147,23 @@ optional class: a merge that stays satisfiable with the class added is satisfiab
 so the candidates of both sides are added, with their saturations, before a merge is called
 satisfiable, and a clash that only appears with them added proves nothing.
 
+The candidates are resolved once, not once per merge. A completed label is closed under the
+rules with its candidates added when it is first used, and what the closure with the
+candidates derives is marked as resting on a choice; a label whose candidate needs its own
+label completed first is extended once that has arrived. The query's merged label resolves
+its candidates the same way when it is built, since the saturations its closure pulls in carry
+the markers too. Without this every node of a query went through the closure to resolve the
+markers of the query's side, 1.1 million closures for three selections, and the heavy classes
+stayed at 12 s.
+
 Checked against the tableau path with the decision switched off: 400 mixed negated queries
 over pizza, 80 over the 41 000 class subset, and six of the classes of the Protege session on
 the full SNOMED CT, answer for answer. On the full ontology the classes that took 50 to 63 s
-per selection take 10 to 13 s, the others 3 to 5 s, six queries leave 43 nodes to the tableau
-instead of 2.2 million, the 16 700 completion tests run once, and the process stays at 23 GB
-instead of 35. Switchable with `Konclude.Answering.SaturationBasedSubClassLabelCompletion`.
+per selection take 5 to 8 s, the first of them with the 16 700 completion tests, which run
+once, the others 2.5 to 5 s; six queries leave 43 nodes to the tableau instead of 2.2 million,
+and the process stays at 21 GB instead of 35. What remains are the merges an implication of
+the query's side fires in, about 50 000 per selection, each of which copies the node's label
+into the closure. Switchable with `Konclude.Answering.SaturationBasedSubClassLabelCompletion`.
 
 
 The answers were compared with the tableau path on 120 mixed queries over the subset and 400

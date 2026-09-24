@@ -227,7 +227,8 @@ namespace Konclude {
 					//! the completed label of a class, see setCompletedLabel
 					class CCompletedLabel {
 						public:
-							CCompletedLabel() : mHasNondeterministic(false), mUnsatisfiable(false), mFailed(false) {}
+							CCompletedLabel() : mConcept(nullptr), mHasNondeterministic(false), mUnsatisfiable(false), mFailed(false), mExtended(false), mExtensionFailed(false), mExtending(false) {}
+							CConcept* mConcept;
 							bool hasEntry(CConcept* concept, bool negated) const { return (mPolarityHash.value(concept, 0) & (negated ? 2 : 1)) != 0; }
 							bool hasDeterministicEntry(CConcept* concept, bool negated) const { return (mPolarityHash.value(concept, 0) & (negated ? 8 : 4)) != 0; }
 							QVector<CCompletedLabelEntry> mEntries;
@@ -236,6 +237,10 @@ namespace Konclude {
 							bool mHasNondeterministic;
 							bool mUnsatisfiable;
 							bool mFailed;
+							//! whether the label was closed under the rules with its equivalence candidates added, see extendCompletedLabel
+							bool mExtended;
+							bool mExtensionFailed;
+							bool mExtending;
 							//! the roles of the existential restrictions, and the tags of these roles with their super roles
 							QList<CRole*> mSuccessorRoleList;
 							QSet<cint64> mSuccessorRoleTagSet;
@@ -259,12 +264,19 @@ namespace Konclude {
 					bool addMergeLabelConcept(CMergeState& state, CConcept* concept, bool negated, bool derived);
 					bool addMergeNamedClass(CMergeState& state, CConcept* concept);
 					//! adds a completed label as a part of the merge, its successors by their roles only
-					bool addCompletedLabelToMergeState(CMergeState& state, const CCompletedLabel* label);
+					bool addCompletedLabelToMergeState(CMergeState& state, CCompletedLabel* label);
+					/*!
+					 *	Closes the label under the rules and adds its equivalence candidates with their
+					 *	saturations, once, so that no query has to; what the closure with the candidates
+					 *	derives rests on a choice. False if it cannot be done, with getCompletionConcept set
+					 *	when a candidate needs its label completed first.
+					 */
+					bool extendCompletedLabel(CCompletedLabel* label);
 					//! like decideEntailed, for a class whose saturation is replaced by its completed label
-					Verdict decideEntailedCompleted(const CCompletedLabel* label, CConcept* concept, bool negated, cint64 depth);
+					Verdict decideEntailedCompleted(CCompletedLabel* label, CConcept* concept, bool negated, cint64 depth);
 					//! like the fast scan, for a completed label against the query's merged label
-					Verdict decideCompletedLabelSatisfiable(const CCompletedLabel* label, const CMergeState* base);
-					Verdict decideCompletedLabelSatisfiableClosure(const CCompletedLabel* label, const CMergeState* base);
+					Verdict decideCompletedLabelSatisfiable(CCompletedLabel* label, const CMergeState* base);
+					Verdict decideCompletedLabelSatisfiableClosure(CCompletedLabel* label, const CMergeState* base);
 					//! the tag of the role and of every super role of it
 					static void collectRoleTagsWithSuperRoles(CRole* role, QSet<cint64>& tagSet);
 					/*!

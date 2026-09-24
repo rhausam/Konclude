@@ -120,6 +120,7 @@ namespace Konclude {
 					label = new CCompletedLabel();
 					mCompletedLabelHash.insert(concept, label);
 				}
+				label->mConcept = concept;
 				label->mEntries = entries;
 				label->mPolarityHash.clear();
 				label->mSuccessorRoleList.clear();
@@ -263,7 +264,7 @@ namespace Konclude {
 					mRootBaseNode = node;
 					if (!node || (!unsatisfiable && !reliable)) {
 						// no usable saturation: the class's completed label stands in, or has to be obtained first
-						const CCompletedLabel* label = mCompletedLabelHash.value(subClassConcept, nullptr);
+						CCompletedLabel* label = mCompletedLabelHash.value(subClassConcept, nullptr);
 						if (label) {
 							if (label->mUnsatisfiable) {
 								verdict = SUBSUMED;
@@ -795,7 +796,7 @@ namespace Konclude {
 				}
 				if (!baseNode || !reliable) {
 					// no usable saturation: the class's completed label stands in, or has to be obtained first
-					const CCompletedLabel* label = mCompletedLabelHash.value(concept, nullptr);
+					CCompletedLabel* label = mCompletedLabelHash.value(concept, nullptr);
 					if (!label) {
 						mUndecidedMergeConceptCodeCounts[baseNode ? -9400 : -9200] = mUndecidedMergeConceptCodeCounts.value(baseNode ? -9400 : -9200, 0) + 1;
 						mCompletionConcept = concept;
@@ -806,6 +807,9 @@ namespace Konclude {
 						return true;
 					}
 					if (label->mFailed) {
+						return false;
+					}
+					if (!extendCompletedLabel(label) && mCompletionConcept) {
 						return false;
 					}
 					return addCompletedLabelToMergeState(state, label);
@@ -988,6 +992,29 @@ namespace Konclude {
 				if (decided && !base->mClashed) {
 					decided = closeMergeState(*base);
 				}
+				if (decided && !base->mClashed && !base->mCandidateList.isEmpty()) {
+					// the equivalence candidates the closure brought along are resolved once here, as
+					// optional classes, instead of in every merge with the base: what they add rests on
+					// a choice, so the base then proves no clash any more
+					CMergeState candidateState(base);
+					if (closeMergeStateWithCandidates(candidateState) && !candidateState.mClashed) {
+						base->mPositiveSet.unite(candidateState.mPositiveSet);
+						base->mNegativeSet.unite(candidateState.mNegativeSet);
+						base->mImplicationList.append(candidateState.mImplicationList);
+						base->mUniversalList.append(candidateState.mUniversalList);
+						base->mSelfConceptSet.unite(candidateState.mSelfConceptSet);
+						base->mSuccessorRoleSet.unite(candidateState.mSuccessorRoleSet);
+						base->mDerivedSuccessorRoleSet.unite(candidateState.mDerivedSuccessorRoleSet);
+						base->mPartNodeList.append(candidateState.mPartNodeList);
+						base->mPartNodeSet.unite(candidateState.mPartNodeSet);
+						base->mCompletedSuccessorRoleTagSet.unite(candidateState.mCompletedSuccessorRoleTagSet);
+						base->mDataRoleTagSet.unite(candidateState.mDataRoleTagSet);
+						base->mCandidateList.clear();
+						base->mHasNondeterministic = true;
+					} else if (mCompletionConcept) {
+						decided = false;
+					}
+				}
 				if (decided && !base->mClashed) {
 					// the implications that wait for something the base lacks, by the first such trigger
 					for (CConcept* implConcept : base->mImplicationList) {
@@ -1122,6 +1149,7 @@ namespace Konclude {
 								triggered = presence.has(trigIt->getData(), false);
 							}
 							if (triggered && !presence.has(impliedLinker->getData(), impliedLinker->isNegated())) {
+								mUndecidedMergeConceptCodeCounts[-9600] = mUndecidedMergeConceptCodeCounts.value(-9600, 0) + 1;
 								return FAST_FALLBACK;
 							}
 						}
@@ -1138,6 +1166,7 @@ namespace Konclude {
 						triggered = presence.has(trigIt->getData(), false);
 					}
 					if (triggered && !presence.has(impliedLinker->getData(), impliedLinker->isNegated())) {
+						mUndecidedMergeConceptCodeCounts[-9800] = mUndecidedMergeConceptCodeCounts.value(-9800, 0) + 1;
 						return FAST_FALLBACK;
 					}
 				}
@@ -1209,6 +1238,7 @@ namespace Konclude {
 				}
 				if (candidateSeen) {
 					// the equivalence candidates have to be added before the merge is called satisfiable
+					mUndecidedMergeConceptCodeCounts[-9900] = mUndecidedMergeConceptCodeCounts.value(-9900, 0) + 1;
 					return FAST_FALLBACK;
 				}
 				return FAST_NOT_SUBSUMED;
@@ -1352,7 +1382,90 @@ namespace Konclude {
 
 
 
-			bool CSaturationSubsumptionDecider::addCompletedLabelToMergeState(CMergeState& state, const CCompletedLabel* label) {
+			bool CSaturationSubsumptionDecider::extendCompletedLabel(CCompletedLabel* label) {
+				if (label->mExtended) {
+					return true;
+				}
+				if (label->mExtensionFailed || label->mUnsatisfiable || label->mFailed || label->mExtending) {
+					// an extension under way, of a label whose candidates lead back to it, is used as it is
+					return false;
+				}
+				label->mExtending = true;
+				CConcept* previousCompletionConcept = mCompletionConcept;
+				mCompletionConcept = nullptr;
+				CMergeState state;
+				bool added = addCompletedLabelToMergeState(state, label);
+				bool closed = added && !state.mClashed && closeMergeState(state) && !state.mClashed;
+				QSet<CConcept*> ownPositiveSet = state.mPositiveSet;
+				QSet<CConcept*> ownNegativeSet = state.mNegativeSet;
+				bool candidatesClosed = closed && closeMergeStateWithCandidates(state);
+				bool extended = candidatesClosed && !state.mClashed;
+				label->mExtending = false;
+				if (!extended) {
+					if (mCompletionConcept) {
+						// a candidate needs its label first, the extension is tried again after
+						mUndecidedMergeConceptCodeCounts[-10800] = mUndecidedMergeConceptCodeCounts.value(-10800, 0) + 1;
+						return false;
+					}
+					cint64 reasonKey = !added ? -10200 : !closed ? -10400 : !candidatesClosed ? -10600 : -10000;
+					mUndecidedMergeConceptCodeCounts[reasonKey] = mUndecidedMergeConceptCodeCounts.value(reasonKey, 0) + 1;
+					mCompletionConcept = previousCompletionConcept;
+					label->mExtensionFailed = true;
+					return false;
+				}
+				mUndecidedMergeConceptCodeCounts[-11000] = mUndecidedMergeConceptCodeCounts.value(-11000, 0) + 1;
+				mCompletionConcept = previousCompletionConcept;
+				// the entries: the original ones as they were, without the candidate markers; what the
+				// closure of the label alone derived as deterministic as the label; what came with the
+				// candidates as resting on a choice
+				bool labelDeterministic = !label->mHasNondeterministic;
+				QVector<CCompletedLabelEntry> entries;
+				QHash<CConcept*,quint8> seen;
+				for (const CCompletedLabelEntry& entry : label->mEntries) {
+					if (getLabelConceptKind(entry.mConcept, entry.mNegated) == LCK_CANDIDATE) {
+						continue;
+					}
+					entries.append(entry);
+					seen[entry.mConcept] |= entry.mNegated ? 2 : 1;
+				}
+				for (cint64 polarity = 0; polarity < 2; ++polarity) {
+					bool negated = polarity == 1;
+					const QSet<CConcept*>& conceptSet = negated ? state.mNegativeSet : state.mPositiveSet;
+					const QSet<CConcept*>& ownSet = negated ? ownNegativeSet : ownPositiveSet;
+					for (QSet<CConcept*>::const_iterator it = conceptSet.constBegin(), itEnd = conceptSet.constEnd(); it != itEnd; ++it) {
+						CConcept* concept(*it);
+						if ((seen.value(concept, 0) & (negated ? 2 : 1)) != 0 || getLabelConceptKind(concept, negated) == LCK_CANDIDATE) {
+							continue;
+						}
+						entries.append(CCompletedLabelEntry(concept, negated, labelDeterministic && ownSet.contains(concept)));
+						seen[concept] |= negated ? 2 : 1;
+					}
+				}
+				QSet<CRole*> roleSet;
+				for (CRole* role : label->mSuccessorRoleList) {
+					roleSet.insert(role);
+				}
+				roleSet.unite(state.mSuccessorRoleSet);
+				roleSet.unite(state.mDerivedSuccessorRoleSet);
+				QSet<cint64> dataRoleTagSet = label->mDataRoleTagSet;
+				dataRoleTagSet.unite(state.mDataRoleTagSet);
+				setCompletedLabel(label->mConcept, entries);
+				for (QSet<CRole*>::const_iterator it = roleSet.constBegin(), itEnd = roleSet.constEnd(); it != itEnd; ++it) {
+					CRole* role(*it);
+					if (role->isDataRole()) {
+						collectRoleTagsWithSuperRoles(role, label->mDataRoleTagSet);
+					} else if (!label->mSuccessorRoleList.contains(role)) {
+						label->mSuccessorRoleList.append(role);
+						collectRoleTagsWithSuperRoles(role, label->mSuccessorRoleTagSet);
+					}
+				}
+				label->mDataRoleTagSet.unite(dataRoleTagSet);
+				label->mExtended = true;
+				return true;
+			}
+
+
+			bool CSaturationSubsumptionDecider::addCompletedLabelToMergeState(CMergeState& state, CCompletedLabel* label) {
 				// the label already holds every consequence, so nothing is derived from its named
 				// classes; its successors are known by their roles only
 				if (label->mHasNondeterministic) {
@@ -1384,7 +1497,7 @@ namespace Konclude {
 			}
 
 
-			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideEntailedCompleted(const CCompletedLabel* label, CConcept* concept, bool negated, cint64 depth) {
+			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideEntailedCompleted(CCompletedLabel* label, CConcept* concept, bool negated, cint64 depth) {
 				// as decideEntailed, over a completed label: an entry that rests on a choice is present in
 				// one model, so it neither proves the entailment nor the absence of it
 				if (depth > 64) {
@@ -1491,12 +1604,16 @@ namespace Konclude {
 			}
 
 
-			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideCompletedLabelSatisfiable(const CCompletedLabel* label, const CMergeState* base) {
-				// the fast scan over a completed label: a clash proves the subsumption only when neither
-				// side rests on a choice, and a successor of the label is known by its role only, so a
-				// universal restriction that could reach it leaves the merge to the tableau
+			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideCompletedLabelSatisfiable(CCompletedLabel* label, const CMergeState* base) {
+				// the fast scan over a completed label: a clash proves the subsumption only when the
+				// entry and the query's side do not rest on a choice, and a successor of the label is
+				// known by its role only, so a universal restriction that could reach it leaves the
+				// merge to the tableau
 				++mCompletedDecisionCount;
-				bool nondeterministic = base->hasNondeterministic() || label->mHasNondeterministic;
+				if (!extendCompletedLabel(label) && mCompletionConcept) {
+					return UNDECIDED;
+				}
+				bool nondeterministic = base->hasNondeterministic();
 				bool candidateSeen = !base->mCandidateList.isEmpty();
 				QVarLengthArray<CConcept*,16> implicationArray;
 				QVarLengthArray<QPair<CConcept*,bool>,16> universalArray;
@@ -1614,7 +1731,7 @@ namespace Konclude {
 			}
 
 
-			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideCompletedLabelSatisfiableClosure(const CCompletedLabel* label, const CMergeState* base) {
+			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideCompletedLabelSatisfiableClosure(CCompletedLabel* label, const CMergeState* base) {
 				// the closure with a completed label as the node's part
 				++mClosureDecisionCount;
 				CMergeState state(base);
