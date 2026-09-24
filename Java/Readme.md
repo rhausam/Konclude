@@ -493,11 +493,17 @@ back differently arranged on every run, and a response carries its `response-tim
 therefore have to be compared as sets and without the timings rather than byte for byte.
 
 A classification result also has to be compared as a *closure* and not as a set of edges.
-Which member of a set of equivalent classes carries the parent edges is not fixed, so two
-runs can describe the same hierarchy with different edges. Comparing the edges directly
-reports differences that are not there, and a closure that does not contract the equivalence
-cycles first loses the ancestors of one member of every such set, which looks exactly like a
-missing inference.
+Which member of a set of equivalent classes carries the parent edges used to be whichever
+one the classifier merged first, so two runs could describe the same hierarchy with
+different edges: about 1 900 of the lines of the written hierarchy of the SNOMED CT variant
+with universal restrictions differed between runs for that reason alone. Since the taxonomy
+orders the equivalent classes of every node by IRI when the classification completes, with
+`owl:Thing` and `owl:Nothing` kept in front of any class equivalent to them, the member with
+the smallest IRI carries the edges and is the one the writer, the OWL API wrapper and the
+OWLlink server report as the representative, so two runs that inferred the same hierarchy
+now write the same file. A closure that does not contract the equivalence cycles first still
+loses the ancestors of one member of every such set, which looks exactly like a missing
+inference.
 
 The answers themselves used to vary as well, by about 90 of the 602 000 inferred subsumptions
 per pair of runs. That was the defect described under THE CLASSIFICATION THAT LOST
