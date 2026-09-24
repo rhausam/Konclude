@@ -503,6 +503,22 @@ The answers themselves used to vary as well, by about 90 of the 602 000 inferred
 per pair of runs. That was the defect described under THE CLASSIFICATION THAT LOST
 SUBSUMPTIONS below and it is fixed; four runs now produce byte identical hierarchies.
 
+Beyond EL the hierarchies still vary between runs (issue #28). On the invalid first build of
+the variant, with `max 1` on non-simple roles, two runs differed in about 2 200 lines and
+1 150 classes had different ancestors, false equivalences included; on the OWL 2 DL-valid
+rebuild two runs differ in one direct parent. That one is a genuine miss and it has a
+six-second reproduction on the command line, no plug-in involved: on a module of the variant,
+`IsClassSatisfiable(473062003 and not 429087003)` is answered true when it is the first
+question, which loses the subsumption, and false when `473062003 and not 266987004` was asked
+before, and false when it is the first question with
+`Konclude.Calculation.Optimization.BranchTriggering=false`. The OR rule with branch triggering
+delays a disjunction until a concept-role trigger fires; for the disjunction that the negated
+definition of 429087003 unfolds to the trigger never fires, the disjunction is left
+unprocessed and the node completes as satisfiable. Only that switch, of forty tried, changes
+the answer. The pattern is a class with `max 1 r` inside its role group tested against a
+definition with `only r` inside its group. Files, requests and the analysis are in
+`~/Documents/konclude-benchmarks/2026-09-24-order-dependent-entailment/`.
+
 
 ### WHAT IS LEFT IN THE WRAPPER
 
@@ -1184,6 +1200,33 @@ posters, which cost the full classification 15 s. Measured against the same tree
 change, three rounds each: 42.4, 42.4 and 45.1 s with it, 43.5, 43.9 and 45.8 s without.
 Twelve stress runs of the comparison that hung and crashed before pass with it, as do both
 test suites and the full classification with its 1 238 944 subclass axioms.
+
+
+### WHAT THE FAST PATH DOES BEYOND EL
+
+SNOMED CT is EL, so the question was what the saturation-based path is worth once definitions
+carry universal restrictions, disjunctions and cardinalities. A variant of the July 2026
+International Edition was generated for that (`VariantBuilder.java` beside the other probes in
+`~/Documents/konclude-benchmarks/2026-09-23-variant-comparison/probes/`): the additions of the
+older edition ported, `only` added inside the role group of 10 % of the classes, a covering
+disjunction to 5 % and `max 1` inside the role group to 2 %. The first build put `max 1` on
+roles that SNOMED CT makes non-simple through property chains and transitivity, which OWL 2 DL
+forbids and Konclude accepts without a word; the OWL API's `OWL2DLProfile` check found the 506
+violations (`ProfileProbe.java`), the builder now skips non-simple roles and checks its output,
+and every measurement below is on the valid rebuild. A generated ontology gets that check before
+it is measured with.
+
+On the valid variant, 383 204 classes, the fast path gives nothing: the direct sub classes of
+`not C` for twelve heavy classes take 47 to 123 s with the decider on and 47 to 108 s with it
+off, existential, universal and complement queries the same, with identical answers. The
+statistics line explains it: for one `not C` query 348 565 label completions are requested
+and run, one per class, and 281 487 nodes still go to the tableau, because the saturation of
+most nodes is insufficient (code -300) once a universal restriction or a cardinality sits in a
+role group that the node refers to. The completion tests are paid on top of the tableau tests
+that follow, so the decider is slower than the tableau on such an ontology, and it should skip
+completion when most nodes are insufficient rather than complete them one by one. The full
+measurement, with memory figures, is in
+`~/Documents/konclude-benchmarks/2026-09-24-variant-queries/README.md`.
 
 
 The answers were compared with the tableau path on 120 mixed queries over the subset and 400
