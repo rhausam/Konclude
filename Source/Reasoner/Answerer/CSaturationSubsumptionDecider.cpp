@@ -914,17 +914,61 @@ namespace Konclude {
 			bool CSaturationSubsumptionDecider::closeMergeState(CMergeState& state) {
 				// fires the implications, the base's and the state's, until none fires any more; the
 				// first operand is the implied concept, the ones after it are the triggers, which the
-				// saturation waits for in order, see updateImplicationReapplyConceptSaturationDescriptor
+				// saturation waits for in order, see updateImplicationReapplyConceptSaturationDescriptor.
+				// Of the base's implications only those waiting for a trigger this state supplies are
+				// looked at, found through the base's trigger hash, so that a merge does not walk the
+				// whole implication list of the query's side
 				bool changed = !state.mClashed;
+				bool firstRound = true;
 				while (changed && !state.mClashed) {
 					changed = false;
-					for (cint64 listIndex = 0; listIndex < 2 && !state.mClashed; ++listIndex) {
-						const QList<CConcept*>* implList = listIndex == 0 ? (state.mBase ? &state.mBase->mImplicationList : nullptr) : &state.mImplicationList;
-						if (!implList) {
-							continue;
+					QSet<CConcept*> baseImplicationSet;
+					if (state.mBase && !state.mBase->mTriggerImplicationHash.isEmpty()) {
+						const QHash<CConcept*,QList<CConcept*> >& triggerHash = state.mBase->mTriggerImplicationHash;
+						struct Collector {
+							const QHash<CConcept*,QList<CConcept*> >* mHash;
+							QSet<CConcept*>* mSet;
+							void consider(CConcept* trigger) {
+								QHash<CConcept*,QList<CConcept*> >::const_iterator it = mHash->constFind(trigger);
+								if (it != mHash->constEnd()) {
+									for (CConcept* implConcept : it.value()) {
+										mSet->insert(implConcept);
+									}
+								}
+							}
+						} collector = { &triggerHash, &baseImplicationSet };
+						if (firstRound) {
+							if (state.mOverlayLabelSet) {
+								for (CConceptSaturationDescriptor* conDesIt = state.mOverlayLabelSet->getConceptSaturationDescriptionLinker(); conDesIt; conDesIt = conDesIt->getNext()) {
+									if (!conDesIt->isNegated()) {
+										collector.consider(conDesIt->getConcept());
+									}
+								}
+								for (CConcept* substitute : state.mOverlaySubstituteArray) {
+									collector.consider(substitute);
+								}
+							}
+							if (state.mOverlayEntries) {
+								for (const CCompletedLabelEntry& entry : *state.mOverlayEntries) {
+									if (!entry.mNegated) {
+										collector.consider(entry.mConcept);
+									}
+								}
+							}
 						}
-						for (cint64 i = 0; i < implList->size() && !state.mClashed; ++i) {
-							CConcept* implConcept = implList->at(i);
+						for (QSet<CConcept*>::const_iterator it = state.mPositiveSet.constBegin(), itEnd = state.mPositiveSet.constEnd(); it != itEnd; ++it) {
+							collector.consider(*it);
+						}
+					}
+					for (cint64 listIndex = 0; listIndex < 2 && !state.mClashed; ++listIndex) {
+						QList<CConcept*> implList;
+						if (listIndex == 0) {
+							implList = baseImplicationSet.toList();
+						} else {
+							implList = state.mImplicationList;
+						}
+						for (cint64 i = 0; i < implList.size() && !state.mClashed; ++i) {
+							CConcept* implConcept = implList.at(i);
 							CSortedNegLinker<CConcept*>* impliedLinker = implConcept->getOperandList();
 							if (!impliedLinker) {
 								continue;
@@ -950,10 +994,10 @@ namespace Konclude {
 							}
 						}
 					}
+					firstRound = false;
 				}
 				return true;
 			}
-
 
 
 			const CSaturationSubsumptionDecider::CMergeState* CSaturationSubsumptionDecider::getConjunctionMergeBase(const QList<CConcept*>& conjuncts) {
@@ -1295,7 +1339,7 @@ namespace Konclude {
 					return UNDECIDED;
 				}
 				CMergeState state(base);
-				bool decided = addMergeNamedClass(state, baseConcept);
+				bool decided = overlayNodeIntoMergeState(state, baseNode);
 				if (decided && !state.mClashed) {
 					decided = closeMergeState(state);
 				}
@@ -1735,7 +1779,7 @@ namespace Konclude {
 				// the closure with a completed label as the node's part
 				++mClosureDecisionCount;
 				CMergeState state(base);
-				if (!addCompletedLabelToMergeState(state, label)) {
+				if (!overlayCompletedLabelIntoMergeState(state, label)) {
 					return UNDECIDED;
 				}
 				if (!closeMergeState(state)) {
@@ -1810,6 +1854,149 @@ namespace Konclude {
 
 			cint64 CSaturationSubsumptionDecider::getCompletedDecisionCount() {
 				return mCompletedDecisionCount;
+			}
+
+
+
+			bool CSaturationSubsumptionDecider::overlayNodeIntoMergeState(CMergeState& state, CIndividualSaturationProcessNode* baseNode) {
+				CIndividualSaturationProcessNode* repNode = getRepresentativeNode(baseNode);
+				CIndividualSaturationProcessNodeStatusFlags* flags = repNode->getIndirectStatusFlags();
+				if (flags->hasCardinalityRestrictedFlag() || flags->hasCardinalityProplematicFlag() || flags->hasNominalConnectionFlag()) {
+					return false;
+				}
+				if (repNode->hasDataValueApplied() || repNode->hasNominalIntegrated()) {
+					return false;
+				}
+				CReapplyConceptSaturationLabelSet* labelSet = repNode->getReapplyConceptSaturationLabelSet(false);
+				if (!labelSet) {
+					return false;
+				}
+				if (state.hasPartNode(repNode)) {
+					return true;
+				}
+				state.mPartNodeSet.insert(repNode);
+				state.mPartNodeList.append(repNode);
+				state.mOverlayLabelSet = labelSet;
+				CIndividualSaturationProcessNode* node = baseNode;
+				while (node->hasSubstituteIndividualNode()) {
+					if (node != baseNode) {
+						CSaturationConceptDataItem* satConDataItem = (CSaturationConceptDataItem*)node->getSaturationConceptReferenceLinking();
+						if (satConDataItem && !satConDataItem->getSaturationNegation() && !satConDataItem->getSaturationRoleRanges()) {
+							CConcept* substitute = satConDataItem->getSaturationConcept();
+							if (state.hasNegativeBesidesOverlay(substitute)) {
+								state.mClashed = true;
+								return true;
+							}
+							state.mOverlaySubstituteArray.append(substitute);
+						}
+					}
+					node = node->getSubstituteIndividualNode();
+				}
+				for (CConceptSaturationDescriptor* conDesIt = labelSet->getConceptSaturationDescriptionLinker(); conDesIt; conDesIt = conDesIt->getNext()) {
+					CConcept* concept = conDesIt->getConcept();
+					bool negated = conDesIt->isNegated();
+					if (negated ? state.hasPositiveBesidesOverlay(concept) : state.hasNegativeBesidesOverlay(concept)) {
+						state.mClashed = true;
+						return true;
+					}
+					LabelConceptKind kind = getLabelConceptKind(concept, negated);
+					cint64 opCode = concept->getOperatorCode();
+					if (kind == LCK_UNSAFE) {
+						cint64 codeKey = opCode * 2 + (negated ? 1 : 0);
+						mUndecidedMergeConceptCodeCounts[codeKey] = mUndecidedMergeConceptCodeCounts.value(codeKey, 0) + 1;
+						return false;
+					}
+					if (kind == LCK_IMPLICATION) {
+						state.mImplicationList.append(concept);
+					} else if (kind == LCK_UNIVERSAL) {
+						state.mUniversalList.append(CMergeUniversal(concept, negated, repNode));
+					} else if (kind == LCK_CANDIDATE) {
+						CSortedNegLinker<CConcept*>* candidateLinker = concept->getOperandList();
+						if (!candidateLinker || candidateLinker->isNegated() || !candidateLinker->getData()->hasClassName()) {
+							mUndecidedMergeConceptCodeCounts[-9000] = mUndecidedMergeConceptCodeCounts.value(-9000, 0) + 1;
+							return false;
+						}
+						state.mCandidateList.append(candidateLinker->getData());
+					} else if (!negated && opCode == CCSELF) {
+						state.mSelfConceptSet.insert(concept);
+					}
+				}
+				// successors under a functional role would be merged with those of the other parts
+				CLinkedRoleSaturationSuccessorHash* succHash = repNode->getLinkedRoleSuccessorHash(false);
+				if (succHash) {
+					CPROCESSHASH<CRole*,CLinkedRoleSaturationSuccessorData*>* roleSuccHash = succHash->getLinkedRoleSuccessorHash();
+					for (CPROCESSHASH<CRole*,CLinkedRoleSaturationSuccessorData*>::const_iterator it = roleSuccHash->constBegin(), itEnd = roleSuccHash->constEnd(); it != itEnd; ++it) {
+						CRole* role = it.key();
+						CLinkedRoleSaturationSuccessorData* roleSuccData = it.value();
+						if (roleSuccData && roleSuccData->getSuccessorCount() > 0) {
+							if (role->isFunctional() && state.hasSuccessorRole(role)) {
+								mUndecidedMergeConceptCodeCounts[-2000] = mUndecidedMergeConceptCodeCounts.value(-2000, 0) + 1;
+								return false;
+							}
+							if (role->isDataRole()) {
+								if (state.hasDataRoleTag(role->getRoleTag())) {
+									mUndecidedMergeConceptCodeCounts[-2400] = mUndecidedMergeConceptCodeCounts.value(-2400, 0) + 1;
+									return false;
+								}
+								state.mDataRoleTagSet.insert(role->getRoleTag());
+							}
+							state.mSuccessorRoleSet.insert(role);
+						}
+					}
+				}
+				return true;
+			}
+
+
+			bool CSaturationSubsumptionDecider::overlayCompletedLabelIntoMergeState(CMergeState& state, CCompletedLabel* label) {
+				if (label->mHasNondeterministic) {
+					state.mHasNondeterministic = true;
+				}
+				state.mOverlayPolarityHash = &label->mPolarityHash;
+				state.mOverlayEntries = &label->mEntries;
+				for (const CCompletedLabelEntry& entry : label->mEntries) {
+					CConcept* concept = entry.mConcept;
+					bool negated = entry.mNegated;
+					if (negated ? state.hasPositiveBesidesOverlay(concept) : state.hasNegativeBesidesOverlay(concept)) {
+						state.mClashed = true;
+						return true;
+					}
+					LabelConceptKind kind = getLabelConceptKind(concept, negated);
+					cint64 opCode = concept->getOperatorCode();
+					if (kind == LCK_UNSAFE) {
+						cint64 codeKey = opCode * 2 + (negated ? 1 : 0);
+						mUndecidedMergeConceptCodeCounts[codeKey] = mUndecidedMergeConceptCodeCounts.value(codeKey, 0) + 1;
+						return false;
+					}
+					if (kind == LCK_IMPLICATION) {
+						state.mImplicationList.append(concept);
+					} else if (kind == LCK_UNIVERSAL) {
+						state.mUniversalList.append(CMergeUniversal(concept, negated, nullptr));
+					} else if (kind == LCK_CANDIDATE) {
+						CSortedNegLinker<CConcept*>* candidateLinker = concept->getOperandList();
+						if (!candidateLinker || candidateLinker->isNegated() || !candidateLinker->getData()->hasClassName()) {
+							mUndecidedMergeConceptCodeCounts[-9000] = mUndecidedMergeConceptCodeCounts.value(-9000, 0) + 1;
+							return false;
+						}
+						state.mCandidateList.append(candidateLinker->getData());
+					} else if (!negated && opCode == CCSELF) {
+						state.mSelfConceptSet.insert(concept);
+					}
+				}
+				if (hasSuccessorRoleConflict(label->mSuccessorRoleList, label->mDataRoleTagSet, state)) {
+					return false;
+				}
+				for (CRole* role : label->mSuccessorRoleList) {
+					state.mSuccessorRoleSet.insert(role);
+					for (CSortedNegLinker<CRole*>* superIt = role->getIndirectSuperRoleList(); superIt; superIt = superIt->getNext()) {
+						if (!superIt->isNegated()) {
+							state.mSuccessorRoleSet.insert(superIt->getData());
+						}
+					}
+				}
+				state.mCompletedSuccessorRoleTagSet.unite(label->mSuccessorRoleTagSet);
+				state.mDataRoleTagSet.unite(label->mDataRoleTagSet);
+				return true;
 			}
 
 

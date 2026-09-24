@@ -188,9 +188,30 @@ namespace Konclude {
 					 */
 					class CMergeState {
 						public:
-							CMergeState(const CMergeState* base = nullptr) : mBase(base), mClashed(false), mCurrentPartNode(nullptr), mHasNondeterministic(false) {}
-							bool hasPositive(CConcept* concept) const { return mPositiveSet.contains(concept) || (mBase && mBase->hasPositive(concept)); }
-							bool hasNegative(CConcept* concept) const { return mNegativeSet.contains(concept) || (mBase && mBase->hasNegative(concept)); }
+							CMergeState(const CMergeState* base = nullptr) : mBase(base), mClashed(false), mCurrentPartNode(nullptr), mHasNondeterministic(false), mOverlayLabelSet(nullptr), mOverlayPolarityHash(nullptr), mOverlayEntries(nullptr) {}
+							/*!
+							 *	The overlay is the label of the node the merge is about, consulted in place instead
+							 *	of being copied into the sets: the saturated label with the concepts of its substitute
+							 *	chain, or the polarity hash of a completed label.
+							 */
+							bool hasOverlay(CConcept* concept, bool negated) const {
+								if (mOverlayLabelSet && mOverlayLabelSet->hasConcept(concept, negated)) {
+									return true;
+								}
+								if (!negated) {
+									for (CConcept* substitute : mOverlaySubstituteArray) {
+										if (substitute == concept) {
+											return true;
+										}
+									}
+								}
+								return mOverlayPolarityHash && (mOverlayPolarityHash->value(concept, 0) & (negated ? 2 : 1)) != 0;
+							}
+							bool hasPositive(CConcept* concept) const { return mPositiveSet.contains(concept) || hasOverlay(concept, false) || (mBase && mBase->hasPositive(concept)); }
+							bool hasNegative(CConcept* concept) const { return mNegativeSet.contains(concept) || hasOverlay(concept, true) || (mBase && mBase->hasNegative(concept)); }
+							//! as hasPositive and hasNegative, without the overlay, for the clash check of the overlay's own concepts
+							bool hasPositiveBesidesOverlay(CConcept* concept) const { return mPositiveSet.contains(concept) || (mBase && mBase->hasPositive(concept)); }
+							bool hasNegativeBesidesOverlay(CConcept* concept) const { return mNegativeSet.contains(concept) || (mBase && mBase->hasNegative(concept)); }
 							bool hasPartNode(CIndividualSaturationProcessNode* node) const { return mPartNodeSet.contains(node) || (mBase && mBase->hasPartNode(node)); }
 							bool hasSuccessorRole(CRole* role) const { return mSuccessorRoleSet.contains(role) || (mBase && mBase->hasSuccessorRole(role)); }
 							//! whether a part came from a completed label with an entry that rests on a choice, so that a clash is no proof
@@ -215,6 +236,10 @@ namespace Konclude {
 							bool mClashed;
 							CIndividualSaturationProcessNode* mCurrentPartNode;
 							bool mHasNondeterministic;
+							CReapplyConceptSaturationLabelSet* mOverlayLabelSet;
+							QVarLengthArray<CConcept*,4> mOverlaySubstituteArray;
+							const QHash<CConcept*,quint8>* mOverlayPolarityHash;
+							const QVector<CCompletedLabelEntry>* mOverlayEntries;
 							//! the named classes of the equivalence candidates of the parts, see closeMergeStateWithCandidates
 							QList<CConcept*> mCandidateList;
 							QSet<CConcept*> mAddedCandidateSet;
@@ -265,6 +290,14 @@ namespace Konclude {
 					bool addMergeNamedClass(CMergeState& state, CConcept* concept);
 					//! adds a completed label as a part of the merge, its successors by their roles only
 					bool addCompletedLabelToMergeState(CMergeState& state, CCompletedLabel* label);
+					/*!
+					 *	Makes the node the part of the merge the decision is about, with its label as the
+					 *	overlay of the state instead of copied into it; what the label holds beyond concepts,
+					 *	implications, universal restrictions, self restrictions, candidates and successors, is
+					 *	collected as addMergeNamedClass does. False if the merge cannot be decided.
+					 */
+					bool overlayNodeIntoMergeState(CMergeState& state, CIndividualSaturationProcessNode* baseNode);
+					bool overlayCompletedLabelIntoMergeState(CMergeState& state, CCompletedLabel* label);
 					/*!
 					 *	Closes the label under the rules and adds its equivalence candidates with their
 					 *	saturations, once, so that no query has to; what the closure with the candidates
