@@ -765,10 +765,22 @@ concepts lose subsumers, whatever else the allocation layout does.
 
 `-w 1` does not make Konclude single threaded, so the runs that carry that flag do not exclude
 concurrency. The process runs 20 threads, and sampling during such a classification finds two
-of them inside saturation and tableau code at the same moment.
-`CConcurrentTaskScheduler::run` dispatches through `QtConcurrent` whenever the thread pool
-holds more than one thread, and the second saturation thread is not a pool thread, so no
-setting serialises it.
+of them inside saturation and tableau code at the same moment. The setting is honoured where
+it applies: `CConfigDependedCalculationEnvironmentFactory` gives a processor count of one a
+single `CSingleThreadTaskProcessorUnit`, which is scheduler, completor and processor in one
+thread, so every tableau and saturation task runs on that one thread. The second thread is the
+precomputation thread itself, `CTotallyPrecomputationThread`, which works on the shared
+saturation items on its own thread while the task unit saturates: right after
+`createSaturationConstructionJob` it runs `addIdentifiedRemainingConsistencyRequiredConcepts`
+and `addRequiredSaturationIndividuals`, later `markSaturationProcessingItems`,
+`analyseConceptSaturationSubsumerExistItems` and `saturateRemainingRequiredItems`. Nothing
+waits for the running saturation before that, `isSaturationComputationRunning` is only
+consulted, so no setting serialises the two. Independently of `-w`, the realizer and the
+Redland parsers dispatch through `QtConcurrent` on Qt's global pool with a thread per core. All
+of that is upstream Konclude, older than this fork; it is tracked as rhausam/Konclude#35. An
+earlier version of this paragraph blamed `CConcurrentTaskScheduler::run` for dispatching
+through `QtConcurrent`; that class is used only by the answerer's variable mapping composition
+and the backend cache, not by the saturation.
 
 What else was excluded, each on SNOMED CT with the runs still disagreeing afterwards:
 
