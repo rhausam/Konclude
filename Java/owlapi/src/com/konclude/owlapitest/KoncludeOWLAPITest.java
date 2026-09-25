@@ -618,7 +618,8 @@ public class KoncludeOWLAPITest {
 		final OWLReasoner slow = reasonerFor(large);
 		try {
 			final Throwable[] thrown = new Throwable[1];
-			final long[] released = new long[1];
+			// set by the caller when it is released, which ends the loop of interrupts below
+			final java.util.concurrent.atomic.AtomicLong released = new java.util.concurrent.atomic.AtomicLong();
 			final java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
 			Thread caller = new Thread(new Runnable() {
 				public void run() {
@@ -628,24 +629,30 @@ public class KoncludeOWLAPITest {
 					} catch (Throwable t) {
 						thrown[0] = t;
 					}
-					released[0] = System.nanoTime();
+					released.set(System.nanoTime());
 				}
 			});
 			caller.start();
 			started.await();
 			// interrupt until the caller is released: the call is in flight from the moment it is
-			// handed to the reasoner's thread, and it takes far longer than the interval here
+			// handed to the reasoner's thread, and it takes far longer than the interval here. The
+			// loop yields rather than sleeps, since Thread.sleep(1) lasts a timer tick of about
+			// 15 ms on Windows, and a classification that ended within one tick went uninterrupted.
+			// The loop ends on the release itself rather than on the end of the caller, which would
+			// let it interrupt a few more times after the release.
 			long interrupted = 0;
-			while (caller.isAlive()) {
+			while (released.get() == 0) {
 				interrupted = System.nanoTime();
 				slow.interrupt();
-				Thread.sleep(1);
+				Thread.yield();
 			}
 			caller.join();
 			check("the call in flight was interrupted", Boolean.valueOf(thrown[0] != null), Boolean.TRUE);
 			if (thrown[0] != null) {
 				check("what an interrupted call throws ", thrown[0].getClass(), ReasonerInterruptedException.class);
-				report(String.format("the caller was released %.1f ms after the last interrupt", (released[0] - interrupted) / 1e6));
+				// the release can fall between the check of the loop and its next interrupt, hence the 0
+				report(String.format("the caller was released %.1f ms after the last interrupt",
+						Math.max(0, released.get() - interrupted) / 1e6));
 			}
 			// the calculation ran on and later calls queue behind it, so the answer is complete:
 			// the 4000 classes, their 4000 defined counterparts and owl:Nothing
