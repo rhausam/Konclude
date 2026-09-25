@@ -78,12 +78,17 @@ if ! find "$JAVA_DIR/src" -name '*.java' -print0 | xargs -0 "$JAVAC" -d "$BUILD_
 	exit 1
 fi
 
+. "$JAVA_DIR/jvm-crash-reports.sh"
+
 FAILED_SCENARIOS=""
 for scenario in subclass hierarchy lifecycles missing-processor; do
 	echo
 	echo "--------------------------------------------------------------------------"
-	if ! "$JAVA" -cp "$BUILD_DIR" -Djava.library.path="$LIBRARY_DIR" \
-			com.konclude.smoketest.KoncludeJNISmokeTest "$scenario"; then
+	"$JAVA" "$CRASH_REPORT_OPTION" -cp "$BUILD_DIR" -Djava.library.path="$LIBRARY_DIR" \
+			com.konclude.smoketest.KoncludeJNISmokeTest "$scenario"
+	status=$?
+	# the report is looked for first, so that it is taken care of whatever the status
+	if crash_report_found jni-smoke "$scenario" || [ $status -ne 0 ]; then
 		FAILED_SCENARIOS="$FAILED_SCENARIOS $scenario"
 	fi
 done

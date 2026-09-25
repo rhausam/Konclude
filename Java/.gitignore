@@ -6,3 +6,6 @@ owlapi/lib/
 
 # JVM crash logs, should a native call go wrong
 hs_err_pid*.log
+
+# JVM crash reports of the run-*.sh scripts, named after the suite and scenario, see jvm-crash-reports.sh
+crash-reports/

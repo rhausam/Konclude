@@ -130,12 +130,17 @@ if ! find "$JAVA_DIR/src" "$JAVA_DIR/owlapi/src" -name '*.java' -print0 \
 	exit 1
 fi
 
+. "$JAVA_DIR/jvm-crash-reports.sh"
+
 FAILED_SCENARIOS=""
 for scenario in hierarchy expressions expressions-tableau individuals properties datatypes inconsistency unsupported lifecycle merges timeout entailment interrupt progress; do
 	echo
 	echo "--------------------------------------------------------------------------"
-	if ! "$JAVA" -cp "$OWLAPI_CP:$BUILD_DIR" -Djava.library.path="$LIBRARY_DIR" \
-			com.konclude.owlapitest.KoncludeOWLAPITest "$scenario"; then
+	"$JAVA" "$CRASH_REPORT_OPTION" -cp "$OWLAPI_CP:$BUILD_DIR" -Djava.library.path="$LIBRARY_DIR" \
+			com.konclude.owlapitest.KoncludeOWLAPITest "$scenario"
+	status=$?
+	# the report is looked for first, so that it is taken care of whatever the status
+	if crash_report_found owlapi "$scenario" || [ $status -ne 0 ]; then
 		FAILED_SCENARIOS="$FAILED_SCENARIOS $scenario"
 	fi
 done
