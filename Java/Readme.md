@@ -115,10 +115,15 @@ such call per selection and the call itself taking the time, which ruled out the
 
 The library has to be one that depends on nothing but the system, since Protege has no Qt to
 offer: build `KoncludeLIB.pro` against a static Qt, with `QT-=gui`, `CONFIG-=static staticlib`
-and `CONFIG+=shared dll`, and `otool -L` or `ldd` shows no Qt afterwards. So far this is done
-for macOS on arm64, which is the one platform the plug-in carries a library for; Linux needs a
-static Qt built with position independent code, Windows a static Qt for MSVC. The build takes
-the library from the property `konclude.library.macos-arm64` and fails if the file is missing:
+and `CONFIG+=shared dll`, and `otool -L`, `ldd` or `dumpbin /dependents` shows no Qt
+afterwards, see 'A LIBRARY WITHOUT QT DEPENDENCIES' below. The release workflow builds such a
+library for macOS on arm64, Linux on x64 and Windows on x64 and packages all three into one
+plug-in, which the draft release carries beside the packages of the command line program.
+
+A local build takes the library for macOS from the property `konclude.library.macos-arm64` and
+fails if the file is missing. The properties `konclude.library.linux-x64` and
+`konclude.library.windows-x64` each add the library of that platform through a profile of the
+pom; without them the plug-in carries the macOS library only:
 
 ```
 cd Java/protege
@@ -861,9 +866,26 @@ CoreServices, CoreFoundation, Foundation, CFNetwork, libSystem, libc++, libz, li
 Homebrew. Both `Java/run-jni-smoke-test.sh` and `Java/run-owlapi-test.sh` pass against it, so a
 plug-in can ship a single self-contained library the way the FaCT++ plug-in does.
 
-This was done on macOS only. A Linux build needs the static Qt compiled with position
-independent code before it can be linked into a shared object, and a Windows build needs a
-static Qt for the Visual Studio tool set, which the release workflow does not build.
+The release workflow builds the library in the same way on all three platforms, in a build
+directory of its own, since `KoncludeLIB.pro` compiles the sources with the JNI interface into
+the same object directory as `Konclude.pro`:
+
+- Linux x64 takes the static Qt of the Linux package. Qt's mkspec compiles its static
+  libraries with `-fPIC` already (`QMAKE_CFLAGS_STATIC_LIB`), so no separate Qt is needed for
+  a shared object. The library is linked with `-static-libstdc++ -static-libgcc` like the
+  package, and with `-Wl,--exclude-libs,ALL`, so that the C++ runtime and Qt inside it do not
+  interpose on the symbols of the virtual machine. `ldd` shows `libz`, `libm` and `libc` only.
+- Windows x64 needs a Qt of its own, since the package is linked against the Qt DLLs, which
+  `System.loadLibrary` would not find beside the library in the directory OSGi extracts it
+  to. The workflow builds qtbase with MSVC 2019 and `-static -static-runtime`, so that the
+  DLL imports neither Qt nor the C runtime of MSVC, and caches it.
+- The OSGi entry for Windows names both `Win32` and `"Windows 10"`, since Felix 7.0.5, which
+  Protege 5.6 ships, normalises 'Windows 10' to `windows10` and every other Windows, 11 and
+  the server editions among them, to `win32`.
+
+The library is tested before it is packaged: the smoke test on all three platforms, the OWL API
+test on macOS and Linux (its script joins the class path with ':', so not on Windows), and the
+plug-in test in the OSGi framework of Protege on macOS.
 
 ## CLASSIFYING SNOMED CT THROUGH THE WRAPPER
 
