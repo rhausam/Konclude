@@ -11,6 +11,7 @@
   workflow does, with
 
       -Dkonclude.library.linux-x64=<path of libKonclude.so>
+      -Dkonclude.library.linux-arm64=<path of libKonclude.so>
       -Dkonclude.library.windows-x64=<path of Konclude.dll>
 
   and copy target/konclude-protege-plugin-<version>.jar into the plugins directory of Protege.
@@ -62,6 +63,8 @@
 		-->
 		<konclude.nativecode.linux-x64></konclude.nativecode.linux-x64>
 		<konclude.resource.linux-x64></konclude.resource.linux-x64>
+		<konclude.nativecode.linux-arm64></konclude.nativecode.linux-arm64>
+		<konclude.resource.linux-arm64></konclude.resource.linux-arm64>
 		<konclude.nativecode.windows-x64></konclude.nativecode.windows-x64>
 		<konclude.resource.windows-x64></konclude.resource.windows-x64>
 	</properties>
@@ -77,6 +80,22 @@
 			<properties>
 				<konclude.nativecode.linux-x64>lib/native/linux-x64/libKonclude.so; osname=Linux; processor=x86-64; processor=amd64,</konclude.nativecode.linux-x64>
 				<konclude.resource.linux-x64>,lib/native/linux-x64/libKonclude.so=${konclude.library.linux-x64}</konclude.resource.linux-x64>
+			</properties>
+		</profile>
+		<!--
+		  Java reports 64 bit ARM as aarch64 on Linux and macOS. The name arm64 must not be
+		  listed: Felix normalises it to arm_le, the 32 bit ARM, on which the library cannot load.
+		-->
+		<profile>
+			<id>linux-arm64</id>
+			<activation>
+				<property>
+					<name>konclude.library.linux-arm64</name>
+				</property>
+			</activation>
+			<properties>
+				<konclude.nativecode.linux-arm64>lib/native/linux-arm64/libKonclude.so; osname=Linux; processor=aarch64,</konclude.nativecode.linux-arm64>
+				<konclude.resource.linux-arm64>,lib/native/linux-arm64/libKonclude.so=${konclude.library.linux-arm64}</konclude.resource.linux-arm64>
 			</properties>
 		</profile>
 		<!--
@@ -194,8 +213,9 @@
 						-->
 						<Bundle-NativeCode>
 							lib/native/macos-arm64/libKonclude.dylib;
-								osname=MacOSX; osname="Mac OS X"; processor=aarch64; processor=arm64,
+								osname=MacOSX; osname="Mac OS X"; processor=aarch64,
 							${konclude.nativecode.linux-x64}
+							${konclude.nativecode.linux-arm64}
 							${konclude.nativecode.windows-x64}
 							*
 						</Bundle-NativeCode>
@@ -203,6 +223,7 @@
 							{maven-resources},
 							lib/native/macos-arm64/libKonclude.dylib=${konclude.library.macos-arm64}
 							${konclude.resource.linux-x64}
+							${konclude.resource.linux-arm64}
 							${konclude.resource.windows-x64}
 						</Include-Resource>
 					</instructions>
