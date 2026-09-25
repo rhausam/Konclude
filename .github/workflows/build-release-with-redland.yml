@@ -563,10 +563,17 @@ jobs:
           mkdir -p docker-context
           cp -r "Release/$RELEASE_NAME" "docker-context/${{ matrix.docker }}"
           docker build -t konclude-test -f konclude-static/Docker/Dockerfile docker-context
-          docker run --rm -v "$(pwd)/konclude-static/Tests":/data konclude-test \
-            owllinkfile -i /data/galen-classify-request.xml -o /data/docker-response.xml
-          grep -c "SubClassOf" konclude-static/Tests/docker-response.xml
-          rm -f konclude-static/Tests/docker-response.xml
+          # the request loads file:./Tests/galen.owl.xml relative to the working directory, /data
+          docker run --rm -v "$(pwd)/Release/$RELEASE_NAME":/data konclude-test \
+            owllinkfile -i Tests/galen-classify-request.xml -o docker-response.xml
+          response="Release/$RELEASE_NAME/docker-response.xml"
+          if grep -q "<Error" "$response" || ! grep -q "<ClassSynset" "$response"; then
+            echo "::error::The classification in the Docker image did not answer."
+            head -c 2000 "$response"
+            exit 1
+          fi
+          echo "$(grep -c '<ClassSynset' "$response") classes in the hierarchy"
+          rm -f "$response"
 
       # The shared library for the Protege plug-in, as for macOS. Static archives are linked into a
       # shared object only if they are position independent, which the mkspec of Qt makes them

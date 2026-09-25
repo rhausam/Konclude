@@ -8,7 +8,8 @@
 # no RUN step and an image for another architecture is assembled without emulating it.
 #
 # Usage, after 'docker build -t konclude -f Docker/Dockerfile <context>', with the ontologies and
-# requests of the current directory under /data:
+# requests of the current directory under /data, the working directory, against which relative
+# paths and file: IRIs such as those of the OWLlink requests in Tests/ are resolved:
 #
 #   docker run --rm -v "$(pwd)":/data konclude classification -i /data/ontology.owl
 #   docker run --rm -p 8080:8080 konclude owllinkserver -p 8080
