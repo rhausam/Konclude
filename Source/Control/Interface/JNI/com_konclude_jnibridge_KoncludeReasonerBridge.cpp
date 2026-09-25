@@ -65,7 +65,9 @@ using namespace Konclude::Control::Loader;
 
 
 static int qtAppargc = 1;
-static char* qtAppargv[] = {"Konclude", NULL};
+// writable, since QCoreApplication takes char** and MSVC rejects string literals for char*
+static char qtAppName[] = "Konclude";
+static char* qtAppargv[] = {qtAppName, NULL};
 static QCoreApplication* qtApp = NULL;
 static bool qtAppCreated = false;
 //static QThread* thread = NULL;
@@ -76,14 +78,19 @@ QByteArray qJNIConfigByteArray;
 
 JNIEXPORT void JNICALL Java_com_konclude_jnibridge_KoncludeReasonerBridge_initKoncludeLibraryInstance(JNIEnv * jenv, jobject bridgeObj, jstring jniConfigString) {
 
+	// writable, since the first entry may be replaced below and MSVC rejects string literals
+	// for char*
+	//char coutLogObserverArgument[] = "-CoutLogObserverLoader ";
+	// Appending '+=Konclude.Debugging.WriteDebuggingData=TRUE' writes the debugging data of
+	// the preprocessing into a 'Debugging' subdirectory of the working directory, which must
+	// not happen by default since the library is loaded into the process of another program.
+	char defaultReasonerArgument[] = "-DefaultReasonerLoader +=Konclude.Execution.CalculationManager=Konclude.Calculation.Calculator.ConcurrentTaskCalculationManager ";
+	char commandProcessorArgument[] = "-JNICommandProcessorLoader ";
+	char emptyArgument[] = " ";
 	char* defaultJNIArgumentStrings[] =  { 
-		//"-CoutLogObserverLoader ",
-		// Appending '+=Konclude.Debugging.WriteDebuggingData=TRUE' writes the debugging data of
-		// the preprocessing into a 'Debugging' subdirectory of the working directory, which must
-		// not happen by default since the library is loaded into the process of another program.
-		"-DefaultReasonerLoader +=Konclude.Execution.CalculationManager=Konclude.Calculation.Calculator.ConcurrentTaskCalculationManager ",
-		"-JNICommandProcessorLoader ",
-		" "
+		defaultReasonerArgument,
+		commandProcessorArgument,
+		emptyArgument
 	};
 
 	int defaultJNIArgumentCount = 2;
