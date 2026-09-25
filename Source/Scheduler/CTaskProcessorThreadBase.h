@@ -170,7 +170,8 @@ namespace Konclude {
 				CTaskReserveQueueConsumer* mTaskReserveQueueConsumer;
 
 
-				// set by another thread in stopProcessing, hence atomic
+				// set by another thread in stopProcessing, hence atomic; relaxed suffices, since the release
+				// of the wake-up semaphore after it makes the store visible to the woken thread
 				std::atomic<bool> mProcessingStopped;
 
 				bool mThreadBlocked;

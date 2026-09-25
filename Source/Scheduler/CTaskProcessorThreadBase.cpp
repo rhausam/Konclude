@@ -176,7 +176,7 @@ namespace Konclude {
 		// so that quit() and wait() can then end the thread. The loop sees the flag when it wakes,
 		// which the release makes immediate; a task in progress finishes its current step first.
 		CTaskProcessorThreadBase* CTaskProcessorThreadBase::stopProcessing() {
-			mProcessingStopped = true;
+			mProcessingStopped.store(true, std::memory_order_relaxed);
 			mProcessingWakeUpSemaphore.release();
 			return this;
 		}
@@ -211,7 +211,7 @@ namespace Konclude {
 
 		bool CTaskProcessorThreadBase::processingLoop() {
 			bool eventSafeguardProcessed = false;
-			while (!mProcessingStopped) {
+			while (!mProcessingStopped.load(std::memory_order_relaxed)) {
 				if (!mTaskProcessingQueue && mProcessingBlocked) {
 					// block until new events or task are available
 #ifdef KONCLUDE_SCHEDULER_TASK_THREADS_TIME_STATISTICS
@@ -557,7 +557,7 @@ namespace Konclude {
 			bool handleNextRound = true;
 			bool roundEventProcessed = false;
 			bool eventProcessed = false;
-			while (handleNextRound && !mProcessingStopped) {
+			while (handleNextRound && !mProcessingStopped.load(std::memory_order_relaxed)) {
 				roundEventProcessed = false;
 				CXLinker<CEventHandler*>* eventHandlerLinkerIt = mEventHandlerLinker;
 				if (eventHandlerLinkerIt) {
