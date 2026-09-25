@@ -242,6 +242,7 @@ jobs:
           path: |
             hs_err_pid*.log
             Java/hs_err_pid*.log
+            Java/crash-reports/*.log
           if-no-files-found: ignore
 
 
@@ -420,6 +421,7 @@ jobs:
           path: |
             hs_err_pid*.log
             konclude-static/Java/hs_err_pid*.log
+            konclude-static/Java/crash-reports/*.log
             konclude-static/Java/protege/hs_err_pid*.log
           if-no-files-found: ignore
 
@@ -590,6 +592,7 @@ jobs:
           path: |
             hs_err_pid*.log
             konclude-static/Java/hs_err_pid*.log
+            konclude-static/Java/crash-reports/*.log
           if-no-files-found: ignore
 
 

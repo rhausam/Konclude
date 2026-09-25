@@ -36,6 +36,13 @@ Java/run-owlapi-test.sh
 which search the library in `Release` and `release` and accept the directory or the file of
 the library as first argument.
 
+Each scenario runs in a virtual machine of its own, and fails if that exits with a status other
+than 0 or leaves a crash report. The second is needed because a crash while the process exits
+can leave the status at 0 (issue #30). Every scenario writes its report into
+`Java/crash-reports`, and the script renames it to `<suite>-<scenario>-hs_err_pid<pid>.log` and
+prints the signal and the top native frames, see `Java/jvm-crash-reports.sh`. The same applies
+to `run-protege-plugin-test.sh` below.
+
 `run-owlapi-test.sh` also needs the OWL API. Note that `owlapi-distribution` is not a single
 jar, it pulls in about fifty dependencies, so the script looks for the class path in
 

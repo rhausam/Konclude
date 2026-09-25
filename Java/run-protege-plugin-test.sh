@@ -161,16 +161,21 @@ cat > "$BUILD_DIR/logback.xml" <<LOGBACK
 </configuration>
 LOGBACK
 
+. "$JAVA_DIR/jvm-crash-reports.sh"
+
 FAILED_SCENARIOS=""
 for scenario in plugin hierarchy expressions expressions-tableau individuals properties datatypes inconsistency unsupported lifecycle merges timeout entailment interrupt progress; do
 	echo
 	echo "--------------------------------------------------------------------------"
 	CACHE_DIR="$BUILD_DIR/felix-cache-$scenario"
 	rm -rf "$CACHE_DIR"
-	if ! "$JAVA" -cp "$FELIX_JAR:$BUILD_DIR/classes" -Djava.awt.headless=true \
+	"$JAVA" "$CRASH_REPORT_OPTION" -cp "$FELIX_JAR:$BUILD_DIR/classes" -Djava.awt.headless=true \
 			-Dlogback.configurationFile="$BUILD_DIR/logback.xml" \
 			com.konclude.protegetest.KoncludeProtegePluginTest \
-			"$PROTEGE_DIR" "$PLUGIN_JAR" "$TEST_BUNDLE" "$CACHE_DIR" "$scenario"; then
+			"$PROTEGE_DIR" "$PLUGIN_JAR" "$TEST_BUNDLE" "$CACHE_DIR" "$scenario"
+	status=$?
+	# the report is looked for first, so that it is taken care of whatever the status
+	if crash_report_found protege-plugin "$scenario" || [ $status -ne 0 ]; then
 		FAILED_SCENARIOS="$FAILED_SCENARIOS $scenario"
 	fi
 	rm -rf "$CACHE_DIR"
