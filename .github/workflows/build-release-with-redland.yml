@@ -223,10 +223,11 @@ jobs:
           }
           Copy-Item Release\Konclude.dll ..\library\
 
-      # the OWL API test joins its class path with ':', so only the smoke test runs on Windows
       - name: Konclude Library Test
         shell: bash
-        run: ./Java/run-jni-smoke-test.sh library/Konclude.dll
+        run: |
+          ./Java/run-jni-smoke-test.sh library/Konclude.dll
+          ./Java/run-owlapi-test.sh library/Konclude.dll
 
       - uses: actions/upload-artifact@v4
         with:
