@@ -1,7 +1,7 @@
 name: Build Releases (with Redland)
 
 # Builds the release packages of Konclude for Windows, macOS and Linux, and the Protege plug-in
-# with the shared library of Konclude for macOS and Linux, and collects them in a draft GitHub
+# with the shared library of Konclude for all three, and collects them in a draft GitHub
 # release. The workflow runs for tags that match releases/v*, where the name of
 # the release is the tag without the releases/ prefix, and it can be started manually, where
 # the release is named after the most recent tag and its creation can be switched off to only
@@ -21,7 +21,8 @@ permissions:
   contents: read
 
 env:
-  # Qt version that is statically compiled for the macOS and Linux packages. Only the qtbase
+  # Qt version that is statically compiled for the macOS and Linux packages and for the library
+  # of the Protege plug-in on all three platforms. Only the qtbase
   # module is built, since Konclude does not require any other module.
   QT_STATIC_VERSION: 5.15.17
   # Increase whenever the configuration of the static Qt build changes, to invalidate the cache.
@@ -79,7 +80,7 @@ jobs:
   build_windows:
     name: Windows x64 MSVC Dynamic
     runs-on: windows-latest
-    timeout-minutes: 180
+    timeout-minutes: 300
     needs: tags
     env:
       RELEASE_NAME: Konclude-${{ needs.tags.outputs.git_tag }}-Windows-x64-MSVC-Dynamic-Qt5.15.2
@@ -164,6 +165,84 @@ jobs:
           name: release-windows
           path: Release/${{ env.RELEASE_NAME }}.zip
           if-no-files-found: error
+
+      # The shared library for the Protege plug-in. The package above uses the Qt DLLs, which
+      # System.loadLibrary would not find beside the library in the directory that OSGi extracts
+      # it to, so the library is built against a static Qt with the static C runtime of MSVC
+      # instead, and then depends on the system DLLs only, as on macOS and Linux. The Qt is
+      # built with the same tool set as the package.
+      - name: Cache static Qt
+        id: cache-qt-static
+        uses: actions/cache@v4
+        with:
+          path: qt-static
+          key: qt-static-${{ runner.os }}-${{ runner.arch }}-msvc2019-static-runtime-${{ env.QT_STATIC_VERSION }}-${{ env.QT_STATIC_CACHE_REVISION }}
+
+      - name: Install jom
+        run: choco install jom --no-progress -y
+
+      - name: Compile static Qt
+        if: steps.cache-qt-static.outputs.cache-hit != 'true'
+        run: |
+          $ROOT = (Get-Location).Path
+          $QT_MINOR = $env:QT_STATIC_VERSION.Substring(0, $env:QT_STATIC_VERSION.LastIndexOf('.'))
+          curl.exe -fsSL --retry 5 -o qtbase.tar.xz "https://download.qt.io/archive/qt/$QT_MINOR/$env:QT_STATIC_VERSION/submodules/qtbase-everywhere-opensource-src-$env:QT_STATIC_VERSION.tar.xz"
+          tar -xf qtbase.tar.xz
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Set-Location "qtbase-everywhere-src-$env:QT_STATIC_VERSION"
+          .\configure.bat -static -static-runtime -release -opensource -confirm-license -prefix "$ROOT\qt-static" -platform win32-msvc `
+            -no-gui -no-widgets -no-opengl -no-icu -no-dbus -qt-pcre -qt-zlib `
+            -no-sql-mysql -no-sql-psql -no-sql-odbc -nomake examples -nomake tests
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          jom -j "$env:NUMBER_OF_PROCESSORS"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          jom install
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # KoncludeLIB.pro takes the JNI include directories from JAVA_HOME
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Compile the Konclude library
+        run: |
+          New-Item -ItemType Directory -Force -Path konclude-lib, library | Out-Null
+          Set-Location konclude-lib
+          ..\qt-static\bin\qmake.exe -o Makefile ..\KoncludeLIB.pro -after "QT-=gui" "CONFIG-=static staticlib debug_and_release" "CONFIG+=shared dll"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          jom -j "$env:NUMBER_OF_PROCESSORS"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $dependents = dumpbin /nologo /dependents Release\Konclude.dll
+          $dependents
+          $foreign = $dependents | Select-String -Pattern '^\s+(Qt5\S*|vcruntime\S*|msvcp\S*|api-ms-win-crt\S*|ucrtbase\S*)\.dll'
+          if ($foreign) {
+            Write-Output "::error::The library depends on DLLs that are not part of Windows: $($foreign -join ', ')"
+            exit 1
+          }
+          Copy-Item Release\Konclude.dll ..\library\
+
+      # the OWL API test joins its class path with ':', so only the smoke test runs on Windows
+      - name: Konclude Library Test
+        shell: bash
+        run: ./Java/run-jni-smoke-test.sh library/Konclude.dll
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: library-windows
+          path: library/Konclude.dll
+          if-no-files-found: error
+
+      - name: Keep the crash reports of the virtual machine
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jvm-crash-reports-windows
+          path: |
+            hs_err_pid*.log
+            Java/hs_err_pid*.log
+          if-no-files-found: ignore
 
 
 
@@ -516,14 +595,14 @@ jobs:
 
 
 
-  # The Protege plug-in with the libraries of both platforms, see Java/Readme.md. The version of
+  # The Protege plug-in with the libraries of all three platforms, see Java/Readme.md. The version of
   # the plug-in is the one of the release, e.g., 0.7.0-1138 for v0.7.0-1138, which the bundle
   # plug-in turns into the OSGi version 0.7.0.1138.
   build_plugin:
     name: Protege Plug-in
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [tags, build_macosx, build_linux]
+    needs: [tags, build_windows, build_macosx, build_linux]
 
     steps:
       - name: Checkout code
@@ -550,11 +629,13 @@ jobs:
           mvn -B -q versions:set -DnewVersion="${GIT_TAG#v}" -DgenerateBackupPoms=false
           mvn -B package \
             -Dkonclude.library.macos-arm64="$GITHUB_WORKSPACE/libraries/library-macos/libKonclude.dylib" \
-            -Dkonclude.library.linux-x64="$GITHUB_WORKSPACE/libraries/library-linux/libKonclude.so"
+            -Dkonclude.library.linux-x64="$GITHUB_WORKSPACE/libraries/library-linux/libKonclude.so" \
+            -Dkonclude.library.windows-x64="$GITHUB_WORKSPACE/libraries/library-windows/Konclude.dll"
           jar="target/konclude-protege-plugin-${GIT_TAG#v}.jar"
           unzip -l "$jar"
           unzip -p "$jar" META-INF/MANIFEST.MF
-          for library in lib/native/macos-arm64/libKonclude.dylib lib/native/linux-x64/libKonclude.so; do
+          for library in lib/native/macos-arm64/libKonclude.dylib lib/native/linux-x64/libKonclude.so \
+                         lib/native/windows-x64/Konclude.dll; do
             if ! unzip -l "$jar" "$library" >/dev/null; then
               echo "::error::The plug-in does not contain $library."
               exit 1

@@ -7,9 +7,11 @@
 
       mvn package -Dkonclude.library.macos-arm64=<path of libKonclude.dylib>
 
-  and, to carry the library for Linux on x64 as well, which the release workflow does, with
+  and, to carry the libraries for Linux on x64 and Windows on x64 as well, which the release
+  workflow does, with
 
       -Dkonclude.library.linux-x64=<path of libKonclude.so>
+      -Dkonclude.library.windows-x64=<path of Konclude.dll>
 
   and copy target/konclude-protege-plugin-<version>.jar into the plugins directory of Protege.
   The library has to be one that is built against a static Qt, so that it depends on nothing
@@ -52,14 +54,19 @@
 		  the command line. The build fails if the file does not exist.
 		-->
 		<konclude.library.macos-arm64>${project.basedir}/../../Release/libKonclude.dylib</konclude.library.macos-arm64>
+
+		<!--
+		  The entries of Bundle-NativeCode and Include-Resource for the libraries of Linux and
+		  Windows, which the profiles below fill in when the path of the library is given, so
+		  that a build without it neither lists the library nor looks for its file.
+		-->
+		<konclude.nativecode.linux-x64></konclude.nativecode.linux-x64>
+		<konclude.resource.linux-x64></konclude.resource.linux-x64>
+		<konclude.nativecode.windows-x64></konclude.nativecode.windows-x64>
+		<konclude.resource.windows-x64></konclude.resource.windows-x64>
 	</properties>
 
 	<profiles>
-		<!--
-		  Adds the library for Linux on x64 to the one for macOS on arm64. The profile replaces
-		  both instructions of the bundle plug-in, so that a build without the Linux library
-		  neither lists it in Bundle-NativeCode nor looks for its file.
-		-->
 		<profile>
 			<id>linux-x64</id>
 			<activation>
@@ -67,32 +74,29 @@
 					<name>konclude.library.linux-x64</name>
 				</property>
 			</activation>
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>org.apache.felix</groupId>
-						<artifactId>maven-bundle-plugin</artifactId>
-						<configuration>
-							<instructions>
-								<Bundle-NativeCode>
-									lib/native/macos-arm64/libKonclude.dylib;
-										osname=MacOSX; osname="Mac OS X"; processor=aarch64; processor=arm64,
-									lib/native/linux-x64/libKonclude.so;
-										osname=Linux; processor=x86-64; processor=amd64,
-									*
-								</Bundle-NativeCode>
-								<Include-Resource>
-									{maven-resources},
-									lib/native/macos-arm64/libKonclude.dylib=${konclude.library.macos-arm64},
-									lib/native/linux-x64/libKonclude.so=${konclude.library.linux-x64}
-								</Include-Resource>
-							</instructions>
-						</configuration>
-					</plugin>
-				</plugins>
-			</build>
+			<properties>
+				<konclude.nativecode.linux-x64>lib/native/linux-x64/libKonclude.so; osname=Linux; processor=x86-64; processor=amd64,</konclude.nativecode.linux-x64>
+				<konclude.resource.linux-x64>,lib/native/linux-x64/libKonclude.so=${konclude.library.linux-x64}</konclude.resource.linux-x64>
+			</properties>
+		</profile>
+		<!--
+		  Felix normalises the name 'Windows 10' to windows10 and every other Windows, 11 and the
+		  server editions among them, to win32, so both names are needed.
+		-->
+		<profile>
+			<id>windows-x64</id>
+			<activation>
+				<property>
+					<name>konclude.library.windows-x64</name>
+				</property>
+			</activation>
+			<properties>
+				<konclude.nativecode.windows-x64>lib/native/windows-x64/Konclude.dll; osname=Win32; osname="Windows 10"; processor=x86-64; processor=amd64,</konclude.nativecode.windows-x64>
+				<konclude.resource.windows-x64>,lib/native/windows-x64/Konclude.dll=${konclude.library.windows-x64}</konclude.resource.windows-x64>
+			</properties>
 		</profile>
 	</profiles>
+
 
 	<dependencies>
 		<!-- everything the plug-in needs is a bundle of Protege, so nothing is packaged -->
@@ -191,11 +195,15 @@
 						<Bundle-NativeCode>
 							lib/native/macos-arm64/libKonclude.dylib;
 								osname=MacOSX; osname="Mac OS X"; processor=aarch64; processor=arm64,
+							${konclude.nativecode.linux-x64}
+							${konclude.nativecode.windows-x64}
 							*
 						</Bundle-NativeCode>
 						<Include-Resource>
 							{maven-resources},
 							lib/native/macos-arm64/libKonclude.dylib=${konclude.library.macos-arm64}
+							${konclude.resource.linux-x64}
+							${konclude.resource.windows-x64}
 						</Include-Resource>
 					</instructions>
 				</configuration>
