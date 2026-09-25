@@ -142,6 +142,37 @@ A change of the plug-in needs a restart of Protege. The plug-in is compiled agai
 5.6.6, the last release on Maven Central, and runs in 5.6.9; the byte code targets Java 11,
 which is what the Protege distributions bundle.
 
+The reasoner uses one processing unit per logical processor the system reports (`AUTO`). The
+system property `konclude.processorCount`, or else the environment variable
+`KONCLUDE_PROCESSOR_COUNT`, sets another number. In Protege that is a line
+`append=-Dkonclude.processorCount=8` in `jvm.conf`: `run.sh` reads `~/.Protege/conf/jvm.conf`
+if it exists and the `conf/jvm.conf` of the installation otherwise. Setting it
+matters inside a container or under `taskset`: on Linux `AUTO` is Qt 5.15's
+`idealThreadCount()`, which is `sysconf(_SC_NPROCESSORS_ONLN)`, the processors online on the
+machine, and ignores both a CPU limit (`docker --cpus`) and a CPU set (`--cpuset-cpus`). Fewer
+can also be better beside other work, and on a machine with many processors more units help
+only as far as an ontology can be classified in parallel. A value that is neither `AUTO` nor a
+positive number is reported in the log and replaced by `AUTO`. Protege's log shows the count in
+effect when the plug-in starts: 'the shared library of Konclude is loaded, processor count 8'.
+The same applies to any program that uses `KoncludeReasoner`.
+
+Other settings of the reasoner go into the system property `konclude.configuration`, or else
+the environment variable `KONCLUDE_CONFIGURATION`, as `+=Konclude.<Key>=<Value>` separated by
+spaces or commas, and are appended to the loading configuration, after the processor count, so
+that a `+=Konclude.Calculation.ProcessorCount=` among them wins. In `jvm.conf` they have to be
+separated by commas, since `run.sh` splits the options at spaces:
+
+```
+append=-Dkonclude.configuration=+=Konclude.Calculation.Memory.RecycledPoolLimit=200000,+=Konclude.Calculation.Memory.TaskProcessorFreePoolReserveLimit=5000
+```
+
+Only such settings are taken; any other argument, such as a loader that would start a server
+with an open port inside Protege, is dropped with a warning in the log. The settings in effect
+are logged beside the processor count. The keys and their defaults are those of
+`Source/Control/Command/CReasonerConfigurationGroup.cpp`; on the command line a trailing
+`+=Konclude.<Key>=<Value>` does the same, which is how a setting is tried out before it goes
+into `jvm.conf`.
+
 `run-protege-plugin-test.sh [<Protege directory>] [<library>]` builds the plug-in and then
 runs it inside the OSGi framework of the given Protege installation rather than on a class
 path: it starts Felix from Protege's `bundles` directory, installs every bundle in there,
