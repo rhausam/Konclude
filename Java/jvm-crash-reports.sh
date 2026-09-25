@@ -9,9 +9,12 @@
 # scenario, so that it is neither matched again nor blamed on the next scenario, and prints
 # what crashed.
 
+. "$JAVA_DIR/native-paths.sh"
+
 CRASH_REPORT_DIR="$JAVA_DIR/crash-reports"
 mkdir -p "$CRASH_REPORT_DIR"
-CRASH_REPORT_OPTION="-XX:ErrorFile=$CRASH_REPORT_DIR/hs_err_pid%p.log"
+# the JVM is a Windows program under Git Bash, so it gets the path in the form of the platform
+CRASH_REPORT_OPTION="-XX:ErrorFile=$(native_path "$CRASH_REPORT_DIR/hs_err_pid%p.log")"
 
 # crash_report_found <suite> <scenario>
 crash_report_found() {

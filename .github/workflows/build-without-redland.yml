@@ -144,9 +144,8 @@ jobs:
 
   # The JNI interface of Konclude is compiled only for KoncludeLIB.pro, which defines
   # KONCLUDE_COMPILE_JNI_INTERFACE, so the sources of the bridge are empty in the builds above and
-  # nothing notices when a change breaks the shared library or the bridge. The smoke test is a
-  # shell script, which runs in the Git Bash of the Windows runner; the OWL API test is left out
-  # there, since it joins its class path with ':'.
+  # nothing notices when a change breaks the shared library or the bridge. The smoke test and
+  # the OWL API test are shell scripts, which run in the Git Bash of the Windows runner.
   jni_library:
     name: JNI library ${{ matrix.config.name }}
     runs-on: ${{ matrix.config.os }}
@@ -218,6 +217,12 @@ jobs:
       - name: Run the JNI smoke test
         shell: bash
         run: ./Java/run-jni-smoke-test.sh
+
+      # the OWL API wrapper against the library, with the OWL API resolved by Maven; on macOS the
+      # plug-in test below runs the same scenarios once more through the bundles of Protege
+      - name: Run the OWL API test
+        shell: bash
+        run: ./Java/run-owlapi-test.sh
 
       # builds the Protege plug-in around the library and runs it inside the OSGi framework of
       # a Protege installation, see Java/Readme.md. The plug-in carries the library for macOS on

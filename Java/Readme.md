@@ -890,9 +890,10 @@ the same object directory as `Konclude.pro`:
   Protege 5.6 ships, normalises 'Windows 10' to `windows10` and every other Windows, 11 and
   the server editions among them, to `win32`.
 
-The library is tested before it is packaged: the smoke test on all three platforms, the OWL API
-test on macOS and Linux (its script joins the class path with ':', so not on Windows), and the
-plug-in test in the OSGi framework of Protege on macOS.
+The library is tested before it is packaged: the smoke test and the OWL API test on all three
+platforms, and the plug-in test in the OSGi framework of Protege on macOS. On Windows the
+scripts run in Git Bash and hand java, javac and Maven the paths in Windows form and class
+paths joined with ';', see `Java/native-paths.sh`.
 
 ## CLASSIFYING SNOMED CT THROUGH THE WRAPPER
 

@@ -70,6 +70,8 @@ else
 fi
 echo "Using the Konclude shared library from '$LIBRARY_DIR'."
 
+. "$JAVA_DIR/native-paths.sh"
+
 # the OWL API is not a single jar, owlapi-distribution pulls a good fifty dependencies
 resolve_owlapi_classpath() {
 	if [ -n "${OWLAPI_CLASSPATH:-}" ]; then
@@ -80,7 +82,7 @@ resolve_owlapi_classpath() {
 		local classpath=""
 		local jar
 		for jar in "$LIB_DIR"/*.jar; do
-			classpath="${classpath:+$classpath:}$jar"
+			classpath="${classpath:+$classpath$CLASSPATH_SEPARATOR}$(native_path "$jar")"
 		done
 		echo "$classpath"
 		return 0
@@ -103,8 +105,11 @@ resolve_owlapi_classpath() {
   </dependencies>
 </project>
 POM
-	if (cd "$work" && mvn -q -o dependency:build-classpath -Dmdep.outputFile="$work/cp.txt" >/dev/null 2>&1) \
-	   || (cd "$work" && mvn -q dependency:build-classpath -Dmdep.outputFile="$work/cp.txt" >/dev/null 2>&1); then
+	# Maven writes the class path with the separator and the paths of the platform
+	local output
+	output="$(native_path "$work/cp.txt")"
+	if (cd "$work" && mvn -q -o dependency:build-classpath -Dmdep.outputFile="$output" >/dev/null 2>&1) \
+	   || (cd "$work" && mvn -q dependency:build-classpath -Dmdep.outputFile="$output" >/dev/null 2>&1); then
 		cat "$work/cp.txt"
 		rm -rf "$work"
 		return 0
@@ -119,7 +124,7 @@ OWLAPI_CP="$(resolve_owlapi_classpath)" || {
 	echo "dependencies into '$LIB_DIR', or install Maven so that they can be resolved." >&2
 	exit 2
 }
-echo "Using the OWL API from $(echo "$OWLAPI_CP" | tr ':' '\n' | wc -l | tr -d ' ') jar(s)."
+echo "Using the OWL API from $(echo "$OWLAPI_CP" | tr "$CLASSPATH_SEPARATOR" '\n' | wc -l | tr -d ' ') jar(s)."
 
 echo "Compiling the test into '$BUILD_DIR'."
 rm -rf "$BUILD_DIR"
@@ -136,7 +141,8 @@ FAILED_SCENARIOS=""
 for scenario in hierarchy expressions expressions-tableau individuals properties datatypes inconsistency unsupported lifecycle merges timeout entailment interrupt progress; do
 	echo
 	echo "--------------------------------------------------------------------------"
-	"$JAVA" "$CRASH_REPORT_OPTION" -cp "$OWLAPI_CP:$BUILD_DIR" -Djava.library.path="$LIBRARY_DIR" \
+	"$JAVA" "$CRASH_REPORT_OPTION" -cp "$OWLAPI_CP$CLASSPATH_SEPARATOR$(native_path "$BUILD_DIR")" \
+			-Djava.library.path="$(native_path "$LIBRARY_DIR")" \
 			com.konclude.owlapitest.KoncludeOWLAPITest "$scenario"
 	status=$?
 	# the report is looked for first, so that it is taken care of whatever the status
