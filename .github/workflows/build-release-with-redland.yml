@@ -429,14 +429,21 @@ jobs:
 
 
 
+  # One job per architecture. The runners are the oldest available ones, so that the packages run
+  # with as old a glibc as possible; docker is the platform name of the architecture for the image.
   build_linux:
-    name: Linux x64 GCC Static
-    # the oldest available runner, so that the package runs with as old a glibc as possible
-    runs-on: ubuntu-22.04
+    name: Linux ${{ matrix.arch }} GCC Static
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: ubuntu-22.04, docker: amd64 }
+          - { arch: arm64, runner: ubuntu-22.04-arm, docker: arm64 }
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 240
     needs: tags
     env:
-      RELEASE_NAME: Konclude-${{ needs.tags.outputs.git_tag }}-Linux-x64-GCC-Static-Qt5.15.17
+      RELEASE_NAME: Konclude-${{ needs.tags.outputs.git_tag }}-Linux-${{ matrix.arch }}-GCC-Static-Qt5.15.17
 
     steps:
       - name: Checkout Konclude code
@@ -545,9 +552,21 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: release-linux
+          name: release-linux-${{ matrix.arch }}
           path: Release/${{ env.RELEASE_NAME }}.zip
           if-no-files-found: error
+
+      # A Docker image from the package and Docker/Dockerfile, built and run on the architecture it
+      # is for; it is only tested here and not pushed anywhere.
+      - name: Konclude Docker Image Test
+        run: |
+          mkdir -p docker-context
+          cp -r "Release/$RELEASE_NAME" "docker-context/${{ matrix.docker }}"
+          docker build -t konclude-test -f konclude-static/Docker/Dockerfile docker-context
+          docker run --rm -v "$(pwd)/konclude-static/Tests":/data konclude-test \
+            owllinkfile -i /data/galen-classify-request.xml -o /data/docker-response.xml
+          grep -c "SubClassOf" konclude-static/Tests/docker-response.xml
+          rm -f konclude-static/Tests/docker-response.xml
 
       # The shared library for the Protege plug-in, as for macOS. Static archives are linked into a
       # shared object only if they are position independent, which the mkspec of Qt makes them
@@ -581,7 +600,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: library-linux
+          name: library-linux-${{ matrix.arch }}
           path: library/libKonclude.so
           if-no-files-found: error
 
@@ -589,7 +608,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: jvm-crash-reports-linux
+          name: jvm-crash-reports-linux-${{ matrix.arch }}
           path: |
             hs_err_pid*.log
             konclude-static/Java/hs_err_pid*.log
@@ -599,7 +618,7 @@ jobs:
 
 
 
-  # The Protege plug-in with the libraries of all three platforms, see Java/Readme.md. The version of
+  # The Protege plug-in with the libraries of all platforms, see Java/Readme.md. The version of
   # the plug-in is the one of the release, e.g., 0.7.0-1138 for v0.7.0-1138, which the bundle
   # plug-in turns into the OSGi version 0.7.0.1138.
   build_plugin:
@@ -633,13 +652,14 @@ jobs:
           mvn -B -q versions:set -DnewVersion="${GIT_TAG#v}" -DgenerateBackupPoms=false
           mvn -B package \
             -Dkonclude.library.macos-arm64="$GITHUB_WORKSPACE/libraries/library-macos/libKonclude.dylib" \
-            -Dkonclude.library.linux-x64="$GITHUB_WORKSPACE/libraries/library-linux/libKonclude.so" \
+            -Dkonclude.library.linux-x64="$GITHUB_WORKSPACE/libraries/library-linux-x64/libKonclude.so" \
+            -Dkonclude.library.linux-arm64="$GITHUB_WORKSPACE/libraries/library-linux-arm64/libKonclude.so" \
             -Dkonclude.library.windows-x64="$GITHUB_WORKSPACE/libraries/library-windows/Konclude.dll"
           jar="target/konclude-protege-plugin-${GIT_TAG#v}.jar"
           unzip -l "$jar"
           unzip -p "$jar" META-INF/MANIFEST.MF
           for library in lib/native/macos-arm64/libKonclude.dylib lib/native/linux-x64/libKonclude.so \
-                         lib/native/windows-x64/Konclude.dll; do
+                         lib/native/linux-arm64/libKonclude.so lib/native/windows-x64/Konclude.dll; do
             if ! unzip -l "$jar" "$library" >/dev/null; then
               echo "::error::The plug-in does not contain $library."
               exit 1

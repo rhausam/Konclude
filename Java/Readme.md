@@ -124,13 +124,13 @@ The library has to be one that depends on nothing but the system, since Protege 
 offer: build `KoncludeLIB.pro` against a static Qt, with `QT-=gui`, `CONFIG-=static staticlib`
 and `CONFIG+=shared dll`, and `otool -L`, `ldd` or `dumpbin /dependents` shows no Qt
 afterwards, see 'A LIBRARY WITHOUT QT DEPENDENCIES' below. The release workflow builds such a
-library for macOS on arm64, Linux on x64 and Windows on x64 and packages all three into one
-plug-in, which the draft release carries beside the packages of the command line program.
+library for macOS on arm64, Linux on x64 and arm64 and Windows on x64 and packages all four
+into one plug-in, which the draft release carries beside the packages of the command line program.
 
 A local build takes the library for macOS from the property `konclude.library.macos-arm64` and
-fails if the file is missing. The properties `konclude.library.linux-x64` and
-`konclude.library.windows-x64` each add the library of that platform through a profile of the
-pom; without them the plug-in carries the macOS library only:
+fails if the file is missing. The properties `konclude.library.linux-x64`,
+`konclude.library.linux-arm64` and `konclude.library.windows-x64` each add the library of that
+platform through a profile of the pom; without them the plug-in carries the macOS library only:
 
 ```
 cd Java/protege
@@ -873,11 +873,11 @@ CoreServices, CoreFoundation, Foundation, CFNetwork, libSystem, libc++, libz, li
 Homebrew. Both `Java/run-jni-smoke-test.sh` and `Java/run-owlapi-test.sh` pass against it, so a
 plug-in can ship a single self-contained library the way the FaCT++ plug-in does.
 
-The release workflow builds the library in the same way on all three platforms, in a build
+The release workflow builds the library in the same way on all four platforms, in a build
 directory of its own, since `KoncludeLIB.pro` compiles the sources with the JNI interface into
 the same object directory as `Konclude.pro`:
 
-- Linux x64 takes the static Qt of the Linux package. Qt's mkspec compiles its static
+- Linux x64 and arm64 take the static Qt of the Linux package of their architecture. Qt's mkspec compiles its static
   libraries with `-fPIC` already (`QMAKE_CFLAGS_STATIC_LIB`), so no separate Qt is needed for
   a shared object. The library is linked with `-static-libstdc++ -static-libgcc` like the
   package, and with `-Wl,--exclude-libs,ALL`, so that the C++ runtime and Qt inside it do not
@@ -889,8 +889,14 @@ the same object directory as `Konclude.pro`:
 - The OSGi entry for Windows names both `Win32` and `"Windows 10"`, since Felix 7.0.5, which
   Protege 5.6 ships, normalises 'Windows 10' to `windows10` and every other Windows, 11 and
   the server editions among them, to `win32`.
+- The OSGi entries for 64 bit ARM, macOS and Linux, name the processor `aarch64` only, which
+  is what Java reports on both. Felix normalises `arm64` to `arm_le`, the 32 bit ARM, so an
+  entry with it would offer the library to a 32 bit Java that cannot load it.
+- jemalloc, which the Linux packages link statically, fixes the page size when it is built,
+  and refuses to run on a kernel with larger pages. The arm64 build assumes 64 KB pages, so
+  that it runs on kernels with 4, 16 and 64 KB pages alike.
 
-The library is tested before it is packaged: the smoke test and the OWL API test on all three
+The library is tested before it is packaged: the smoke test and the OWL API test on all four
 platforms, and the plug-in test in the OSGi framework of Protege on macOS. On Windows the
 scripts run in Git Bash and hand java, javac and Maven the paths in Windows form and class
 paths joined with ';', see `Java/native-paths.sh`.
