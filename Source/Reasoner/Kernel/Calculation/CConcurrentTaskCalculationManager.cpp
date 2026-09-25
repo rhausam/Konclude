@@ -37,6 +37,13 @@ namespace Konclude {
 					mTemMemMan = nullptr;
 				}
 
+				cint64 CConcurrentTaskCalculationManager::stopCalculation(unsigned long waitMillis) {
+					if (mTaskCalcEn) {
+						return mTaskCalcEn->stopProcessorUnits(waitMillis);
+					}
+					return 0;
+				}
+
 				CCalculationManager *CConcurrentTaskCalculationManager::calculateTask(CSatisfiableCalculationTask* task) {
 					if (mTaskCalcEn) {
 						CTaskEventCommunicator::postSendTaskScheduleEvent(mTaskCalcEn->getSchedulerTaskProcessorUnit()->getEventHandler(),task,mTemMemMan);

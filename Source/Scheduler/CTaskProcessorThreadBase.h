@@ -23,6 +23,7 @@
 
 // Libraries includes
 #include <QTime>
+#include <atomic>
 
 // Namespace includes
 #include "SchedulerSettings.h"
@@ -169,7 +170,8 @@ namespace Konclude {
 				CTaskReserveQueueConsumer* mTaskReserveQueueConsumer;
 
 
-				bool mProcessingStopped;
+				// set by another thread in stopProcessing, hence atomic
+				std::atomic<bool> mProcessingStopped;
 
 				bool mThreadBlocked;
 

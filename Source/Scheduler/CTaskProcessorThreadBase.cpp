@@ -172,8 +172,12 @@ namespace Konclude {
 			return this;
 		}
 
+		// Ends the processing loop, which otherwise never returns to the event loop of the thread,
+		// so that quit() and wait() can then end the thread. The loop sees the flag when it wakes,
+		// which the release makes immediate; a task in progress finishes its current step first.
 		CTaskProcessorThreadBase* CTaskProcessorThreadBase::stopProcessing() {
 			mProcessingStopped = true;
+			mProcessingWakeUpSemaphore.release();
 			return this;
 		}
 

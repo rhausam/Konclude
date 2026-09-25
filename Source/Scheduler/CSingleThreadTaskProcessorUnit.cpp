@@ -258,8 +258,12 @@ namespace Konclude {
 			return this;
 		}
 
+		// Ends the processing loop, which otherwise never returns to the event loop of the thread,
+		// so that quit() and wait() can then end the thread. The unit waits for work without a
+		// timeout, so the release is what wakes it; a task in progress finishes its current step.
 		CSingleThreadTaskProcessorUnit* CSingleThreadTaskProcessorUnit::stopProcessing() {
 			mProcessingStopped = true;
+			mProcessingWakeUpSemaphore.release();
 			return this;
 		}
 

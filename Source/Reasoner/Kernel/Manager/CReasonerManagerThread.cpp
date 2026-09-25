@@ -85,6 +85,9 @@ namespace Konclude {
 					mSatExpCache = 0;
 					mReuseCompGraphCache = 0;
 					mSatNodeExpCache = 0;
+					mCompConsCache = 0;
+					mBackendAssCache = 0;
+					mOccStatsCache = 0;
 					//}
 					mPrecomputationManager = new CPrecomputationManager(this);
 					mPreprocessingManager = new CPreprocessingManager(this);
@@ -287,7 +290,45 @@ namespace Konclude {
 
 					LOG(INFO,"::Konclude::Reasoner::Kernel::ReasonerManager",logTr("Closing Reasoner."),this);
 
-					//QThread::msleep(50);
+					// Nothing stopped the threads of a reasoner before, so after a library instance was
+					// closed they kept running until the process exited, the processor threads polling,
+					// and crashed while Qt's static objects were destroyed (issue #30). They are stopped
+					// and joined here, before the objects they use are deleted: first the workers, which
+					// give tasks to the processor threads, then the processor threads, whose callbacks
+					// reach the workers, then the caches that both use. The objects themselves are left
+					// as before. A thread that does not stop in time is left running and reported.
+					QList<QThread*> workerThreads;
+					if (classificationMan) {
+						workerThreads += classificationMan->getWorkerThreads();
+					}
+					if (mPrecomputationManager) {
+						workerThreads += mPrecomputationManager->getWorkerThreads();
+					}
+					if (mPreprocessingManager) {
+						workerThreads += mPreprocessingManager->getWorkerThreads();
+					}
+					if (mRealizationManager) {
+						workerThreads += mRealizationManager->getWorkerThreads();
+					}
+					CAnsweringManagerThread* answeringManagerThread = dynamic_cast<CAnsweringManagerThread*>(mAnswererManager);
+					if (answeringManagerThread) {
+						workerThreads += answeringManagerThread->getWorkerThreads();
+						workerThreads.append(answeringManagerThread);
+					}
+					qint64 stillRunningCount = CThread::quitAndWaitThreads(workerThreads, 30000);
+					if (mCalculationManager) {
+						stillRunningCount += mCalculationManager->stopCalculation(30000);
+					}
+					QList<QThread*> cacheThreads;
+					for (QThread* cacheThread : QList<QThread*>({ mCompConsCache, mBackendAssCache, mOccStatsCache })) {
+						if (cacheThread) {
+							cacheThreads.append(cacheThread);
+						}
+					}
+					stillRunningCount += CThread::quitAndWaitThreads(cacheThreads, 30000);
+					if (stillRunningCount > 0) {
+						LOG(WARN,"::Konclude::Reasoner::Kernel::ReasonerManager",logTr("%1 thread(s) of the reasoner did not stop in time.").arg(stillRunningCount),this);
+					}
 
 					delete mCalculationManager;
 					delete mPrecomputationManager;

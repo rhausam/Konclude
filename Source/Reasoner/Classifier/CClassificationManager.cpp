@@ -38,6 +38,37 @@ namespace Konclude {
 				}
 			}
 
+			QList<QThread*> CClassificationManager::getWorkerThreads() {
+				QList<QThread*> threads;
+				readWriteLock.lockForRead();
+				for (auto worker : mOntoClassifierSet) {
+					QThread* thread = dynamic_cast<QThread*>(worker);
+					if (thread && !threads.contains(thread)) {
+						threads.append(thread);
+					}
+				}
+				for (auto worker : mOntoBackgroundClassifierHash) {
+					QThread* thread = dynamic_cast<QThread*>(worker);
+					if (thread && !threads.contains(thread)) {
+						threads.append(thread);
+					}
+				}
+				for (auto worker : mOntoDataPropertyClassifierHash) {
+					QThread* thread = dynamic_cast<QThread*>(worker);
+					if (thread && !threads.contains(thread)) {
+						threads.append(thread);
+					}
+				}
+				for (auto worker : mOntoObjectPropertyClassifierHash) {
+					QThread* thread = dynamic_cast<QThread*>(worker);
+					if (thread && !threads.contains(thread)) {
+						threads.append(thread);
+					}
+				}
+				readWriteLock.unlock();
+				return threads;
+			}
+
 
 			cint64 CClassificationManager::getActiveClassifierCount() {
 				readWriteLock.lockForRead();

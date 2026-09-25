@@ -25,6 +25,8 @@
 
 
 // Namespace includes
+#include <atomic>
+
 #include "SchedulerSettings.h"
 #include "CTaskEventHandlerBasedProcessor.h"
 #include "CTaskEventHandlerBasedCompletor.h"
@@ -167,7 +169,8 @@ namespace Konclude {
 				QSemaphore mProcessingWakeUpSemaphore;
 				CXLinker<CEventHandler*>* mEventHandlerLinker;
 
-				bool mProcessingStopped;
+				// set by another thread in stopProcessing, hence atomic
+				std::atomic<bool> mProcessingStopped;
 
 				bool mThreadBlocked;
 
