@@ -1,7 +1,8 @@
 name: Build Releases (with Redland)
 
-# Builds the release packages of Konclude for Windows, macOS and Linux and collects them in a
-# draft GitHub release. The workflow runs for tags that match releases/v*, where the name of
+# Builds the release packages of Konclude for Windows, macOS and Linux, and the Protege plug-in
+# with the shared library of Konclude for macOS and Linux, and collects them in a draft GitHub
+# release. The workflow runs for tags that match releases/v*, where the name of
 # the release is the tag without the releases/ prefix, and it can be started manually, where
 # the release is named after the most recent tag and its creation can be switched off to only
 # build and test the packages.
@@ -284,6 +285,65 @@ jobs:
           path: Release/${{ env.RELEASE_NAME }}.zip
           if-no-files-found: error
 
+      # The shared library for the Protege plug-in, against the same static Qt, so that it depends
+      # on the system only, see 'A LIBRARY WITHOUT QT DEPENDENCIES' in Java/Readme.md. It is built
+      # in a directory of its own, since KoncludeLIB.pro compiles the sources with the JNI
+      # interface into the same object directory as Konclude.pro. A static Qt propagates
+      # CONFIG += static, which would make the library an archive, hence the CONFIG arguments.
+      # KoncludeLIB.pro takes the JNI include directories from JAVA_HOME.
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Compile the Konclude library
+        run: |
+          mkdir -p konclude-lib library
+          cd konclude-lib
+          ../qt-static/bin/qmake -o Makefile ../konclude-static/KoncludeLIB.pro -after "QT-=gui" "CONFIG-=static staticlib" "CONFIG+=shared dll"
+          make -j"$(sysctl -n hw.ncpu)"
+          otool -L Release/libKonclude.dylib
+          # the first line is the install name of the library itself
+          if otool -L Release/libKonclude.dylib | tail -n +3 | grep -vE "^\s*(/usr/lib/|/System/Library/)"; then
+            echo "::error::The library depends on the libraries listed above, which are not part of macOS."
+            exit 1
+          fi
+          cp -L Release/libKonclude.dylib ../library/
+
+      - name: Konclude Library Test
+        run: |
+          konclude-static/Java/run-jni-smoke-test.sh library/libKonclude.dylib
+          konclude-static/Java/run-owlapi-test.sh library/libKonclude.dylib
+
+      # the plug-in inside the OSGi framework of Protege, as the push workflow does, but with the
+      # library that is shipped
+      - name: Download Protege
+        run: |
+          curl -fsSL --retry 5 -o protege.zip https://github.com/protegeproject/protege-distribution/releases/download/protege-5.6.6/Protege-5.6.6-platform-independent.zip
+          unzip -q protege.zip -d protege
+          ls -d protege/*/bundles
+
+      - name: Konclude Plug-in Test
+        run: konclude-static/Java/run-protege-plugin-test.sh "$(dirname "$(ls -d protege/*/bundles)")" library/libKonclude.dylib
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: library-macos
+          path: library/libKonclude.dylib
+          if-no-files-found: error
+
+      - name: Keep the crash reports of the virtual machine
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jvm-crash-reports-macos
+          path: |
+            hs_err_pid*.log
+            konclude-static/Java/hs_err_pid*.log
+            konclude-static/Java/protege/hs_err_pid*.log
+          if-no-files-found: ignore
+
 
 
 
@@ -405,6 +465,108 @@ jobs:
         with:
           name: release-linux
           path: Release/${{ env.RELEASE_NAME }}.zip
+          if-no-files-found: error
+
+      # The shared library for the Protege plug-in, as for macOS. Static archives are linked into a
+      # shared object only if they are position independent, which the mkspec of Qt makes them
+      # (QMAKE_CFLAGS_STATIC_LIB includes -fPIC). The C++ runtime is linked statically as for the
+      # package, and the symbols of all archives are kept local, so that the C++ runtime and Qt
+      # inside the library do not interpose on those of the virtual machine or of other libraries.
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Compile the Konclude library
+        run: |
+          mkdir -p konclude-lib library
+          cd konclude-lib
+          ../qt-static/bin/qmake -o Makefile ../konclude-static/KoncludeLIB.pro -after "QT-=gui" "CONFIG-=static staticlib" "CONFIG+=shared dll" \
+            "QMAKE_LFLAGS+=-static-libstdc++ -static-libgcc -Wl,--exclude-libs,ALL"
+          make -j"$(nproc)"
+          ldd Release/libKonclude.so
+          if ldd Release/libKonclude.so | grep -vE "(linux-vdso|ld-linux-[a-z0-9_-]+|libc|libm|libdl|libpthread|librt|libz)\.so"; then
+            echo "::error::The library depends on the libraries listed above, which might not be available."
+            exit 1
+          fi
+          cp -L Release/libKonclude.so ../library/
+
+      - name: Konclude Library Test
+        run: |
+          konclude-static/Java/run-jni-smoke-test.sh library/libKonclude.so
+          konclude-static/Java/run-owlapi-test.sh library/libKonclude.so
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: library-linux
+          path: library/libKonclude.so
+          if-no-files-found: error
+
+      - name: Keep the crash reports of the virtual machine
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jvm-crash-reports-linux
+          path: |
+            hs_err_pid*.log
+            konclude-static/Java/hs_err_pid*.log
+          if-no-files-found: ignore
+
+
+
+
+  # The Protege plug-in with the libraries of both platforms, see Java/Readme.md. The version of
+  # the plug-in is the one of the release, e.g., 0.7.0-1138 for v0.7.0-1138, which the bundle
+  # plug-in turns into the OSGi version 0.7.0.1138.
+  build_plugin:
+    name: Protege Plug-in
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [tags, build_macosx, build_linux]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Download libraries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: library-*
+          path: libraries
+
+      - name: Build the plug-in
+        working-directory: Java/protege
+        env:
+          GIT_TAG: ${{ needs.tags.outputs.git_tag }}
+        run: |
+          ls -lR ../../libraries
+          mvn -B -q versions:set -DnewVersion="${GIT_TAG#v}" -DgenerateBackupPoms=false
+          mvn -B package \
+            -Dkonclude.library.macos-arm64="$GITHUB_WORKSPACE/libraries/library-macos/libKonclude.dylib" \
+            -Dkonclude.library.linux-x64="$GITHUB_WORKSPACE/libraries/library-linux/libKonclude.so"
+          jar="target/konclude-protege-plugin-${GIT_TAG#v}.jar"
+          unzip -l "$jar"
+          unzip -p "$jar" META-INF/MANIFEST.MF
+          for library in lib/native/macos-arm64/libKonclude.dylib lib/native/linux-x64/libKonclude.so; do
+            if ! unzip -l "$jar" "$library" >/dev/null; then
+              echo "::error::The plug-in does not contain $library."
+              exit 1
+            fi
+          done
+          mkdir -p ../../plugin
+          cp "$jar" ../../plugin/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-plugin
+          path: plugin/*.jar
           if-no-files-found: error
 
 
@@ -625,7 +787,7 @@ jobs:
   publish:
     name: Draft release
     runs-on: ubuntu-latest
-    needs: [tags, build_windows, build_macosx, build_linux, build_docker]
+    needs: [tags, build_windows, build_macosx, build_linux, build_plugin, build_docker]
     if: always() && needs.tags.result == 'success' && needs.tags.outputs.publish == 'true'
     permissions:
       contents: write

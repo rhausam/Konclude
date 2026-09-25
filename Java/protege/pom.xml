@@ -7,6 +7,10 @@
 
       mvn package -Dkonclude.library.macos-arm64=<path of libKonclude.dylib>
 
+  and, to carry the library for Linux on x64 as well, which the release workflow does, with
+
+      -Dkonclude.library.linux-x64=<path of libKonclude.so>
+
   and copy target/konclude-protege-plugin-<version>.jar into the plugins directory of Protege.
   The library has to be one that is built against a static Qt, so that it depends on nothing
   but the system, see Java/Readme.md.
@@ -49,6 +53,46 @@
 		-->
 		<konclude.library.macos-arm64>${project.basedir}/../../Release/libKonclude.dylib</konclude.library.macos-arm64>
 	</properties>
+
+	<profiles>
+		<!--
+		  Adds the library for Linux on x64 to the one for macOS on arm64. The profile replaces
+		  both instructions of the bundle plug-in, so that a build without the Linux library
+		  neither lists it in Bundle-NativeCode nor looks for its file.
+		-->
+		<profile>
+			<id>linux-x64</id>
+			<activation>
+				<property>
+					<name>konclude.library.linux-x64</name>
+				</property>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.felix</groupId>
+						<artifactId>maven-bundle-plugin</artifactId>
+						<configuration>
+							<instructions>
+								<Bundle-NativeCode>
+									lib/native/macos-arm64/libKonclude.dylib;
+										osname=MacOSX; osname="Mac OS X"; processor=aarch64; processor=arm64,
+									lib/native/linux-x64/libKonclude.so;
+										osname=Linux; processor=x86-64; processor=amd64,
+									*
+								</Bundle-NativeCode>
+								<Include-Resource>
+									{maven-resources},
+									lib/native/macos-arm64/libKonclude.dylib=${konclude.library.macos-arm64},
+									lib/native/linux-x64/libKonclude.so=${konclude.library.linux-x64}
+								</Include-Resource>
+							</instructions>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 	<dependencies>
 		<!-- everything the plug-in needs is a bundle of Protege, so nothing is packaged -->
