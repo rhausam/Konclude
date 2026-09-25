@@ -305,5 +305,6 @@ jobs:
           path: |
             hs_err_pid*.log
             Java/hs_err_pid*.log
+            Java/crash-reports/*.log
             Java/protege/hs_err_pid*.log
           if-no-files-found: ignore
