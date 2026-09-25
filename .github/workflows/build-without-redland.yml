@@ -144,8 +144,9 @@ jobs:
 
   # The JNI interface of Konclude is compiled only for KoncludeLIB.pro, which defines
   # KONCLUDE_COMPILE_JNI_INTERFACE, so the sources of the bridge are empty in the builds above and
-  # nothing notices when a change breaks the shared library or the bridge. Windows is left out
-  # because the smoke test is a shell script.
+  # nothing notices when a change breaks the shared library or the bridge. The smoke test is a
+  # shell script, which runs in the Git Bash of the Windows runner; the OWL API test is left out
+  # there, since it joins its class path with ':'.
   jni_library:
     name: JNI library ${{ matrix.config.name }}
     runs-on: ${{ matrix.config.os }}
@@ -160,6 +161,10 @@ jobs:
         - {
             name: "macOS Latest Clang",
             os: macos-latest
+          }
+        - {
+            name: "Windows Latest MSVC",
+            os: windows-latest
           }
 
     steps:
@@ -187,13 +192,31 @@ jobs:
           java-version: '17'
 
       - name: Compile the shared library
+        if: ${{ !startsWith(matrix.config.os, 'windows') }}
         run: |
           echo `qmake --version`
           qmake KoncludeLIB.pro
           make -j "$(nproc 2>/dev/null || sysctl -n hw.ncpu)"
 
-      # compiles the Java side against the bridge and drives the built library through it
+      # the same tool set and jom as for the command line build above
+      - name: Prepare Visual Studio
+        if: startsWith(matrix.config.os, 'windows')
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          toolset: '14.29'
+
+      - name: Compile the shared library Windows
+        if: startsWith(matrix.config.os, 'windows')
+        run: |
+          choco install jom --no-progress -y
+          qmake --version
+          qmake KoncludeLIB.pro
+          jom -j "$env:NUMBER_OF_PROCESSORS"
+
+      # compiles the Java side against the bridge and drives the built library through it. On
+      # Windows the library finds the Qt DLLs through PATH, to which install-qt-action adds them.
       - name: Run the JNI smoke test
+        shell: bash
         run: ./Java/run-jni-smoke-test.sh
 
       # builds the Protege plug-in around the library and runs it inside the OSGi framework of
