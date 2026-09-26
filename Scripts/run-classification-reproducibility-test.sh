@@ -116,7 +116,9 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 # class, self subsumptions dropped and duplicates removed. Reads the file twice, the equivalence
 # classes have to be known before the subsumptions can be rewritten.
 canonicalise() {
-	awk '
+	# bytewise string comparison, so that the members of an equivalence class are ordered the
+	# same everywhere; the awk of macOS compares by the collation of the locale otherwise
+	LC_ALL=C awk '
 		function iri_of_line(   value) {
 			if (!match($0, /IRI="[^"]*"/)) {
 				return ""
