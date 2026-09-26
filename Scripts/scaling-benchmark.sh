@@ -227,7 +227,9 @@ phase_ms() {
 # one sorted line per equivalence class, one line per subsumption between the smallest members of
 # the two equivalence classes, which leaves exactly the differences that change what was inferred
 canonicalise() {
-	awk '
+	# bytewise string comparison, so that the members of an equivalence class are ordered the
+	# same everywhere; the awk of macOS compares by the collation of the locale otherwise
+	LC_ALL=C awk '
 		function iri_of_line(   value) {
 			if (!match($0, /IRI="[^"]*"/)) {
 				return ""
