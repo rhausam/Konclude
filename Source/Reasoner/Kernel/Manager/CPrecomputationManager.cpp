@@ -42,6 +42,19 @@ namespace Konclude {
 				CPrecomputationManager::~CPrecomputationManager() {
 				}
 
+				QList<QThread*> CPrecomputationManager::getWorkerThreads() {
+					QList<QThread*> threads;
+					mReadWriteLock.lockForRead();
+					for (auto worker : mOntoPrecomputatorHash) {
+						QThread* thread = dynamic_cast<QThread*>(worker);
+						if (thread && !threads.contains(thread)) {
+							threads.append(thread);
+						}
+					}
+					mReadWriteLock.unlock();
+					return threads;
+				}
+
 				CPrecomputator* CPrecomputationManager::getPrecomputator(CConcreteOntology *ontology, CConfigurationBase *config) {
 					CPrecomputator* precomputator = nullptr;
 					mReadWriteLock.lockForRead();

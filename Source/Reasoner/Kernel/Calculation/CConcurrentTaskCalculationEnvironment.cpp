@@ -50,6 +50,23 @@ namespace Konclude {
 				}
 
 
+				cint64 CConcurrentTaskCalculationEnvironment::stopProcessorUnits(unsigned long waitMillis) {
+					// The loop of a unit never returns to the event loop of its thread while it runs, so
+					// quit() only takes effect once stopProcessing has ended the loop. All loops are
+					// stopped first, so that no unit waits for another that is still being joined.
+					QList<QThread*> threads;
+					if (mProcessUnit) {
+						mProcessUnit->stopProcessing();
+						threads.append(mProcessUnit);
+					}
+					for (CTaskProcessorThreadBase* threadUnit : mThreadUnitList) {
+						threadUnit->stopProcessing();
+						threads.append(threadUnit);
+					}
+					return CThread::quitAndWaitThreads(threads, waitMillis);
+				}
+
+
 				CConcurrentTaskCalculationEnvironment* CConcurrentTaskCalculationEnvironment::initSingleTaskProcessor(CSingleThreadTaskProcessorUnit* processUnit) {
 					mProcessUnit = processUnit;
 					mSchedulerUnit = mProcessUnit;

@@ -70,6 +70,8 @@ namespace Konclude {
 						virtual CCalculationManager *calculateJob(CCalculationJob* job, CCallbackData* callbackData = nullptr);
 						virtual CCalculationManager *calculateTask(CSatisfiableCalculationTask* task);
 
+						virtual cint64 stopCalculation(unsigned long waitMillis);
+
 						virtual CCalculationManager *initializeManager(CCalculationEnvironmentFactory *contextFactory, CConfigurationProvider *configurationProvider);
 
 						virtual CCalculationEnviroment *getCalculationContext();
