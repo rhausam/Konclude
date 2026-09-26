@@ -53,7 +53,10 @@ public class KoncludeProtegeReasonerInfo extends AbstractProtegeOWLReasonerInfo 
 	public void initialise() throws Exception {
 		try {
 			KoncludeReasoner.loadNativeLibrary();
-			LOGGER.info("Konclude: the shared library of Konclude is loaded");
+			LOGGER.info("Konclude: the shared library of Konclude is loaded, processor count {} (set with -D{}){}",
+					KoncludeReasoner.PROCESSOR_COUNT, KoncludeReasoner.PROCESSOR_COUNT_PROPERTY,
+					KoncludeReasoner.ADDITIONAL_CONFIGURATION.isEmpty() ? ""
+							: ", additional settings " + KoncludeReasoner.ADDITIONAL_CONFIGURATION.trim());
 		} catch (UnsatisfiedLinkError error) {
 			LOGGER.error("Konclude: the shared library of Konclude could not be loaded on "
 					+ System.getProperty("os.name") + " " + System.getProperty("os.arch")

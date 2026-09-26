@@ -821,6 +821,26 @@ public class KoncludeOWLAPITest {
 	}
 
 	private static void runLifecycle() throws Exception {
+		// the processor count of the loading configuration, see KoncludeReasoner.PROCESSOR_COUNT
+		check("processor count of no value     ", KoncludeReasoner.processorCountSetting(null), "AUTO");
+		check("processor count of 'auto'       ", KoncludeReasoner.processorCountSetting(" auto "), "AUTO");
+		check("processor count of '8'          ", KoncludeReasoner.processorCountSetting("8"), "8");
+		check("processor count of '0'          ", KoncludeReasoner.processorCountSetting("0"), "AUTO");
+		check("processor count of 'many'       ", KoncludeReasoner.processorCountSetting("many"), "AUTO");
+		check("configuration has the count     ", Boolean.valueOf(KoncludeReasoner.DEFAULT_LOADING_CONFIGURATION
+				.contains("+=Konclude.Calculation.ProcessorCount=" + KoncludeReasoner.PROCESSOR_COUNT + " ")), Boolean.TRUE);
+		// the settings of konclude.configuration, see KoncludeReasoner.ADDITIONAL_CONFIGURATION
+		check("settings of no value            ", KoncludeReasoner.additionalConfigurationSettings(null), "");
+		check("settings of two                 ", KoncludeReasoner.additionalConfigurationSettings(
+				" +=Konclude.A.B=1   +=Konclude.C=x "), "+=Konclude.A.B=1 +=Konclude.C=x ");
+		check("settings without a loader       ", KoncludeReasoner.additionalConfigurationSettings(
+				"-OWLlinkServerLoader +=Konclude.A=1"), "+=Konclude.A=1 ");
+		check("settings without a value        ", KoncludeReasoner.additionalConfigurationSettings("+=Konclude.A"), "");
+		check("settings separated by commas    ", KoncludeReasoner.additionalConfigurationSettings(
+				"+=Konclude.A=1,+=Konclude.C=x"), "+=Konclude.A=1 +=Konclude.C=x ");
+		check("configuration ends in them      ", Boolean.valueOf(KoncludeReasoner.DEFAULT_LOADING_CONFIGURATION
+				.endsWith(KoncludeReasoner.ADDITIONAL_CONFIGURATION)), Boolean.TRUE);
+
 		// several reasoners in one virtual machine, each with its own library instance
 		for (int i = 1; i <= 3; ++i) {
 			OWLOntology ontology = familyOntology();

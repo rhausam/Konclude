@@ -140,15 +140,44 @@ public class KoncludeReasoner implements OWLReasoner {
 	 * has to start from this. An empty configuration means this one; it is not handed to the
 	 * library as it is, because the library's own default lacks the last line.
 	 *
-	 * 'Konclude.Calculation.ProcessorCount' is set to AUTO because the default of the library
-	 * is a single processing unit, as it is for the command line without '-w AUTO'. Classifying
-	 * SNOMED CT takes 156 s with one unit against 34.9 s with AUTO on a machine with 16 cores.
+	 * 'Konclude.Calculation.ProcessorCount' is PROCESSOR_COUNT, AUTO unless it is overridden,
+	 * because the default of the library is a single processing unit, as it is for the command
+	 * line without '-w AUTO'. Classifying SNOMED CT takes 156 s with one unit against 34.9 s with
+	 * AUTO on a machine with 16 cores.
 	 */
-	public static final String DEFAULT_LOADING_CONFIGURATION =
-			"-DefaultReasonerLoader "
-			+ "+=Konclude.Execution.CalculationManager=Konclude.Calculation.Calculator.ConcurrentTaskCalculationManager "
-			+ "-JNICommandProcessorLoader "
-			+ "+=Konclude.Calculation.ProcessorCount=AUTO ";
+	public static final String DEFAULT_LOADING_CONFIGURATION;
+
+	/**
+	 * The system property, and the environment variable, that set the number of processing
+	 * units, AUTO or a positive number; the property takes precedence. AUTO is one per logical
+	 * processor that the system reports, which inside a container limited to fewer processors,
+	 * or beside other work on the same machine, can be more than is useful. In Protege it is
+	 * set with a line append=-Dkonclude.processorCount=8 in ~/.Protege/conf/jvm.conf, which run.sh
+	 * reads in place of conf/jvm.conf if it exists.
+	 */
+	public static final String PROCESSOR_COUNT_PROPERTY = "konclude.processorCount";
+	public static final String PROCESSOR_COUNT_ENVIRONMENT_VARIABLE = "KONCLUDE_PROCESSOR_COUNT";
+
+	/** The number of processing units the loading configurations ask for, AUTO or a number. */
+	public static final String PROCESSOR_COUNT;
+
+	/**
+	 * The system property, and the environment variable, whose settings are appended to
+	 * DEFAULT_LOADING_CONFIGURATION and FULL_COMPLETION_GRAPH_LOADING_CONFIGURATION, for tuning
+	 * the reasoner on a machine without rebuilding, e.g.
+	 * -Dkonclude.configuration="+=Konclude.Calculation.Memory.RecycledPoolLimit=200000".
+	 * The property takes precedence. They come after the processor count, so a
+	 * Konclude.Calculation.ProcessorCount among them wins. Only settings, tokens of the form
+	 * +=Konclude.Key=Value separated by spaces or commas, are taken; commas are for Protege's
+	 * jvm.conf, whose options run.sh splits at spaces. The rest is dropped, since other arguments start loaders,
+	 * such as a server that opens a port, with a warning. A configuration
+	 * handed to a constructor replaces the default ones and is not extended.
+	 */
+	public static final String CONFIGURATION_PROPERTY = "konclude.configuration";
+	public static final String CONFIGURATION_ENVIRONMENT_VARIABLE = "KONCLUDE_CONFIGURATION";
+
+	/** The settings taken from CONFIGURATION_PROPERTY, empty or ending in a space. */
+	public static final String ADDITIONAL_CONFIGURATION;
 
 	/**
 	 * The default loading arguments plus
@@ -161,12 +190,76 @@ public class KoncludeReasoner implements OWLReasoner {
 	 * see MergeSafety. Building the completion graph is the expensive path that the short cuts
 	 * exist to avoid, which matters for a large ABox.
 	 */
-	public static final String FULL_COMPLETION_GRAPH_LOADING_CONFIGURATION =
-			"-DefaultReasonerLoader "
-			+ "+=Konclude.Execution.CalculationManager=Konclude.Calculation.Calculator.ConcurrentTaskCalculationManager "
-			+ "+=Konclude.Calculation.Precomputation.ForceFullCompletionGraphConstruction=true "
-			+ "-JNICommandProcessorLoader "
-			+ "+=Konclude.Calculation.ProcessorCount=AUTO ";
+	public static final String FULL_COMPLETION_GRAPH_LOADING_CONFIGURATION;
+
+	static {
+		String property = System.getProperty(PROCESSOR_COUNT_PROPERTY);
+		PROCESSOR_COUNT = processorCountSetting(property != null ? property
+				: System.getenv(PROCESSOR_COUNT_ENVIRONMENT_VARIABLE));
+		String configuration = System.getProperty(CONFIGURATION_PROPERTY);
+		ADDITIONAL_CONFIGURATION = additionalConfigurationSettings(configuration != null ? configuration
+				: System.getenv(CONFIGURATION_ENVIRONMENT_VARIABLE));
+		DEFAULT_LOADING_CONFIGURATION =
+				"-DefaultReasonerLoader "
+				+ "+=Konclude.Execution.CalculationManager=Konclude.Calculation.Calculator.ConcurrentTaskCalculationManager "
+				+ "-JNICommandProcessorLoader "
+				+ "+=Konclude.Calculation.ProcessorCount=" + PROCESSOR_COUNT + " "
+				+ ADDITIONAL_CONFIGURATION;
+		FULL_COMPLETION_GRAPH_LOADING_CONFIGURATION =
+				"-DefaultReasonerLoader "
+				+ "+=Konclude.Execution.CalculationManager=Konclude.Calculation.Calculator.ConcurrentTaskCalculationManager "
+				+ "+=Konclude.Calculation.Precomputation.ForceFullCompletionGraphConstruction=true "
+				+ "-JNICommandProcessorLoader "
+				+ "+=Konclude.Calculation.ProcessorCount=" + PROCESSOR_COUNT + " "
+				+ ADDITIONAL_CONFIGURATION;
+	}
+
+	/**
+	 * The settings of the value of the property or the environment variable, each followed by a
+	 * space: the tokens of the form +=Konclude.Key=Value, the others dropped with a warning.
+	 */
+	public static String additionalConfigurationSettings(String value) {
+		if (value == null) {
+			return "";
+		}
+		StringBuilder settings = new StringBuilder();
+		for (String token : value.trim().split("[\\s,]+")) {
+			if (token.isEmpty()) {
+				continue;
+			}
+			if (token.startsWith("+=Konclude.") && token.indexOf('=', 2) > 0) {
+				settings.append(token).append(' ');
+			} else {
+				// LOGGER is initialised after this runs from the static initialiser above
+				LoggerFactory.getLogger(KoncludeReasoner.class).warn(
+						"Konclude: '{}' in the configuration is not a setting of the form +=Konclude.Key=Value and is dropped", token);
+			}
+		}
+		return settings.toString();
+	}
+
+	/**
+	 * The processor count for the loading configuration from the value of the property or the
+	 * environment variable: AUTO for no value, for AUTO in any case and, with a warning, for
+	 * anything that is not a positive number, since the library would take that for 1.
+	 */
+	public static String processorCountSetting(String value) {
+		if (value == null || value.trim().isEmpty() || value.trim().equalsIgnoreCase("AUTO")) {
+			return "AUTO";
+		}
+		try {
+			int count = Integer.parseInt(value.trim());
+			if (count > 0) {
+				return Integer.toString(count);
+			}
+		} catch (NumberFormatException e) {
+			// reported below
+		}
+		// LOGGER is initialised after this runs from the static initialiser above
+		LoggerFactory.getLogger(KoncludeReasoner.class).warn(
+				"Konclude: the processor count '{}' is neither AUTO nor a positive number, AUTO is used", value);
+		return "AUTO";
+	}
 
 	private static boolean sNativeLibraryLoaded = false;
 
