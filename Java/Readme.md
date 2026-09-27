@@ -128,10 +128,12 @@ afterwards, see 'A LIBRARY WITHOUT QT DEPENDENCIES' below. The release workflow 
 library for macOS on arm64, Linux on x64 and arm64 and Windows on x64 and packages all four
 into one plug-in, which the draft release carries beside the packages of the command line program.
 
-A local build takes the library for macOS from the property `konclude.library.macos-arm64` and
-fails if the file is missing. The properties `konclude.library.linux-x64`,
+The properties `konclude.library.macos-arm64`, `konclude.library.linux-x64`,
 `konclude.library.linux-arm64` and `konclude.library.windows-x64` each add the library of that
-platform through a profile of the pom; without them the plug-in carries the macOS library only:
+platform through a profile of the pom, and the build fails if the file is missing. On a Mac with
+an ARM processor the library for macOS is always packaged, from `Release/libKonclude.dylib` of
+an in-tree build unless the property names another file; elsewhere a build carries only the
+libraries whose property is given:
 
 ```
 cd Java/protege
@@ -182,8 +184,10 @@ bundle that requires the plug-in, so that every class is loaded through the bund
 in Protege. Its `plugin` scenario does what Protege does with a reasoner, creating and
 precomputing on a classification thread and asking from two other threads, and checks the
 tasks reported to the progress monitor and a buffered change; the other scenarios are those
-of `run-owlapi-test.sh`, run through the bundles. All pass against Protege 5.6.9 on macOS on
-arm64.
+of `run-owlapi-test.sh`, run through the bundles. The script packages the library of the
+platform it runs on, macOS on arm64 or Linux on x64 or arm64. All pass against Protege 5.6.9 on
+macOS on arm64 and on Debian 13 on arm64, there with a library that uses the Qt 5.15 of the
+system, which is fine for the test but not for a plug-in to ship.
 
 What the plug-in cannot do yet: the inferred axioms that Protege's export and its displayed
 inferences ask for through the queries listed under WHAT THE BRIDGE DOES NOT ANSWER, the

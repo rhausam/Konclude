@@ -7,8 +7,8 @@
 
       mvn package -Dkonclude.library.macos-arm64=<path of libKonclude.dylib>
 
-  and, to carry the libraries for Linux on x64 and Windows on x64 as well, which the release
-  workflow does, with
+  and, to carry the libraries for Linux and Windows as well, which the release workflow does,
+  or instead of the one for macOS, with
 
       -Dkonclude.library.linux-x64=<path of libKonclude.so>
       -Dkonclude.library.linux-arm64=<path of libKonclude.so>
@@ -50,17 +50,21 @@
 		<slf4j.version>1.7.36</slf4j.version>
 
 		<!--
-		  The shared library that goes into the bundle, one per platform. The default is where
-		  an in-tree build of KoncludeLIB.pro puts it; an out-of-tree build passes the path on
-		  the command line. The build fails if the file does not exist.
+		  The shared library for macOS, which a build on a Mac with an ARM processor always
+		  packages. The default is where an in-tree build of KoncludeLIB.pro puts it; an
+		  out-of-tree build passes the path on the command line. The build fails if the file
+		  does not exist.
 		-->
 		<konclude.library.macos-arm64>${project.basedir}/../../Release/libKonclude.dylib</konclude.library.macos-arm64>
 
 		<!--
-		  The entries of Bundle-NativeCode and Include-Resource for the libraries of Linux and
-		  Windows, which the profiles below fill in when the path of the library is given, so
-		  that a build without it neither lists the library nor looks for its file.
+		  The entries of Bundle-NativeCode and Include-Resource for the library of each
+		  platform, which the profiles below fill in when the path of the library is given, or
+		  for macOS on a Mac, so that a build without it neither lists the library nor looks for
+		  its file.
 		-->
+		<konclude.nativecode.macos-arm64></konclude.nativecode.macos-arm64>
+		<konclude.resource.macos-arm64></konclude.resource.macos-arm64>
 		<konclude.nativecode.linux-x64></konclude.nativecode.linux-x64>
 		<konclude.resource.linux-x64></konclude.resource.linux-x64>
 		<konclude.nativecode.linux-arm64></konclude.nativecode.linux-arm64>
@@ -70,6 +74,35 @@
 	</properties>
 
 	<profiles>
+		<!--
+		  The library for macOS is packaged when its path is given, or on a Mac with an ARM
+		  processor with the default path, as before the other platforms could do without it.
+		-->
+		<profile>
+			<id>macos-arm64</id>
+			<activation>
+				<property>
+					<name>konclude.library.macos-arm64</name>
+				</property>
+			</activation>
+			<properties>
+				<konclude.nativecode.macos-arm64>lib/native/macos-arm64/libKonclude.dylib; osname=MacOSX; osname="Mac OS X"; processor=aarch64,</konclude.nativecode.macos-arm64>
+				<konclude.resource.macos-arm64>,lib/native/macos-arm64/libKonclude.dylib=${konclude.library.macos-arm64}</konclude.resource.macos-arm64>
+			</properties>
+		</profile>
+		<profile>
+			<id>macos-arm64-on-a-mac</id>
+			<activation>
+				<os>
+					<family>mac</family>
+					<arch>aarch64</arch>
+				</os>
+			</activation>
+			<properties>
+				<konclude.nativecode.macos-arm64>lib/native/macos-arm64/libKonclude.dylib; osname=MacOSX; osname="Mac OS X"; processor=aarch64,</konclude.nativecode.macos-arm64>
+				<konclude.resource.macos-arm64>,lib/native/macos-arm64/libKonclude.dylib=${konclude.library.macos-arm64}</konclude.resource.macos-arm64>
+			</properties>
+		</profile>
 		<profile>
 			<id>linux-x64</id>
 			<activation>
@@ -212,16 +245,15 @@
 						  library is packaged and the reasoner can say so when it is started.
 						-->
 						<Bundle-NativeCode>
-							lib/native/macos-arm64/libKonclude.dylib;
-								osname=MacOSX; osname="Mac OS X"; processor=aarch64,
+							${konclude.nativecode.macos-arm64}
 							${konclude.nativecode.linux-x64}
 							${konclude.nativecode.linux-arm64}
 							${konclude.nativecode.windows-x64}
 							*
 						</Bundle-NativeCode>
 						<Include-Resource>
-							{maven-resources},
-							lib/native/macos-arm64/libKonclude.dylib=${konclude.library.macos-arm64}
+							{maven-resources}
+							${konclude.resource.macos-arm64}
 							${konclude.resource.linux-x64}
 							${konclude.resource.linux-arm64}
 							${konclude.resource.windows-x64}
