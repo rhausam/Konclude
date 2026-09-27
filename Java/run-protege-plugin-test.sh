@@ -164,7 +164,7 @@ LOGBACK
 . "$JAVA_DIR/jvm-crash-reports.sh"
 
 FAILED_SCENARIOS=""
-for scenario in plugin hierarchy expressions expressions-tableau individuals properties datatypes inconsistency unsupported lifecycle merges timeout entailment interrupt progress; do
+for scenario in plugin hierarchy expressions expressions-tableau expressions-el individuals properties datatypes inconsistency unsupported lifecycle merges timeout entailment interrupt progress; do
 	echo
 	echo "--------------------------------------------------------------------------"
 	CACHE_DIR="$BUILD_DIR/felix-cache-$scenario"

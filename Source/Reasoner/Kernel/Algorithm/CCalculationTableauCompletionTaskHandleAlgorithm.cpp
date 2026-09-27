@@ -21754,7 +21754,9 @@ namespace Konclude {
 								satIndiNode = satIndiNode->getSubstituteIndividualNode();
 							}
 							CReapplyConceptSaturationLabelSet* satConSet = satIndiNode->getReapplyConceptSaturationLabelSet(false);
-							if (satConSet) {
+							// a reduced label lacks the ALL and implication concepts the saturation applied, the
+							// node is not initialized from it since they would not be applied here, see issue #47
+							if (satConSet && !satIndiNode->hasReducedConceptLabel() && !baseSatIndiNode->hasReducedConceptLabel()) {
 								if (satIndiNode->getIndirectStatusFlags()->hasClashedFlag() || baseSatIndiNode->getIndirectStatusFlags()->hasClashedFlag()) {
 									CClashedDependencyDescriptor* clashDes = nullptr;
 									addConceptToIndividualSkipANDProcessing(concept,conceptNegation,indi,depTrackPoint,false,false, true,calcAlgContext);
@@ -22077,7 +22079,9 @@ namespace Konclude {
 				bool CCalculationTableauCompletionTaskHandleAlgorithm::tryExpansionFromSaturatedData(CIndividualProcessNode*& indi, CIndividualProcessNode* createdSuccIndi, CConceptDescriptor* conDes, CDependencyTrackPoint* depTrackPoint, CIndividualSaturationProcessNode*& saturationIndiNode, bool* satCachingPossible, CConceptDescriptor** lastSatCachPossibleConDes, CCalculationAlgorithmContextBase* calcAlgContext) {
 					if (saturationIndiNode && saturationIndiNode->isInitialized()) {
 						CReapplyConceptSaturationLabelSet* satConSet = saturationIndiNode->getReapplyConceptSaturationLabelSet(false);
-						if (satConSet) {
+						// the concepts of a reduced label would be taken as expanded although the ALL and
+						// implication concepts the saturation applied are missing, see issue #47
+						if (satConSet && !saturationIndiNode->hasReducedConceptLabel()) {
 							bool nominalConnectionFlag = saturationIndiNode->getIndirectStatusFlags()->hasNominalConnectionFlag();
 							if (saturationIndiNode->getIndirectStatusFlags()->hasClashedFlag()) {
 								if (!nominalConnectionFlag || !mOptIncrementalExpansion) {

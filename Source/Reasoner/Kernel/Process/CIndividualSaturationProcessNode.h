@@ -125,6 +125,11 @@ namespace Konclude {
 						bool getRequiredBackwardPropagation();
 						CIndividualSaturationProcessNode* setRequiredBackwardPropagation(bool requiredBackProp);
 
+						// the label holds only the concepts the saturation needs itself, the ALL and most
+						// implication concepts it applied are left out, see issue #47
+						bool hasReducedConceptLabel();
+						CIndividualSaturationProcessNode* setReducedConceptLabel(bool reducedConceptLabel);
+
 						bool hasSubstituteIndividualNode();
 						CIndividualSaturationProcessNode* getSubstituteIndividualNode();
 						CIndividualSaturationProcessNode* setSubstituteIndividualNode(CIndividualSaturationProcessNode* indiNode);
@@ -256,6 +261,7 @@ namespace Konclude {
 						CIndividualSaturationProcessNodeStatusFlags mDirectStatusFlags;
 						CIndividualSaturationProcessNodeStatusFlags mIndirectStatusFlags;
 						bool mRequiredBackProp;
+						bool mReducedConceptLabel;
 						bool mDataValueApplied;
 						CConceptSaturationDescriptor* mClashedConSatDesLinker;
 
