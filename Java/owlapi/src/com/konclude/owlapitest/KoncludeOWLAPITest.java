@@ -217,6 +217,32 @@ public class KoncludeOWLAPITest {
 	}
 
 	/**
+	 * The family ontology down to its EL part: no inverse property, no individuals, nothing
+	 * negated. The saturation keeps only a reduced label for the classes of such an ontology,
+	 * which the tableau must not take as expanded (issue #47).
+	 */
+	private static OWLOntology elFamilyOntology() throws OWLOntologyCreationException {
+		OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
+		OWLOntology ontology = manager.createOntology(IRI.create(NS));
+
+		OWLObjectProperty hasChild = objectProperty("hasChild");
+
+		manager.addAxioms(ontology, new HashSet<OWLAxiom>(Arrays.<OWLAxiom>asList(
+			DF.getOWLSubClassOfAxiom(cls("Man"), cls("Person")),
+			DF.getOWLSubClassOfAxiom(cls("Woman"), cls("Person")),
+			DF.getOWLDisjointClassesAxiom(cls("Man"), cls("Woman")),
+			DF.getOWLEquivalentClassesAxiom(cls("Parent"),
+				DF.getOWLObjectIntersectionOf(cls("Person"),
+					DF.getOWLObjectSomeValuesFrom(hasChild, cls("Person")))),
+			DF.getOWLEquivalentClassesAxiom(cls("Father"),
+				DF.getOWLObjectIntersectionOf(cls("Man"), cls("Parent"))),
+			DF.getOWLObjectPropertyDomainAxiom(hasChild, cls("Person")),
+			DF.getOWLObjectPropertyRangeAxiom(hasChild, cls("Person"))
+		)));
+		return ontology;
+	}
+
+	/**
 	 * The loading configuration the scenarios create their reasoners with, empty for the default.
 	 * The 'expressions-tableau' scenario switches the decision of the sub classes of an expression
 	 * from the saturation off, so that the answers of the tableau path stay tested as well.
@@ -364,6 +390,35 @@ public class KoncludeOWLAPITest {
 			});
 		} finally {
 			strictReasoner.dispose();
+		}
+	}
+
+	/**
+	 * Questions about expressions over the EL family ontology. Parent is found for 'hasChild some
+	 * Person' only through the absorbed definition of Parent, which the tableau applies from the
+	 * successor back to the node of the expression; the successor was set up from the reduced label
+	 * of Person the saturation keeps, which lacks that step, so Parent was missed (issue #47).
+	 */
+	private static void runExpressionsEL() throws Exception {
+		OWLOntology ontology = elFamilyOntology();
+		OWLObjectProperty hasChild = objectProperty("hasChild");
+		OWLClassExpression hasChildPerson = DF.getOWLObjectSomeValuesFrom(hasChild, cls("Person"));
+		OWLClassExpression manWithChild = DF.getOWLObjectIntersectionOf(cls("Man"), hasChildPerson);
+
+		OWLReasoner reasoner = reasonerFor(ontology);
+		try {
+			check("equivalentClasses(hasChild some Person)", names(reasoner.getEquivalentClasses(hasChildPerson)),
+					expected("Parent"));
+			check("superClasses(hasChild some Person, false)", names(reasoner.getSuperClasses(hasChildPerson, false)),
+					expected("Person", "Thing"));
+			check("subClasses(hasChild some Person, true) ", names(reasoner.getSubClasses(hasChildPerson, true)),
+					expected("Father"));
+			check("equivalentClasses(Man and hasChild some Person)", names(reasoner.getEquivalentClasses(manWithChild)),
+					expected("Father"));
+			check("superClasses(Man and ..., false) ", names(reasoner.getSuperClasses(manWithChild, false)),
+					expected("Man", "Parent", "Person", "Thing"));
+		} finally {
+			reasoner.dispose();
 		}
 	}
 
@@ -1011,6 +1066,8 @@ public class KoncludeOWLAPITest {
 			sLoadingConfiguration = KoncludeReasoner.DEFAULT_LOADING_CONFIGURATION
 					+ "+=Konclude.Answering.SaturationBasedSubClassDecision=false ";
 			runExpressions();
+		} else if ("expressions-el".equals(scenario)) {
+			runExpressionsEL();
 		} else if ("individuals".equals(scenario)) {
 			runIndividuals();
 		} else if ("properties".equals(scenario)) {

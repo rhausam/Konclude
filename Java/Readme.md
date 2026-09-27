@@ -79,6 +79,7 @@ arguments instead of extending them, so it has to start from that constant.
 | --- | --- |
 | `hierarchy` | the class hierarchy of a small family ontology, direct and indirect, and the top and the bottom node |
 | `expressions-tableau` | the `expressions` checks with the decision of the sub classes from the saturation switched off, so that the tableau path stays tested, see SUB CLASSES OF AN EXPRESSION FROM THE SATURATION |
+| `expressions-el` | equivalent and super classes of `hasChild some Person` and `Man and hasChild some Person` over an EL ontology without individuals, whose saturation keeps reduced labels that the tableau must not take as expanded (issue #47) |
 | `expressions` | the questions about anonymous class expressions, as the DL query tab of Protege asks them: equivalent, sub and super classes, satisfiability and instances of `ObjectSomeValuesFrom`, `ObjectIntersectionOf`, `ObjectUnionOf` and `ObjectComplementOf` expressions, and a fresh entity inside one |
 | `individuals` | the types, the instances, the same individuals, the grouping by sameAs and the object property values |
 | `properties` | the object property hierarchy, sub, super and equivalent, direct and indirect |
@@ -369,6 +370,20 @@ run. Driving them against the library brought out the following, all of which ar
   the earlier item that subsumes the expression, `Parent` and its ancestors, and replaced the
   known set with them instead of adding them to it. They are added now. The `expressions`
   scenario asks in that order on purpose and checks the three answers.
+
+  In an ontology without individuals whose classes are all EL, the answers missed classes
+  that an absorbed definition gives
+  ([rhausam/Konclude#47](https://github.com/rhausam/Konclude/issues/47)): with
+  `Parent ≡ Person and (hasChild some Person)` and `hasChild` with the domain `Person`,
+  `hasChild some Person` was not equivalent to `Parent`. The absorption turns the definition
+  into `Person ⊑ ∀hasChild⁻.T` and `T and Person → Parent`, so a `Person` successor sends `T`
+  back to its predecessor. For such an ontology the saturation keeps a reduced label of each
+  node, without the ALL and most of the implication concepts it applied; the tableau set up
+  the successor of `hasChild some Person` from that label and took the concepts as expanded,
+  so `∀hasChild⁻.T` never came up. A saturation node now records whether its label is reduced
+  and the tableau does not take a reduced label over. With an inverse property, an individual
+  or a negation in the ontology the labels are complete, which is why the `expressions`
+  scenario did not show it; the `expressions-el` scenario does.
 
 
 - The bottom node was a direct child of the top node in every taxonomy, so `owl:Nothing`

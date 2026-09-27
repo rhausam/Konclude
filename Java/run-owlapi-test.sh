@@ -138,7 +138,7 @@ fi
 . "$JAVA_DIR/jvm-crash-reports.sh"
 
 FAILED_SCENARIOS=""
-for scenario in hierarchy expressions expressions-tableau individuals properties datatypes inconsistency unsupported lifecycle merges timeout entailment interrupt progress; do
+for scenario in hierarchy expressions expressions-tableau expressions-el individuals properties datatypes inconsistency unsupported lifecycle merges timeout entailment interrupt progress; do
 	echo
 	echo "--------------------------------------------------------------------------"
 	"$JAVA" "$CRASH_REPORT_OPTION" -cp "$OWLAPI_CP$CLASSPATH_SEPARATOR$(native_path "$BUILD_DIR")" \

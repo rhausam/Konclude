@@ -811,6 +811,7 @@ namespace Konclude {
 						initializeRoleAssertions(indiProcSatNode,calcAlgContext);
 						initializeDataAssertions(indiProcSatNode, calcAlgContext);
 
+						indiProcSatNode->setReducedConceptLabel(!mConfForceAllConceptInsertion);
 						indiProcSatNode->setInitialized(true);
 
 						// counted for the progress that another thread may read while the saturation
@@ -2348,6 +2349,7 @@ namespace Konclude {
 
 					resolveData->setProcessingIndividualNode(resolvedNode);
 					resolvedNode->getSuccessorExtensionData(true)->setExtensionResolveData(resolveData);
+					resolvedNode->setReducedConceptLabel(!mConfForceAllConceptInsertion);
 					resolvedNode->setInitialized(true);
 					resolvedNode->setRequiredBackwardPropagation(true);
 					addIndividualToCompletionQueue(resolvedNode,calcAlgContext);
@@ -5201,6 +5203,7 @@ namespace Konclude {
 					if (dataLiteral->getDatatype() && dataLiteral->getDatatype()->getDatatypeConcept()) {
 						addConceptFilteredToIndividual(dataLiteral->getDatatype()->getDatatypeConcept(), false, dataValueIndiNode, false, calcAlgContext);
 					}
+					dataValueIndiNode->setReducedConceptLabel(!mConfForceAllConceptInsertion);
 					dataValueIndiNode->setInitialized(true);
 					dataValueIndiNode->setRequiredBackwardPropagation(true);
 					addIndividualToCompletionQueue(dataValueIndiNode, calcAlgContext);
@@ -5277,6 +5280,7 @@ namespace Konclude {
 						cint64 nextResolveIndiID = calcAlgContext->getUsedProcessingDataBox()->getNextSaturationResolvedSuccessorExtensionIndividualNodeID();
 
 						resolveNode->initIndividualSaturationProcessNode(nextResolveIndiID,nullptr,nullptr);
+						resolveNode->setReducedConceptLabel(!mConfForceAllConceptInsertion);
 						resolveNode->setInitialized(true);
 						resolveNode->setSeparated(true);
 						resolveNode->setRequiredBackwardPropagation(true);

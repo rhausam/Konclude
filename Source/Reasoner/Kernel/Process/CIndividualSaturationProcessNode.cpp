@@ -45,6 +45,7 @@ namespace Konclude {
 					mSubstituteIndiNode = nullptr;
 					mCopyIndiNode = nullptr;
 					mRequiredBackProp = false;
+					mReducedConceptLabel = false;
 
 					mDependingIndiNodeLinker = nullptr;
 					mDepSaturationIndiNode = nullptr;
@@ -327,6 +328,15 @@ namespace Konclude {
 
 				CIndividualSaturationProcessNode* CIndividualSaturationProcessNode::setRequiredBackwardPropagation(bool requiredBackProp) {
 					mRequiredBackProp = requiredBackProp;
+					return this;
+				}
+
+				bool CIndividualSaturationProcessNode::hasReducedConceptLabel() {
+					return mReducedConceptLabel;
+				}
+
+				CIndividualSaturationProcessNode* CIndividualSaturationProcessNode::setReducedConceptLabel(bool reducedConceptLabel) {
+					mReducedConceptLabel = reducedConceptLabel;
 					return this;
 				}
 
