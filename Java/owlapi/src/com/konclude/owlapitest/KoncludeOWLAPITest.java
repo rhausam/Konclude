@@ -295,13 +295,14 @@ public class KoncludeOWLAPITest {
 			check("superClasses(hasChild some Person, true)", names(reasoner.getSuperClasses(hasChildPerson, true)),
 					expected("Person"));
 
-			// the engine loses 'Man' from this expression once 'hasChild some Person' has been
-			// asked about before, as it was above, over OWLlink as well, see Java/Readme.md
-			checkEngineDefect("equivalentClasses(Man and hasChild some Person)", names(reasoner.getEquivalentClasses(manWithChild)),
+			// asked after 'hasChild some Person' on purpose: the engine lost 'Man' from this
+			// expression then, because the super classes found through the earlier item replaced
+			// those of the model instead of being added to them (issue #13)
+			check("equivalentClasses(Man and hasChild some Person)", names(reasoner.getEquivalentClasses(manWithChild)),
 					expected("Father"));
-			checkEngineDefect("superClasses(Man and ..., true)  ", names(reasoner.getSuperClasses(manWithChild, true)),
+			check("superClasses(Man and ..., true)  ", names(reasoner.getSuperClasses(manWithChild, true)),
 					expected("Man", "Parent"));
-			checkEngineDefect("superClasses(Man and ..., false) ", names(reasoner.getSuperClasses(manWithChild, false)),
+			check("superClasses(Man and ..., false) ", names(reasoner.getSuperClasses(manWithChild, false)),
 					expected("Man", "Parent", "Person", "Thing"));
 
 			// the inferred disjoint classes of Protege are the sub classes of the complement

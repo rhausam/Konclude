@@ -12614,6 +12614,12 @@ namespace Konclude {
 							superClassesSet->insert(hierNode);
 						}
 					}
+					// super classes found through other items before stay known, they are sound as well
+					QSet<CHierarchyNode*>* previousKnownSuperClassesSet = conceptItem->getKnownSuperClassNodeSet();
+					if (previousKnownSuperClassesSet) {
+						*superClassesSet += *previousKnownSuperClassesSet;
+						delete previousKnownSuperClassesSet;
+					}
 					conceptItem->setKnownSuperClassNodeSet(superClassesSet);
 				} else {
 					QSet<CConcept*>* knownSuperConceptSet = new QSet<CConcept*>();
@@ -13383,10 +13389,33 @@ namespace Konclude {
 				} visitor;
 				visitSuperSubConceptItems(startConceptItem, false, true, &visitor);
 				if (visitor.mFoundKnwonSuperClassNodeSet) {
-					startConceptItem->setKnownSuperClassNodeSet(visitor.mFoundKnwonSuperClassNodeSet);
+					// The super classes found through other items are super classes of this one, but not
+					// all of them: those of a subsuming item leave out, for instance, the atomic conjuncts
+					// of this item. The satisfiability test of this item may already have given its known
+					// and possible super classes from the model, so the found ones are added to those
+					// instead of replacing them, which lost Man and Father for Man and (hasChild some
+					// Person) once hasChild some Person had been asked about (issue #13).
+					QSet<CHierarchyNode*>* knownSuperClassNodeSet = startConceptItem->getKnownSuperClassNodeSet();
+					if (knownSuperClassNodeSet) {
+						*knownSuperClassNodeSet += *visitor.mFoundKnwonSuperClassNodeSet;
+						delete visitor.mFoundKnwonSuperClassNodeSet;
+					} else {
+						knownSuperClassNodeSet = visitor.mFoundKnwonSuperClassNodeSet;
+						startConceptItem->setKnownSuperClassNodeSet(knownSuperClassNodeSet);
+					}
+					visitor.mFoundKnwonSuperClassNodeSet = knownSuperClassNodeSet;
 					visitSuperSubConceptItems(startConceptItem, true, false, &visitor);
 					if (visitor.mFoundPossibleSuperClassNodeSet) {
-						startConceptItem->setPossibleSuperClassNodeSet(visitor.mFoundPossibleSuperClassNodeSet);
+						// a possible super class has to be one of the model and one of the sub items
+						QSet<CHierarchyNode*>* possibleSuperClassNodeSet = startConceptItem->getPossibleSuperClassNodeSet();
+						if (possibleSuperClassNodeSet) {
+							possibleSuperClassNodeSet->intersect(*visitor.mFoundPossibleSuperClassNodeSet);
+							delete visitor.mFoundPossibleSuperClassNodeSet;
+						} else {
+							possibleSuperClassNodeSet = visitor.mFoundPossibleSuperClassNodeSet;
+							startConceptItem->setPossibleSuperClassNodeSet(possibleSuperClassNodeSet);
+						}
+						possibleSuperClassNodeSet->subtract(*knownSuperClassNodeSet);
 						return true;
 					}
 				}
