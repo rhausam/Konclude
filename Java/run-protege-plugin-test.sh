@@ -98,8 +98,10 @@ echo "Using the Konclude shared library '$LIBRARY'."
 
 case "$(uname -s)-$(uname -m)" in
 	Darwin-arm64) LIBRARY_PROPERTY="konclude.library.macos-arm64" ;;
+	Linux-x86_64) LIBRARY_PROPERTY="konclude.library.linux-x64" ;;
+	Linux-aarch64) LIBRARY_PROPERTY="konclude.library.linux-arm64" ;;
 	*)
-		echo "The plug-in packages the shared library for macOS on arm64 only, this is $(uname -s) on $(uname -m)." >&2
+		echo "The plug-in packages the shared library for macOS on arm64 and Linux on x64 and arm64 only, this is $(uname -s) on $(uname -m)." >&2
 		exit 2
 		;;
 esac
