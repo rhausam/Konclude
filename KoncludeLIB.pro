@@ -40,3 +40,9 @@ RCC_DIR += ./GeneratedFiles
 
 #Include file(s)
 include(Konclude.pri)
+
+# No jemalloc here, unlike Konclude.pro: the library is loaded into a program whose malloc is
+# already in place, a shared jemalloc would not be used, and a static one would serve the library
+# while the C library allocates the strings it returns (realpath, strdup, which Qt frees), so
+# that one allocator would free the memory of the other. The library tunes glibc's malloc
+# instead, see 'THE MEMORY ALLOCATOR ON LINUX' in Java/Readme.md.

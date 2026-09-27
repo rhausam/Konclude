@@ -1343,6 +1343,54 @@ while their own entailment checks confirm the subsumption. Konclude's answer is 
 with the decider on and off.
 
 
+## THE MEMORY ALLOCATOR ON LINUX
+
+On Linux the malloc of the GNU C library cost Konclude a third of the classification time of
+SNOMED CT. Measured on 2026-09-27 on a 32 processor Graviton4 (AWS r8g.8xlarge, Debian 13, glibc
+2.41, transparent huge pages `always`) with the 310 MB SNOMED CT file with additions:
+
+| command line, `-w AUTO` | wall | precomputation | system time |
+|---|---|---|---|
+| glibc, default settings | 87-93 s | 40-44 s | 12-13 s |
+| glibc, tuned as below | 75 s | 32-33 s | 6 s |
+| jemalloc 5.3 linked or preloaded | 59-61 s | 27-28 s | 6 s |
+
+| library through the wrapper | translate | precompute | after dispose |
+|---|---|---|---|
+| glibc, default settings | 19-21 s | 66-68 s | 25 GB (4.8 GB with `malloc_trim`) |
+| glibc, tuned as below | 17 s | 54-57 s | 5 GB |
+| jemalloc 5.3 preloaded | 14 s | 54 s | 7.8 GB |
+
+Every run gave the same hierarchy. Two things make glibc slow here. It trims the free top of each
+thread's heap as soon as it exceeds a threshold that it adapts on its own, so heaps shrink and grow
+all the time while pools of tasks are freed on one thread and allocated on another; with
+transparent huge pages every fault after a trim also clears a 2 MB page, which is the doubled
+system time. That part is removed by fixed thresholds. The rest, about 15 s on the command line, is
+jemalloc's faster allocation itself; the tunable tcache made no difference.
+
+- `CSystemAllocatorTuning` sets the trim threshold to 1 GB (beyond the 64 MB of a thread's heap,
+  so heaps are not trimmed), the top pad to 256 MB and the mmap threshold to glibc's maximum,
+  32 MB, with `mallopt` once per process, at the start of the command line program and when the
+  first library instance is created. The environment variable `KONCLUDE_MALLOC_TUNING=off` keeps
+  glibc's defaults, for comparisons with one binary. Other C libraries are not touched.
+- Since the heaps are no longer trimmed, `closeKoncludeLibraryInstance` calls `malloc_trim(0)`
+  after the instance is deleted. That is also what makes the memory freed by dispose (issue #45)
+  visible on Linux: glibc keeps freed pages in its arenas, so without the call the process stayed
+  at 25 GB after disposing a SNOMED CT reasoner, with it at 5 GB. The peak while reasoning is 1 to
+  3 GB higher with the tuning.
+- The release packages of `Konclude.pro` link jemalloc. `KoncludeWithoutRedland.pro` does with
+  `qmake CONFIG+=jemalloc`, with `JEMALLOC_LIB=<file>` for a particular library, e.g.
+  `/usr/lib/aarch64-linux-gnu/libjemalloc.so.2` of Debian's `libjemalloc2` without the
+  development package. The tuning is then harmless, since glibc's malloc is no longer used.
+- The library cannot use jemalloc. Loaded into the Java virtual machine, a shared jemalloc would
+  not replace the malloc that the process already has. A static one linked with its symbols
+  hidden would serve the library alone, while the functions of the C library that return
+  allocated memory, `realpath` and `strdup` among those that Qt imports and frees, keep using
+  glibc's, so one allocator would free the memory of the other. Preloading jemalloc into the
+  whole virtual machine (`LD_PRELOAD` in Protege's start script) works, and gains a little more
+  in the translation.
+
+
 ## OTHER LIMITATIONS
 
 - Annotations and annotation axioms are dropped by the translator, which matches the
