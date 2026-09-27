@@ -359,14 +359,16 @@ run. Driving them against the library brought out the following, all of which ar
   Fixing this in the engine is tracked as
   [rhausam/Konclude#12](https://github.com/rhausam/Konclude/issues/12).
 
-  Not fixed, tracked as [rhausam/Konclude#13](https://github.com/rhausam/Konclude/issues/13),
-  and also present over OWLlink, is that the answering engine loses part of an
-  expression once a sub expression of it has been asked about before: after the equivalent
-  classes of `hasChild some Person` the equivalent classes of `Man and (hasChild some Person)`
-  come back empty instead of `Father`, and its super classes lack `Man`. Asked first, the
-  expression is answered correctly. The `expressions` scenario asks in that order on purpose
-  and reports these three answers as known defects of the engine instead of failing, so that
-  it shows when the engine is fixed.
+  The answering engine lost part of an expression once a sub expression of it had been asked
+  about before, over OWLlink as well
+  ([rhausam/Konclude#13](https://github.com/rhausam/Konclude/issues/13)): after the
+  equivalent classes of `hasChild some Person` the equivalent classes of
+  `Man and (hasChild some Person)` came back empty instead of `Father`, and its super classes
+  lacked `Man`. The satisfiability test of the expression gives its known super classes from
+  the model, all of them; `searchSuperSubSuperClassesResult` then took the super classes of
+  the earlier item that subsumes the expression, `Parent` and its ancestors, and replaced the
+  known set with them instead of adding them to it. They are added now. The `expressions`
+  scenario asks in that order on purpose and checks the three answers.
 
 
 - The bottom node was a direct child of the top node in every taxonomy, so `owl:Nothing`
