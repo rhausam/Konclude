@@ -42,11 +42,14 @@ namespace Konclude {
 				}
 
 				CJNIQueryProcessor::~CJNIQueryProcessor() {
-					// the revision the expressions were built into is left to the reasoner, as the
-					// OWLlink interface leaves the revisions of its complex queries, the reasoner does
-					// not track a revision that is not installed and its ontology shares its data with
-					// the installed one
 					delete mExpressionBuilder;
+					// The revision the expressions of the queries were built into is not installed, so
+					// the revision manager does not know it and nothing else deletes it; its ontology
+					// references the data of the installed one and is preprocessed on top of it, so it
+					// has to go while the installed ontology still exists. The querying bridge is closed
+					// before the library instance, which deletes the installed ontology (issue #45).
+					delete mExpressionOntRev;
+					mExpressionOntRev = nullptr;
 				}
 
 

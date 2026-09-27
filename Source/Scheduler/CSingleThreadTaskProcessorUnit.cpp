@@ -63,7 +63,40 @@ namespace Konclude {
 			mTaskSchedulingQueue = nullptr;
 		}
 
+		// Releases the memory of the tasks that completed without being released because their data
+		// was kept, such as the saturation or the consistency of an ontology. Nothing else releases
+		// them, so they stayed allocated until the process ended (issue #45). This runs when the unit
+		// is deleted, after its thread has been stopped and after the objects that read the data of
+		// these tasks, the workers and the caches, have been deleted. A task lives in its own memory
+		// pools, which the allocator reads before it releases them.
+		cint64 CSingleThreadTaskProcessorUnit::releaseKeptTasks() {
+			cint64 releasedCount = 0;
+			for (CTask* keptTask : mKeptTaskList) {
+				for (CDeletionLinker* deletionLinkerIt = keptTask->takeDeletionLinker(); deletionLinkerIt; deletionLinkerIt = deletionLinkerIt->getNext()) {
+					deletionLinkerIt->deleteObject();
+				}
+				mMemoryAllocator->releaseMemoryPoolContainer(keptTask);
+				++releasedCount;
+			}
+			mKeptTaskList.clear();
+			return releasedCount;
+		}
+
+
 		CSingleThreadTaskProcessorUnit::~CSingleThreadTaskProcessorUnit() {
+			// The unit owns its allocator, the pool provider handed to it or created for it, and its
+			// task handling algorithm. The thread has been stopped and joined before (see
+			// CConcurrentTaskCalculationEnvironment::stopProcessorUnits). The allocator releases its
+			// reserve of free pools to the provider, so it goes first. The memory of tasks that were
+			// kept, such as the saturation, is not held by the allocator and is released by the
+			// holder of the task (issue #45).
+			releaseKeptTasks();
+			delete mMemoryAllocator;
+			mMemoryAllocator = nullptr;
+			delete mMemoryPoolProvider;
+			mMemoryPoolProvider = nullptr;
+			delete mTaskHandleAlgo;
+			mTaskHandleAlgo = nullptr;
 		}
 
 
@@ -570,6 +603,10 @@ namespace Konclude {
 							deletionLinkerIt->deleteObject();
 						}
 						mMemoryAllocator->releaseMemoryPoolContainer(completionTask);
+					} else {
+						// a task whose data is kept, such as the saturation, is released when the unit is
+						// deleted, see releaseKeptTasks (issue #45)
+						mKeptTaskList.append(completionTask);
 					}
 					completedCount++;
 				}				

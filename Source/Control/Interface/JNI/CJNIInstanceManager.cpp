@@ -45,6 +45,9 @@ namespace Konclude {
 					delete mJNILoaderFactory;
 					delete mJNICommandLoader;
 					delete mCurrentExpBuilder;
+					// the global references of its entity mapping are released by
+					// closeKoncludeLibraryInstance, which has the JNIEnv (issue #45)
+					delete mOntRevData;
 				}
 
 				CJNICommandProcessor* CJNIInstanceManager::getJNICommandProcessor() {

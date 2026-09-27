@@ -185,6 +185,14 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_KoncludeReasonerBridge_closeK
 		CJNICommandLoader* jniCommandLoader = jniInstanceManager->getJNICommandLoader();
 		jniCommandLoader->exit();
 
+		// every entity the bridge mapped holds a global reference to its Java object, which would
+		// keep one reference per class, property and individual in the virtual machine for every
+		// library instance that is closed (issue #45)
+		CJNIOntologyRevisionData* ontRevData = jniInstanceManager->getOntologyRevisionData();
+		if (ontRevData) {
+			ontRevData->getEntityMappingHash()->releaseGlobalReferences(jenv);
+		}
+
 		LOG(INFO,"::Konclude::Main",logTr("Stopping Konclude ..."),0);
 
 		delete jniInstanceManager;

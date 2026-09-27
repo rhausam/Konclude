@@ -39,7 +39,22 @@ namespace Konclude {
 				}
 
 
+				// The precomputation threads have been stopped and joined by the reasoner manager before
+				// (issue #30); their items are deleted while the ontologies and the tasks they read still
+				// exist, then the threads (issue #45). A thread can serve several ontologies.
 				CPrecomputationManager::~CPrecomputationManager() {
+					QSet<CPrecomputationThread*> threadSet;
+					for (CPrecomputator* precomputator : mOntoPrecomputatorHash) {
+						CPrecomputationThread* thread = dynamic_cast<CPrecomputationThread*>(precomputator);
+						if (thread) {
+							threadSet.insert(thread);
+						}
+					}
+					mOntoPrecomputatorHash.clear();
+					for (CPrecomputationThread* thread : threadSet) {
+						thread->deleteOntologyPrecomputationItems();
+					}
+					qDeleteAll(threadSet);
 				}
 
 				QList<QThread*> CPrecomputationManager::getWorkerThreads() {

@@ -36,9 +36,21 @@ namespace Konclude {
 				}
 
 				CJNIQueryExpressionBuildingLoader::~CJNIQueryExpressionBuildingLoader() {
-					// the expressions that were built here and found nowhere else, the ones of the
-					// installed ontology are shared with it and stay
-					qDeleteAll(mOwnedExpressionList);
+					// The expressions that were built here and found nowhere else; the ones of the
+					// installed ontology are shared with it and stay. The building methods also append
+					// them to the concept lists of the expression ontology, which deletes the expressions
+					// it built with it, so they are handed to that ontology instead of being deleted here,
+					// and each is deleted once. CJNIQueryProcessor deletes the expression ontology right
+					// after this (issue #45).
+					if (mExpressionOntology && mExpressionOntology->getBuildData()) {
+						CBUILDLIST<CBuildExpression*>* expressionList = mExpressionOntology->getBuildData()->getExpressionBuildListContainer();
+						for (CBuildExpression* expression : mOwnedExpressionList) {
+							expressionList->append(expression);
+						}
+					} else {
+						qDeleteAll(mOwnedExpressionList);
+					}
+					mOwnedExpressionList.clear();
 				}
 
 

@@ -281,6 +281,15 @@ namespace Konclude {
 					// mapping hashes and container
 					CBUILDLIST<CBuildExpression*>* mExpressionBuildListContainer;
 
+					// how many entries of the build lists were copied from the referenced ontology; the
+					// expressions after them were built for this ontology and are deleted with it
+					cint64 mInheritedExpressionBuildCount;
+					cint64 mInheritedBuildConceptCount;
+					cint64 mInheritedBuildObjectRoleCount;
+					cint64 mInheritedBuildIndividualCount;
+					cint64 mInheritedBuildDataRoleCount;
+					cint64 mInheritedBuildDatatypeCount;
+
 
 					CBUILDHASH<CObjectPropertyTermExpression*,CObjectPropertyTermExpression*>* mInverseObjectPropertyHash;
 					CBUILDLIST< QPair<CObjectPropertyTermExpression*,CObjectPropertyTermExpression*> >* mInverseObjectPropertyList;

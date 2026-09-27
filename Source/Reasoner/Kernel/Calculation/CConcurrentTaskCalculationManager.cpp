@@ -37,6 +37,16 @@ namespace Konclude {
 					mTemMemMan = nullptr;
 				}
 
+				// Deletes the calculation environment with its processor units, whose threads have to be
+				// stopped with stopCalculation before. The generator context stays: the tasks it created
+				// may be kept by the ontology beyond this point, such as the saturation, and their
+				// holders release them (issue #45).
+				CConcurrentTaskCalculationManager::~CConcurrentTaskCalculationManager() {
+					delete calcContext;
+					calcContext = nullptr;
+					mTaskCalcEn = nullptr;
+				}
+
 				cint64 CConcurrentTaskCalculationManager::stopCalculation(unsigned long waitMillis) {
 					if (mTaskCalcEn) {
 						return mTaskCalcEn->stopProcessorUnits(waitMillis);

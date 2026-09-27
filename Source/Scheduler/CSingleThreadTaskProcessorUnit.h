@@ -123,6 +123,9 @@ namespace Konclude {
 
 			// protected methods
 			protected:
+				// releases the memory of the kept tasks, once nothing uses their data any more
+				cint64 releaseKeptTasks();
+
 				virtual bool processControlEvents(QEvent::Type type, CControlEvent *event);
 
 				bool addProcessingTask(CTask* task);
@@ -159,6 +162,8 @@ namespace Konclude {
 				CTask* mTaskCompletionQueue;
 				CTaskProcessorContext *mTaskProcessorContext;
 				CTaskHandleMemoryAllocationManager *mMemoryAllocator;
+				// the completed tasks that were not released because their data is kept
+				QList<CTask*> mKeptTaskList;
 				CTaskHandleAlgorithm* mTaskHandleAlgo;
 				CQueuedLinkedEventHandler* mEventHandler;
 				CTaskStatusPropagator* mTaskStatusPropagator;
