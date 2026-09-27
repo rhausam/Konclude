@@ -330,7 +330,10 @@ namespace Konclude {
 						LOG(WARN,"::Konclude::Reasoner::Kernel::ReasonerManager",logTr("%1 thread(s) of the reasoner did not stop in time.").arg(stillRunningCount),this);
 					}
 
-					delete mCalculationManager;
+					// Deleted in the order of what reads what (issue #45): the workers and the caches read
+					// the data of the tasks that the processor units keep, such as the saturation, and the
+					// units release the memory of those tasks when they are deleted with the calculation
+					// manager, so the calculation manager goes last.
 					delete mPrecomputationManager;
 					delete mPreprocessingManager;
 					delete mRealizationManager;
@@ -351,6 +354,8 @@ namespace Konclude {
 						mSatNodeExpCache->stopThread(true);
 						delete mSatNodeExpCache;
 					}
+
+					delete mCalculationManager;
 
 					if (mBlockThreadPoolThreadCount > 0) {
 						mBlockThreadPoolThreadsBlockingSemaphore.release(mBlockThreadPoolThreadCount);

@@ -181,6 +181,12 @@ namespace Konclude {
 				delete mSaturationPrecomputationStep;
 				delete mIndividualPrecomputationStep;
 
+				// every saturation concept data item, for a concept or a role successor, is created by
+				// this item and appended to the container (issue #45); the saturation data of mSaturDataList
+				// is left, the last one of them belongs to the precomputation of the ontology as well
+				qDeleteAll(mSatItemContainer);
+				mSatItemContainer.clear();
+
 				if (mAllAssertionIndividual) {
 					CConceptAssertionLinker* conAssLinker = mAllAssertionIndividual->getAssertionConceptLinker();
 					while (conAssLinker) {

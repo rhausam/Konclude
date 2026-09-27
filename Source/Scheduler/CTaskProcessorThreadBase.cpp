@@ -82,6 +82,26 @@ namespace Konclude {
 			mLastProcessedEvent = nullptr;
 		}
 
+		// Releases the memory of the tasks that completed without being released because their data
+		// was kept, such as the saturation or the consistency of an ontology. Nothing else releases
+		// them, so they stayed allocated until the process ended (issue #45). This runs when the unit
+		// is deleted, after its thread has been stopped and after the objects that read the data of
+		// these tasks, the workers and the caches, have been deleted. A task lives in its own memory
+		// pools, which the allocator reads before it releases them.
+		cint64 CTaskProcessorThreadBase::releaseKeptTasks() {
+			cint64 releasedCount = 0;
+			for (CTask* keptTask : mKeptTaskList) {
+				for (CDeletionLinker* deletionLinkerIt = keptTask->takeDeletionLinker(); deletionLinkerIt; deletionLinkerIt = deletionLinkerIt->getNext()) {
+					deletionLinkerIt->deleteObject();
+				}
+				mMemoryAllocator->releaseMemoryPoolContainer(keptTask);
+				++releasedCount;
+			}
+			mKeptTaskList.clear();
+			return releasedCount;
+		}
+
+
 		CTaskProcessorThreadBase::~CTaskProcessorThreadBase() {
 		}
 

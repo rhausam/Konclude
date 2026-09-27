@@ -45,8 +45,15 @@ namespace Konclude {
 				}
 
 				CConcurrentTaskCalculationEnvironment::~CConcurrentTaskCalculationEnvironment() {
+					// the units release their pools to providers that report to the allocation
+					// limitation, so the units go before it
 					qDeleteAll(mProcessorUnitList);
 					mProcessorUnitList.clear();
+					mThreadUnitList.clear();
+					mProcessUnit = nullptr;
+					delete mCallbackExecuter;
+					delete mStatusPropagator;
+					delete mAllocationLimitation;
 				}
 
 

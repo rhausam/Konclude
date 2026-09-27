@@ -28,6 +28,9 @@ namespace Konclude {
 		namespace Expression {
 
 
+			CBuildExpression::~CBuildExpression() {
+			}
+
 			CBuildExpression::CBuildExpression() {
 			}
 

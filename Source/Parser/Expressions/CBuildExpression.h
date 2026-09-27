@@ -57,6 +57,10 @@ namespace Konclude {
 					//! Constructor
 					CBuildExpression();
 
+					//! Destructor, virtual since the ontologies delete the expressions they built through
+					//! this type (issue #45)
+					virtual ~CBuildExpression();
+
 					enum ExpressionType {	BETCLASS, BETOBJECTPROPERTY, BETCLASSVARIABLE, BETOBJECTPROPERTYVARIABLE, BETDATAPROPERTYVARIABLE,
 						
 											BETEQUIVALENTCLASSES, BETESUBCLASSOF, BETDISJOINTUNION, BETDISJOINTCLASSES,
