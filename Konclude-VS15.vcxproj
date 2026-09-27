@@ -3466,6 +3466,7 @@
     <ClCompile Include="Source\Reasoner\Preprocess\CTriggeredImplicationGCIAbsorberPreProcess.cpp" />
     <ClCompile Include="Source\Reasoner\Taxonomy\CPCPrSuIpIsDiHierarchyNode.cpp" />
     <ClCompile Include="Source\Utilities\Memory\CMemoryPoolRecycler.cpp" />
+    <ClCompile Include="Source\Utilities\Memory\CSystemAllocatorTuning.cpp" />
     <ClCompile Include="Source\Utilities\Memory\CMemoryPoolAllocationManager.cpp" />
     <ClCompile Include="Source\Utilities\Memory\CMemoryPoolContainer.cpp" />
     <ClCompile Include="Source\Utilities\Memory\CMemoryPoolContainerAllocationManager.cpp" />
@@ -6717,6 +6718,7 @@
     <ClInclude Include="Source\Reasoner\Preprocess\CTriggeredImplicationGCIAbsorberPreProcess.h" />
     <ClInclude Include="Source\Reasoner\Taxonomy\CPCPrSuIpIsDiHierarchyNode.h" />
     <ClInclude Include="Source\Utilities\Memory\CMemoryPoolRecycler.h" />
+    <ClInclude Include="Source\Utilities\Memory\CSystemAllocatorTuning.h" />
     <ClInclude Include="Source\Utilities\Memory\CMemoryPoolAllocationManager.h" />
     <ClInclude Include="Source\Utilities\Memory\CMemoryPoolContainer.h" />
     <ClInclude Include="Source\Utilities\Memory\CMemoryPoolContainerAllocationManager.h" />

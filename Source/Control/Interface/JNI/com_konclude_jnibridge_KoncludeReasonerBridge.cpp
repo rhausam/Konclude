@@ -42,6 +42,7 @@
 #include "CKoncludeInfo.h"
 
 #include "Utilities/UtilitiesSettings.h"
+#include "Utilities/Memory/CSystemAllocatorTuning.h"
 
 #include "Logger/CLogger.h"
 #include "Logger/CConsolePrintLogObserver.h"
@@ -117,6 +118,12 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_KoncludeReasonerBridge_initKo
 				LOG(INFO,"::Konclude::Main","Starting Konclude via JNI ...",0);
 				LOG(INFO,"::Konclude::Main",koncludeString,0);
 				LOG(INFO,"::Konclude::Main",QString("%1, %2, Version %3 (%4)\r\n").arg(CKoncludeInfo::getKoncludeDescription()).arg(CKoncludeInfo::getKoncludeBitPlatformString()).arg(CKoncludeInfo::getKoncludeVersionString()).arg(CKoncludeInfo::getKoncludeCompilationDateString()),0);
+
+				// once per process, for the whole virtual machine, see CSystemAllocatorTuning
+				QString allocatorTuning = Utilities::Memory::CSystemAllocatorTuning::applyTuning();
+				if (!allocatorTuning.isEmpty()) {
+					LOG(INFO,"::Konclude::Main",allocatorTuning,0);
+				}
 
 
 				CJNIInstanceManager* jniInstanceManager = new CJNIInstanceManager();
@@ -197,6 +204,10 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_KoncludeReasonerBridge_closeK
 
 		delete jniInstanceManager;
 		CJNIHandler::setJNIInstanceManager(jenv,bridgeObj,nullptr);
+
+		// the tuned heaps of glibc are not trimmed while a reasoner works, so the memory of the
+		// destroyed one is handed back to the system here
+		Utilities::Memory::CSystemAllocatorTuning::releaseFreeMemory();
 	}
 }
 
