@@ -309,6 +309,25 @@ public class KoncludeOWLAPITest {
 		} finally {
 			reasoner.dispose();
 		}
+
+		// a second unsatisfiable class, whose name has nothing to do with it: every one of them is mapped to
+		// the bottom node, so both have owl:Nothing and each other as equivalent classes (issue #55). It is
+		// unsatisfiable through the disjointness of Man and Woman, as Impossible is, so that the saturation
+		// finds it; with a complement, as in 'Man and not Person', the class came out right before the fix
+		OWLOntology withParadox = familyOntology();
+		withParadox.getOWLOntologyManager().addAxiom(withParadox, DF.getOWLEquivalentClassesAxiom(cls("Paradox"),
+				DF.getOWLObjectIntersectionOf(cls("Woman"), cls("Father"))));
+		reasoner = reasonerFor(withParadox);
+		try {
+			check("equivalentClasses(Paradox)      ", names(reasoner.getEquivalentClasses(cls("Paradox"))),
+					expected("Impossible", "Nothing", "Paradox"));
+			check("equivalentClasses(Impossible), 2", names(reasoner.getEquivalentClasses(cls("Impossible"))),
+					expected("Impossible", "Nothing", "Paradox"));
+			check("superClasses(Paradox, true)    ", names(reasoner.getSuperClasses(cls("Paradox"), true)),
+					expected("Father", "Grandparent", "Mother"));
+		} finally {
+			reasoner.dispose();
+		}
 	}
 
 	/**
