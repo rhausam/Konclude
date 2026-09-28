@@ -355,16 +355,25 @@ run. Driving them against the library brought out the following, all of which ar
   step, and it is only asked for when the instances are, which is the one place that needs the
   direct sub classes realized, to subtract their instances.
 
-- Konclude's complex queries report a class that is equivalent to the asked expression among
-  its sub and its super classes, and their direct answers are not minimal, a class below
-  another class of the answer is reported as direct as well. `CJNIQueryProcessor` therefore
-  answers an expression that is equivalent to a class from the class hierarchy of that class,
-  and takes the direct sub or super classes of any other expression from the hierarchy as
-  well: those classes of the complete answer none of whose parents, or children, is in it.
-  Fixing this in the engine is tracked as
-  [rhausam/Konclude#12](https://github.com/rhausam/Konclude/issues/12). The engine's direct
-  sub classes are minimal since #50, see below; the equivalent class is still among them, so
-  the workaround stays.
+- Konclude's complex queries reported a class that is equivalent to the asked expression among
+  its sub and its super classes, and their direct answers were not minimal, a class below
+  another class of the answer was reported as direct as well
+  ([rhausam/Konclude#12](https://github.com/rhausam/Konclude/issues/12)). `CJNIQueryProcessor`
+  worked around both: it asked for the equivalent classes first and answered an expression
+  that is equivalent to a class from the class hierarchy of that class, and it took the direct
+  sub or super classes of any other expression from the complete answer, those none of whose
+  parents, or children, is in it.
+
+  The engine's direct sub classes are minimal since #50, see below. Since #12 the engine also
+  answers strictly: the sub and super classes of a concept item still include the equivalent
+  node, which is how the equivalence is found, and the answer of a sub or super classes query
+  starts from that node's children or parents instead of from the node. A super classes query
+  computes the sub classes too for that, as the bridge's equivalents query did. The bridge asks
+  for the direct or the complete answer and passes it on. Over OWLlink, `GetSubClasses` and
+  `GetSuperClasses` of an expression no longer list its equivalent class either. An
+  unsatisfiable expression now has the super classes of `owl:Nothing`, where the bridge had
+  answered from the first class of its equivalents, `Impossible` in the family ontology, whose
+  named super classes come out empty.
 
   The answering engine lost part of an expression once a sub expression of it had been asked
   about before, over OWLlink as well

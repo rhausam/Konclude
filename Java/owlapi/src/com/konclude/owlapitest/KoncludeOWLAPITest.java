@@ -316,6 +316,7 @@ public class KoncludeOWLAPITest {
 		OWLClassExpression manWithChild = DF.getOWLObjectIntersectionOf(cls("Man"), hasChildPerson);
 		OWLClassExpression notMan = DF.getOWLObjectComplementOf(cls("Man"));
 		OWLClassExpression manAndWoman = DF.getOWLObjectIntersectionOf(cls("Man"), cls("Woman"));
+		OWLClassExpression personOrNotPerson = DF.getOWLObjectUnionOf(cls("Person"), DF.getOWLObjectComplementOf(cls("Person")));
 		OWLClassExpression womanOrParent = DF.getOWLObjectUnionOf(cls("Woman"), cls("Parent"));
 		OWLClassExpression hasChildWoman = DF.getOWLObjectSomeValuesFrom(hasChild, cls("Woman"));
 		final OWLClassExpression hasChildFresh = DF.getOWLObjectSomeValuesFrom(hasChild, cls("Fresh"));
@@ -358,6 +359,14 @@ public class KoncludeOWLAPITest {
 					expected("Impossible", "Nothing"));
 			check("subClasses(Man and Woman, false) ", names(reasoner.getSubClasses(manAndWoman, false)),
 					expected());
+			// the engine answers the strict sub and super classes itself (issue #12): those of an expression
+			// that is equivalent to owl:Nothing or owl:Thing are the ones of that node, as for the named class
+			check("superClasses(Man and Woman, true)", names(reasoner.getSuperClasses(manAndWoman, true)),
+					expected("Father", "Grandparent", "Mother"));
+			check("superClasses(Person or not Person, true)", names(reasoner.getSuperClasses(personOrNotPerson, true)),
+					expected());
+			check("subClasses(Person or not Person, true)", names(reasoner.getSubClasses(personOrNotPerson, true)),
+					expected("Person"));
 
 			check("instances(hasChild some Woman)   ", names(reasoner.getInstances(hasChildWoman, false)),
 					expected("john", "johnny"));
