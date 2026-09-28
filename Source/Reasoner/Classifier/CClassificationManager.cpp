@@ -32,7 +32,19 @@ namespace Konclude {
 			}
 
 
+			// the classifiers are stopped by the reasoner manager before (issue #45)
 			CClassificationManager::~CClassificationManager() {
+				QSet<CSubsumptionClassifier*> classifierSet(mOntoClassifierSet);
+				for (CSubsumptionClassifier* classifier : mOntoBackgroundClassifierHash) {
+					classifierSet.insert(classifier);
+				}
+				for (CSubsumptionClassifier* classifier : mOntoDataPropertyClassifierHash) {
+					classifierSet.insert(classifier);
+				}
+				for (CSubsumptionClassifier* classifier : mOntoObjectPropertyClassifierHash) {
+					classifierSet.insert(classifier);
+				}
+				qDeleteAll(classifierSet);
 				if (mClassifierFac) {
 					delete mClassifierFac;
 				}

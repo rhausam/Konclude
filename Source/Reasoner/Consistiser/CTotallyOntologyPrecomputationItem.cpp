@@ -186,6 +186,9 @@ namespace Konclude {
 				// is left, the last one of them belongs to the precomputation of the ontology as well
 				qDeleteAll(mSatItemContainer);
 				mSatItemContainer.clear();
+				qDeleteAll(mApproxSatCalcJobList);
+				mApproxSatCalcJobList.clear();
+				mApproxSatCalcJob = nullptr;
 
 				if (mAllAssertionIndividual) {
 					CConceptAssertionLinker* conAssLinker = mAllAssertionIndividual->getAssertionConceptLinker();
@@ -750,8 +753,13 @@ namespace Konclude {
 				return mApproxSatCalcJob;
 			}
 
+			// the item owns every saturation job of the precomputation, one per step, and deletes them with the
+			// data of their construction (issue #45)
 			CTotallyOntologyPrecomputationItem* CTotallyOntologyPrecomputationItem::setSaturationCalculationJob(CApproximatedSaturationCalculationJob* calculationJob) {
 				mApproxSatCalcJob = calculationJob;
+				if (calculationJob && !mApproxSatCalcJobList.contains(calculationJob)) {
+					mApproxSatCalcJobList.append(calculationJob);
+				}
 				return this;
 			}
 

@@ -337,6 +337,8 @@ namespace Konclude {
 					delete mPrecomputationManager;
 					delete mPreprocessingManager;
 					delete mRealizationManager;
+					// the classification manager, with its classifiers, is deleted by the commander, which
+					// created it, after this manager and before the revision manager deletes the ontologies
 
 					if (unsatCache) {
 						unsatCache->stopThread(true);
@@ -356,6 +358,10 @@ namespace Konclude {
 					}
 
 					delete mCalculationManager;
+					// read by the processor units, so after them; the other two caches that are only stopped
+					// above still run jobs of their own on Qt's pool (issue #45)
+					delete mOccStatsCache;
+					mOccStatsCache = nullptr;
 
 					if (mBlockThreadPoolThreadCount > 0) {
 						mBlockThreadPoolThreadsBlockingSemaphore.release(mBlockThreadPoolThreadCount);

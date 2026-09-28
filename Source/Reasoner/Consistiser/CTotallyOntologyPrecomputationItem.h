@@ -491,6 +491,7 @@ namespace Konclude {
 
 
 					CApproximatedSaturationCalculationJob* mApproxSatCalcJob;
+					QList<CApproximatedSaturationCalculationJob*> mApproxSatCalcJobList;
 
 					CCalculationConfigurationExtension* mCalculationConfig;
 
