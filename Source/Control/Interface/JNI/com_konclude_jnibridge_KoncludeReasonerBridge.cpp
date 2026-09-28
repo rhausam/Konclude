@@ -34,6 +34,7 @@
 #include "CJNIOntologyRevisionData.h"
 #include "CJNIAxiomExpressionVisitingLoader.h"
 #include "CJNIQueryProcessor.h"
+#include "CJNILogMessageQueue.h"
 
 
 
@@ -109,6 +110,8 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_KoncludeReasonerBridge_initKo
 
 
 			CLogger *logger = CLogger::getInstance();
+			// keeps the log for the Java side from here on, which logs it with SLF4J
+			CJNILogMessageQueue::getInstance();
 
 			try {
 
@@ -179,6 +182,35 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_KoncludeReasonerBridge_initKo
 
 		}
 	}
+}
+
+
+
+
+
+// the log messages queued since the last call, three entries each: the level (30 info, 60 warning,
+// 70 and above error), the domain and the text; a first entry "dropped" with the count when the queue was full
+JNIEXPORT jobjectArray JNICALL Java_com_konclude_jnibridge_KoncludeReasonerBridge_takeKoncludeLogMessages(JNIEnv * jenv, jclass bridgeClass) {
+	cint64 droppedCount = 0;
+	QList<QString> entries = CJNILogMessageQueue::getInstance()->takeMessages(&droppedCount);
+	if (droppedCount > 0) {
+		entries.prepend(QString("more log messages were written than could be kept, %1 of them were dropped").arg(droppedCount));
+		entries.prepend("::Konclude::JNI");
+		entries.prepend("60");
+	}
+	jclass stringClass = jenv->FindClass("java/lang/String");
+	jobjectArray array = jenv->NewObjectArray(entries.size(), stringClass, nullptr);
+	if (!array) {
+		return nullptr;
+	}
+	for (int i = 0; i < entries.size(); ++i) {
+		const QString& entry = entries.at(i);
+		jstring string = jenv->NewString((const jchar*)entry.utf16(), entry.length());
+		jenv->SetObjectArrayElement(array, i, string);
+		jenv->DeleteLocalRef(string);
+	}
+	jenv->DeleteLocalRef(stringClass);
+	return array;
 }
 
 

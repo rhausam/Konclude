@@ -242,6 +242,32 @@ and every `...FromArgumentList` method terminate the virtual machine if no list 
 pushed, so a caller has to pair them itself.
 
 
+## KONCLUDE'S LOG
+
+Konclude's log reached nobody inside another program: the library registers no observer
+with its logger unless the loading configuration asks for one, such as
+`-CoutLogObserverLoader`, which prints to standard output. So a warning that the ontology is
+not in OWL 2 DL (#32) was lost in Protege.
+
+Since then the library keeps its log messages in a queue, `CJNILogMessageQueue`, and the
+wrapper takes them after every call into the library and logs them with SLF4J, which Protege
+and most OWL API programs use.
+- **Logger names:** the logger is `com.konclude.native` followed by Konclude's domain, for
+  instance `com.konclude.native.Reasoner.Preprocess.NonSimpleRoleRestrictionCheck`.
+- **Levels:** Konclude's warnings are logged as WARN and its errors as ERROR, so Protege shows
+  them in its log window (Window > Show log...) and in `~/.Protege/logs/protege.log`. Konclude's
+  information messages are logged as DEBUG. A classification writes a few hundred of them,
+  mostly about its internal commands, and Protege's root logger is at info.
+- **Showing the information messages:** add a logger to Protege's `conf/logback.xml`:
+
+  ```
+  <logger name="com.konclude.native" level="debug"/>
+  ```
+
+- **One queue per process:** the queue is shared by all library instances of the process,
+  like the logger, and holds up to 10 000 messages. A full queue drops the oldest messages and
+  reports how many it dropped.
+
 ## WHAT THE BRIDGE DOES NOT ANSWER
 
 The querying bridge provides 12 queries about a named entity and 5 about a class expression,

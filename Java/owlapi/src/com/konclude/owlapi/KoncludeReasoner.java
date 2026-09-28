@@ -1476,6 +1476,7 @@ public class KoncludeReasoner implements OWLReasoner {
 			throw new IllegalStateException(cause);
 		} finally {
 			mInFlight.remove(future);
+			forwardKoncludeLog();
 			long milliseconds = (System.nanoTime() - start) / 1000000L;
 			if (milliseconds >= SLOW_CALL_MILLISECONDS) {
 				LOGGER.info("Konclude: {} took {} ms", method, milliseconds);
@@ -1483,6 +1484,63 @@ public class KoncludeReasoner implements OWLReasoner {
 				LOGGER.debug("Konclude: {} took {} ms", method, milliseconds);
 			}
 		}
+	}
+
+	/**
+	 * Hands the log messages of the library to SLF4J, which puts them into the log of Protege and
+	 * of any other program that uses the wrapper. Without this the library's log reached nobody,
+	 * a warning that the ontology is not in OWL 2 DL included (issue #32). The messages are those
+	 * of every library instance of the process, logged under 'com.konclude.native' and Konclude's
+	 * domain, 'com.konclude.native.Reasoner.Preprocess.NonSimpleRoleRestrictionCheck' for
+	 * instance. Level 60 is logged as a warning and 70 and above as an error. Konclude's
+	 * information, level 30, is logged as debug: a classification writes a few hundred such
+	 * lines, most of them about its internal commands, which would fill the log of Protege,
+	 * whose root logger is at info; setting 'com.konclude.native' to debug shows them.
+	 */
+	private static void forwardKoncludeLog() {
+		synchronized (NATIVE_LOG_LOCK) {
+			String[] entries;
+			try {
+				entries = KoncludeReasonerBridge.takeKoncludeLogMessages();
+			} catch (UnsatisfiedLinkError error) {
+				// a library without the method, the log stays where it was
+				return;
+			}
+			if (entries == null) {
+				return;
+			}
+			for (int i = 0; i + 2 < entries.length; i += 3) {
+				double level;
+				try {
+					level = Double.parseDouble(entries[i]);
+				} catch (NumberFormatException exception) {
+					level = 30;
+				}
+				Logger logger = LoggerFactory.getLogger(nativeLoggerName(entries[i + 1]));
+				String message = entries[i + 2];
+				if (level >= 70) {
+					logger.error(message);
+				} else if (level >= 60) {
+					logger.warn(message);
+				} else {
+					logger.debug(message);
+				}
+			}
+		}
+	}
+
+	private static final Object NATIVE_LOG_LOCK = new Object();
+
+	/** '::Konclude::Reasoner::Preprocess' becomes 'com.konclude.native.Reasoner.Preprocess' */
+	private static String nativeLoggerName(String domain) {
+		StringBuilder name = new StringBuilder("com.konclude.native");
+		for (String part : domain.split("::")) {
+			part = part.trim();
+			if (!part.isEmpty() && !part.equals("Konclude")) {
+				name.append('.').append(part.replace(' ', '_'));
+			}
+		}
+		return name.toString();
 	}
 
 	/** the name of a query in the log: with the expression when it is anonymous */

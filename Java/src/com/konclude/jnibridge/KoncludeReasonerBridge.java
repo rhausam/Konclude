@@ -62,6 +62,14 @@ public class KoncludeReasonerBridge {
 
 	public native void finalizeQueryingBridge(QueryingBridge processor);
 
+	/**
+	 * The log messages Konclude wrote since the last call, for all library instances of the
+	 * process: three entries each, the level (30 information, 60 warning, 70 and above error),
+	 * the domain, for instance '::Konclude::Reasoner::Preprocess', and the text. Empty before
+	 * the first library instance was initialised.
+	 */
+	public static native String[] takeKoncludeLogMessages();
+
 	/** only of interest for the smoke test, to show that the native side filled the field */
 	public long getNativeDataPointer() {
 		return mNativeDataPointer;

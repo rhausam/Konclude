@@ -890,6 +890,7 @@
     <ClCompile Include="Source\Control\Interface\JNI\CJNIOntologyRevisionData.cpp" />
     <ClCompile Include="Source\Control\Interface\JNI\CJNIQueryExpressionBuildingLoader.cpp" />
     <ClCompile Include="Source\Control\Interface\JNI\CJNIQueryProcessor.cpp" />
+    <ClCompile Include="Source\Control\Interface\JNI\CJNILogMessageQueue.cpp" />
     <ClCompile Include="Source\Control\Interface\JNI\com_konclude_jnibridge_AxiomExpressionBuildingBridge.cpp" />
     <ClCompile Include="Source\Control\Interface\JNI\com_konclude_jnibridge_KoncludeReasonerBridge.cpp" />
     <ClCompile Include="Source\Control\Interface\JNI\com_konclude_jnibridge_QueryingBridge.cpp" />
@@ -3790,6 +3791,7 @@
     <ClInclude Include="Source\Control\Interface\JNI\CJNIOntologyRevisionData.h" />
     <ClInclude Include="Source\Control\Interface\JNI\CJNIQueryExpressionBuildingLoader.h" />
     <ClInclude Include="Source\Control\Interface\JNI\CJNIQueryProcessor.h" />
+    <ClInclude Include="Source\Control\Interface\JNI\CJNILogMessageQueue.h" />
     <ClInclude Include="Source\Control\Interface\JNI\JNISettings.h" />
     <CustomBuild Include="Source\Control\Interface\OWLlink\COWLlinkHttpConnectionHandlerProcessor.h">
       <Message Condition="'$(Configuration)|$(Platform)'=='DebugDLL|Win32'">Moc%27ing %(Filename)%(Extension)...</Message>
