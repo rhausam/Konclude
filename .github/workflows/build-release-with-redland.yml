@@ -178,8 +178,11 @@ jobs:
           path: qt-static
           key: qt-static-${{ runner.os }}-${{ runner.arch }}-msvc2019-static-runtime-${{ env.QT_STATIC_VERSION }}-${{ env.QT_STATIC_CACHE_REVISION }}
 
+      # jom.ps1 retries the install of jom and falls back to nmake without it
       - name: Install jom
-        run: choco install jom --no-progress -y
+        run: |
+          . .github/scripts/jom.ps1
+          Install-Jom
 
       - name: Compile static Qt
         if: steps.cache-qt-static.outputs.cache-hit != 'true'
@@ -194,10 +197,9 @@ jobs:
             -no-gui -no-widgets -no-opengl -no-icu -no-dbus -qt-pcre -qt-zlib `
             -no-sql-mysql -no-sql-psql -no-sql-odbc -nomake examples -nomake tests
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          jom -j "$env:NUMBER_OF_PROCESSORS"
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-          jom install
-          if ($LASTEXITCODE -ne 0) { exit 1 }
+          . "$ROOT\.github\scripts\jom.ps1"
+          Invoke-Make
+          Invoke-Make install
 
       # KoncludeLIB.pro takes the JNI include directories from JAVA_HOME
       - name: Install Java
