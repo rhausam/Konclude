@@ -290,6 +290,14 @@ public class KoncludeOWLAPITest {
 					Boolean.TRUE);
 			check("isSatisfiable(Impossible)      ", Boolean.valueOf(reasoner.isSatisfiable(cls("Impossible"))),
 					Boolean.FALSE);
+			// an unsatisfiable class is equivalent to owl:Nothing and has its super classes; the classifier added
+			// it to the bottom node without mapping it there, so a node of its own was answered (issue #55)
+			check("equivalentClasses(Impossible)  ", names(reasoner.getEquivalentClasses(cls("Impossible"))),
+					expected("Impossible", "Nothing"));
+			check("superClasses(Impossible, true) ", names(reasoner.getSuperClasses(cls("Impossible"), true)),
+					expected("Father", "Grandparent", "Mother"));
+			check("subClasses(Impossible, false)  ", names(reasoner.getSubClasses(cls("Impossible"), false)),
+					expected());
 			// the bottom node is not a direct sub class of owl:Thing beside the roots, and owl:Thing
 			// is not a direct super class of it beside the leaves; the taxonomy used to keep the
 			// link between the two that an empty taxonomy starts with, which is how unsatisfiable

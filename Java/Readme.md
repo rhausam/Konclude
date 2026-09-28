@@ -424,6 +424,15 @@ run. Driving them against the library brought out the following, all of which ar
   order over the ontology without the domain and the range.
 
 
+- A named unsatisfiable class was answered from a node of its own
+  ([rhausam/Konclude#55](https://github.com/rhausam/Konclude/issues/55)): `Impossible` had no
+  super classes and only itself as equivalent class, while `owl:Nothing` listed `Impossible`
+  among its equivalent classes and had the leaves as its direct super classes. The classifier
+  that works from the saturation added an unsatisfiable class to the bottom node without
+  mapping the class to that node, as the other classifiers do, and `CTaxonomy::getHierarchyNode`
+  creates a node for a class it does not find, so the first query about the class made one
+  without parents. The mapping is updated now; the `hierarchy` scenario checks `Impossible`.
+
 - The bottom node was a direct child of the top node in every taxonomy, so `owl:Nothing`
   and every unsatisfiable class were reported as direct sub classes of `owl:Thing` beside the
   real roots, and `owl:Thing` as a direct super class of `owl:Nothing` beside the leaves.

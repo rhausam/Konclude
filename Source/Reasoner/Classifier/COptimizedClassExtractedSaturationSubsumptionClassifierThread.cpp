@@ -152,6 +152,10 @@ namespace Konclude {
 						}
 					}
 				}
+				// the unsatisfiable classes were added to the bottom node, they have to be found there as well, otherwise
+				// looking one up creates a node of its own without parents, which answered no super classes and not
+				// owl:Nothing as equivalent class (issue #55); the other classifiers update the mapping likewise
+				tax->updateNodeEquivalences(bottomHierNode);
 
 
 				for (QList<COptimizedClassExtractedSaturationSatisfiableTestingItem*>::const_iterator it = extClassItemList.constBegin(), itEnd = extClassItemList.constEnd(); it != itEnd; ++it) {
