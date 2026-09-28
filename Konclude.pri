@@ -265,6 +265,7 @@ HEADERS += \
    ./Source/Control/Interface/JNI/com_konclude_jnibridge_QueryingBridge.h \
    ./Source/Control/Interface/JNI/JNISettings.h \
    ./Source/Control/Interface/JNI/CJNIQueryProcessor.h \
+   ./Source/Control/Interface/JNI/CJNILogMessageQueue.h \
    ./Source/Control/Interface/JNI/CJNIQueryExpressionBuildingLoader.h \
    ./Source/Control/Interface/JNI/CJNIOntologyRevisionData.h \
    ./Source/Control/Interface/JNI/CJNIInstanceManagerConfigType.h \
@@ -2922,6 +2923,7 @@ SOURCES += \
    ./Source/Control/Interface/JNI/com_konclude_jnibridge_KoncludeReasonerBridge.cpp \
    ./Source/Control/Interface/JNI/com_konclude_jnibridge_AxiomExpressionBuildingBridge.cpp \
    ./Source/Control/Interface/JNI/CJNIQueryProcessor.cpp \
+   ./Source/Control/Interface/JNI/CJNILogMessageQueue.cpp \
    ./Source/Control/Interface/JNI/CJNIQueryExpressionBuildingLoader.cpp \
    ./Source/Control/Interface/JNI/CJNIOntologyRevisionData.cpp \
    ./Source/Control/Interface/JNI/CJNIInstanceManagerConfigType.cpp \
