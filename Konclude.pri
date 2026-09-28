@@ -1946,6 +1946,7 @@ HEADERS += \
    ./Source/Reasoner/Preprocess/CFullNominalSchemaGroundingPreProcess.h \
    ./Source/Reasoner/Preprocess/CExtractRelevantConceptRolePreProcess.h \
    ./Source/Reasoner/Preprocess/CExtractPropagationIntoCreationDirectionPreProcess.h \
+   ./Source/Reasoner/Preprocess/CNonSimpleRoleRestrictionCheckPreProcess.h \
    ./Source/Reasoner/Preprocess/CDisjunctSortingPreProcess.h \
    ./Source/Reasoner/Preprocess/CDatatypeNormalizerPreProcess.h \
    ./Source/Reasoner/Preprocess/CDataLiteralNormalizerPreProcess.h \
@@ -4569,6 +4570,7 @@ SOURCES += \
    ./Source/Reasoner/Preprocess/CFullNominalSchemaGroundingPreProcess.cpp \
    ./Source/Reasoner/Preprocess/CExtractRelevantConceptRolePreProcess.cpp \
    ./Source/Reasoner/Preprocess/CExtractPropagationIntoCreationDirectionPreProcess.cpp \
+   ./Source/Reasoner/Preprocess/CNonSimpleRoleRestrictionCheckPreProcess.cpp \
    ./Source/Reasoner/Preprocess/CDisjunctSortingPreProcess.cpp \
    ./Source/Reasoner/Preprocess/CDatatypeNormalizerPreProcess.cpp \
    ./Source/Reasoner/Preprocess/CDataExtenderPreProcess.cpp \

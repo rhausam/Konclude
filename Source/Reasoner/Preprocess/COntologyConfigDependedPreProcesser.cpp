@@ -81,6 +81,14 @@ namespace Konclude {
 						subRoleNorm->preprocess(ontology,&preprocessingContext);
 						reportLog("Stopped subrole transformation preprocessing.");
 						delete subRoleNorm;
+
+						// needs the role hierarchy of the subrole transformation; only for the ontology itself, not for
+						// the testing ontologies of queries, so that it is reported once (issue #32)
+						if (CConfigDataReader::readConfigBoolean(config,"Konclude.Calculation.Preprocessing.NonSimpleRoleRestrictionCheck",true)) {
+							COntologyPreProcess *nonSimpleCheck = new CNonSimpleRoleRestrictionCheckPreProcess();
+							nonSimpleCheck->preprocess(ontology,&preprocessingContext);
+							delete nonSimpleCheck;
+						}
 					}
 					if (CConfigDataReader::readConfigBoolean(config,"Konclude.Calculation.Preprocessing.DatatypeNormalizer",true)) {
 						COntologyPreProcess* datatypeNorm = new CDatatypeNormalizerPreProcess();
