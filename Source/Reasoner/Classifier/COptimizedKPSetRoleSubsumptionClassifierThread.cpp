@@ -63,7 +63,19 @@ namespace Konclude {
 			}
 
 
+			// The temporary ontology of a role classification references the data of the classified ontology, so it
+			// is deleted here, with the classifier, before the revision manager deletes the ontologies (issue #45).
 			COptimizedKPSetRoleSubsumptionClassifierThread::~COptimizedKPSetRoleSubsumptionClassifierThread() {
+				for (COntologyClassificationItem* ontItem : ontItemList) {
+					COptimizedKPSetRoleOntologyClassificationItem* roleItem = dynamic_cast<COptimizedKPSetRoleOntologyClassificationItem*>(ontItem);
+					CConcreteOntology* tmpRoleRealOntology = roleItem ? roleItem->getTemporaryRoleClassificationOntology() : nullptr;
+					if (tmpRoleRealOntology) {
+						// the consistence is the one of the classified ontology, which deletes it
+						tmpRoleRealOntology->setConsistence(nullptr);
+						delete tmpRoleRealOntology;
+						roleItem->setTemporaryRoleClassificationOntology(nullptr);
+					}
+				}
 			}
 
 
