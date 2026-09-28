@@ -10510,6 +10510,15 @@ namespace Konclude {
 							.arg(mSaturationSubsumptionDecider->getCompletionRequestCount()).arg(mLabelCompletionTestCount).arg(mSaturationSubsumptionDecider->getCompletedDecisionCount()),this);
 					LOG(INFO, getDomain(), logTr("Saturation merges: %1 by the label scan, %2 by the closure.").arg(mSaturationSubsumptionDecider->getFastDecisionCount()).arg(mSaturationSubsumptionDecider->getClosureDecisionCount()),this);
 				}
+				// the search goes down from several nodes and stops at every subsumed one, so it also finds nodes below
+				// one that it found subsumed over another path, Father below Parent through Man, or the bottom node
+				// through a leaf; those are no direct sub classes, and an expression with one of them next to its
+				// equivalent class was not found equivalent to it (issue #50)
+				QSet<CHierarchyNode*>* foundSubClassNodeSet = conceptItem->getDirectSubClassNodeSet();
+				if (foundSubClassNodeSet) {
+					conceptItem->setDirectSubClassNodeSet(getDirectReducedSubNodeSet(*foundSubClassNodeSet));
+					delete foundSubClassNodeSet;
+				}
 				delete conceptItem->getPossibleSubClassNodeTestingList();
 				conceptItem->setPossibleSubClassNodeTestingList(nullptr);
 				delete conceptItem->getPossibleSubClassTestingNodeSet();
@@ -12598,6 +12607,34 @@ namespace Konclude {
 
 
 
+			// The topmost nodes of a set of sub classes, those none of whose predecessors is in the set. The bottom
+			// node is left out as soon as there is another node, since each node lies above it; its predecessor set
+			// is not relied upon for that.
+			QSet<CHierarchyNode*>* COptimizedComplexExpressionAnsweringHandler::getDirectReducedSubNodeSet(const QSet<CHierarchyNode*>& subClassesSet) {
+				CHierarchyNode* bottomHierNode = mOntoAnsweringItem->getOntology()->getClassification()->getClassConceptClassification()->getClassConceptTaxonomy()->getBottomHierarchyNode();
+				QSet<CHierarchyNode*>* directSubClassesSet = new QSet<CHierarchyNode*>();
+				for (CHierarchyNode* subClassNode : subClassesSet) {
+					if (!subClassNode || subClassNode == bottomHierNode && subClassesSet.size() > 1) {
+						continue;
+					}
+					bool belowOtherNode = false;
+					for (QSet<CHierarchyNode*>::const_iterator it = subClassesSet.constBegin(), itEnd = subClassesSet.constEnd(); !belowOtherNode && it != itEnd; ++it) {
+						CHierarchyNode* otherNode(*it);
+						if (otherNode && otherNode != subClassNode && otherNode != bottomHierNode && subClassNode->hasPredecessorNode(otherNode)) {
+							belowOtherNode = true;
+						}
+					}
+					if (!belowOtherNode) {
+						directSubClassesSet->insert(subClassNode);
+					}
+				}
+				return directSubClassesSet;
+			}
+
+
+
+
+
 			bool COptimizedComplexExpressionAnsweringHandler::processExtractedClassSubsumers(CAnsweringMessageDataCalculationClassSubsumers* message, CAnswererContext* answererContext) {
 				CConcept* concept = message->getSubsumedConcept();
 				bool negation = message->getSubsumedConceptNegation();
@@ -13513,21 +13550,23 @@ namespace Konclude {
 
 
 
-				QSet<CHierarchyNode*> testingSubClassCandidateSet;
-				if (visitor.mFoundMinimumSubClassNodeSet) {
-					visitor.mFoundMinimumSubClassNodeSet;
-					for (auto node : *visitor.mFoundMinimumSubClassNodeSet) {
-						testingSubClassCandidateSet.insert(node);
+				// The search for the sub classes goes down from the candidates, so they have to lie above every sub class.
+				// The direct super classes of the item do, and so do the direct sub classes of an item that subsumes it,
+				// since every sub class of the item is one of that item. Those are taken when there are any, as they are
+				// lower down; the topmost of them are needed, their most specific ones would leave out sub classes below
+				// the others.
+				QSet<CHierarchyNode*>* possibleClassNodeTestingSet = nullptr;
+				if (visitor.mFoundMinimumSubClassNodeSet && !visitor.mFoundMinimumSubClassNodeSet->isEmpty()) {
+					possibleClassNodeTestingSet = getDirectReducedSubNodeSet(*visitor.mFoundMinimumSubClassNodeSet);
+				} else {
+					QSet<CHierarchyNode*> testingSubClassCandidateSet;
+					QSet<CHierarchyNode*>* directSuperClassNodeSet = startConceptItem->getDirectSuperClassNodeSet();
+					if (directSuperClassNodeSet) {
+						testingSubClassCandidateSet = *directSuperClassNodeSet;
 					}
+					possibleClassNodeTestingSet = getDirectReducedSuperNodeSet(testingSubClassCandidateSet);
 				}
-				QSet<CHierarchyNode*>* directSuperClassNodeSet = startConceptItem->getDirectSuperClassNodeSet();
-				if (directSuperClassNodeSet) {
-					for (QSet<CHierarchyNode*>::const_iterator it = directSuperClassNodeSet->constBegin(), itEnd = directSuperClassNodeSet->constEnd(); it != itEnd; ++it) {
-						CHierarchyNode* hierNode(*it);
-						testingSubClassCandidateSet.insert(hierNode);
-					}
-				}
-				QSet<CHierarchyNode*>* possibleClassNodeTestingSet = getDirectReducedSuperNodeSet(testingSubClassCandidateSet);
+				delete visitor.mFoundMinimumSubClassNodeSet;
 				startConceptItem->setPossibleSubClassTestingNodeSet(possibleClassNodeTestingSet);
 				QList<CHierarchyNode*>* possibleClassNodeTestingList = new QList<CHierarchyNode *>();
 				startConceptItem->setPossibleSubClassNodeTestingList(possibleClassNodeTestingList);

@@ -219,9 +219,15 @@ public class KoncludeOWLAPITest {
 	/**
 	 * The family ontology down to its EL part: no inverse property, no individuals, nothing
 	 * negated. The saturation keeps only a reduced label for the classes of such an ontology,
-	 * which the tableau must not take as expanded (issue #47).
+	 * which the tableau must not take as expanded (issue #47). Without the domain and the range of
+	 * hasChild, 'Man and hasChild some Person' is still equivalent to Father, but 'hasChild some
+	 * Person' is no longer equivalent to Parent, only above it.
 	 */
 	private static OWLOntology elFamilyOntology() throws OWLOntologyCreationException {
+		return elFamilyOntology(true);
+	}
+
+	private static OWLOntology elFamilyOntology(boolean domainAndRange) throws OWLOntologyCreationException {
 		OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
 		OWLOntology ontology = manager.createOntology(IRI.create(NS));
 
@@ -235,10 +241,14 @@ public class KoncludeOWLAPITest {
 				DF.getOWLObjectIntersectionOf(cls("Person"),
 					DF.getOWLObjectSomeValuesFrom(hasChild, cls("Person")))),
 			DF.getOWLEquivalentClassesAxiom(cls("Father"),
-				DF.getOWLObjectIntersectionOf(cls("Man"), cls("Parent"))),
-			DF.getOWLObjectPropertyDomainAxiom(hasChild, cls("Person")),
-			DF.getOWLObjectPropertyRangeAxiom(hasChild, cls("Person"))
+				DF.getOWLObjectIntersectionOf(cls("Man"), cls("Parent")))
 		)));
+		if (domainAndRange) {
+			manager.addAxioms(ontology, new HashSet<OWLAxiom>(Arrays.<OWLAxiom>asList(
+				DF.getOWLObjectPropertyDomainAxiom(hasChild, cls("Person")),
+				DF.getOWLObjectPropertyRangeAxiom(hasChild, cls("Person"))
+			)));
+		}
 		return ontology;
 	}
 
@@ -417,6 +427,27 @@ public class KoncludeOWLAPITest {
 					expected("Father"));
 			check("superClasses(Man and ..., false) ", names(reasoner.getSuperClasses(manWithChild, false)),
 					expected("Man", "Parent", "Person", "Thing"));
+		} finally {
+			reasoner.dispose();
+		}
+
+		// asked in this order on purpose: the sub classes of 'Man and hasChild some Person' were searched
+		// from those of 'hasChild some Person', and the search kept Nothing next to Father, so the
+		// expression was not found equivalent to Father (issue #50)
+		reasoner = reasonerFor(elFamilyOntology(false));
+		try {
+			check("no domain: equivalentClasses(hasChild some Person)", names(reasoner.getEquivalentClasses(hasChildPerson)),
+					expected());
+			check("no domain: subClasses(hasChild some Person, true)", names(reasoner.getSubClasses(hasChildPerson, true)),
+					expected("Parent"));
+			check("no domain: superClasses(hasChild some Person, false)", names(reasoner.getSuperClasses(hasChildPerson, false)),
+					expected("Thing"));
+			check("no domain: equivalentClasses(Man and hasChild some Person)", names(reasoner.getEquivalentClasses(manWithChild)),
+					expected("Father"));
+			check("no domain: superClasses(Man and ..., true)", names(reasoner.getSuperClasses(manWithChild, true)),
+					expected("Man", "Parent"));
+			check("no domain: subClasses(Man and ..., true)", names(reasoner.getSubClasses(manWithChild, true)),
+					expected("Nothing"));
 		} finally {
 			reasoner.dispose();
 		}

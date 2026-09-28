@@ -565,6 +565,7 @@ namespace Konclude {
 
 
 					QSet<CHierarchyNode*>* getDirectReducedSuperNodeSet(const QSet<CHierarchyNode*>& superClassesSet);
+					QSet<CHierarchyNode*>* getDirectReducedSubNodeSet(const QSet<CHierarchyNode*>& subClassesSet);
 
 					bool finishCalculationStepProcessing(COptimizedComplexConceptItem* conceptItem, CComplexConceptStepComputationProcess* compStep, CAnswererContext* answererContext);
 
