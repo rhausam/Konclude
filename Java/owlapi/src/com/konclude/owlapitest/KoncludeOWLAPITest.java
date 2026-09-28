@@ -290,6 +290,14 @@ public class KoncludeOWLAPITest {
 					Boolean.TRUE);
 			check("isSatisfiable(Impossible)      ", Boolean.valueOf(reasoner.isSatisfiable(cls("Impossible"))),
 					Boolean.FALSE);
+			// an unsatisfiable class is equivalent to owl:Nothing and has its super classes; the classifier added
+			// it to the bottom node without mapping it there, so a node of its own was answered (issue #55)
+			check("equivalentClasses(Impossible)  ", names(reasoner.getEquivalentClasses(cls("Impossible"))),
+					expected("Impossible", "Nothing"));
+			check("superClasses(Impossible, true) ", names(reasoner.getSuperClasses(cls("Impossible"), true)),
+					expected("Father", "Grandparent", "Mother"));
+			check("subClasses(Impossible, false)  ", names(reasoner.getSubClasses(cls("Impossible"), false)),
+					expected());
 			// the bottom node is not a direct sub class of owl:Thing beside the roots, and owl:Thing
 			// is not a direct super class of it beside the leaves; the taxonomy used to keep the
 			// link between the two that an empty taxonomy starts with, which is how unsatisfiable
@@ -297,6 +305,25 @@ public class KoncludeOWLAPITest {
 			check("subClasses(Thing, direct=true)  ", names(reasoner.getSubClasses(DF.getOWLThing(), true)),
 					expected("Person"));
 			check("superClasses(Nothing, direct=true)", names(reasoner.getSuperClasses(DF.getOWLNothing(), true)),
+					expected("Father", "Grandparent", "Mother"));
+		} finally {
+			reasoner.dispose();
+		}
+
+		// a second unsatisfiable class, whose name has nothing to do with it: every one of them is mapped to
+		// the bottom node, so both have owl:Nothing and each other as equivalent classes (issue #55). It is
+		// unsatisfiable through the disjointness of Man and Woman, as Impossible is, so that the saturation
+		// finds it; with a complement, as in 'Man and not Person', the class came out right before the fix
+		OWLOntology withParadox = familyOntology();
+		withParadox.getOWLOntologyManager().addAxiom(withParadox, DF.getOWLEquivalentClassesAxiom(cls("Paradox"),
+				DF.getOWLObjectIntersectionOf(cls("Woman"), cls("Father"))));
+		reasoner = reasonerFor(withParadox);
+		try {
+			check("equivalentClasses(Paradox)      ", names(reasoner.getEquivalentClasses(cls("Paradox"))),
+					expected("Impossible", "Nothing", "Paradox"));
+			check("equivalentClasses(Impossible), 2", names(reasoner.getEquivalentClasses(cls("Impossible"))),
+					expected("Impossible", "Nothing", "Paradox"));
+			check("superClasses(Paradox, true)    ", names(reasoner.getSuperClasses(cls("Paradox"), true)),
 					expected("Father", "Grandparent", "Mother"));
 		} finally {
 			reasoner.dispose();
