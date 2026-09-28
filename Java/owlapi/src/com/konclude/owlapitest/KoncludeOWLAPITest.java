@@ -332,6 +332,14 @@ public class KoncludeOWLAPITest {
 			check("superClasses(hasChild some Person, true)", names(reasoner.getSuperClasses(hasChildPerson, true)),
 					expected("Person"));
 
+			// asked first on purpose: the super classes of an expression are strict without its sub classes, the
+			// equivalent class is decided from the only direct super class by one subsumption decision (issue #12)
+			OWLClassExpression hasChildParent = DF.getOWLObjectSomeValuesFrom(hasChild, cls("Parent"));
+			check("superClasses(hasChild some Parent, true)", names(reasoner.getSuperClasses(hasChildParent, true)),
+					expected("Parent"));
+			check("equivalentClasses(hasChild some Parent)", names(reasoner.getEquivalentClasses(hasChildParent)),
+					expected("Grandparent"));
+
 			// asked after 'hasChild some Person' on purpose: the engine lost 'Man' from this
 			// expression then, because the super classes found through the earlier item replaced
 			// those of the model instead of being added to them (issue #13)

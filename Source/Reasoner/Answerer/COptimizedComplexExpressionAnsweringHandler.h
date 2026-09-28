@@ -477,7 +477,7 @@ namespace Konclude {
 
 					bool createSatisfiabilityTest(COptimizedComplexConceptItem* conceptItem, CAnswererContext* answererContext);
 					bool createSuperClassSubsumptionTest(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode, CAnswererContext* answererContext);
-					bool createSubClassSubsumptionTest(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode, CAnswererContext* answererContext);
+					bool createSubClassSubsumptionTest(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode, CAnswererContext* answererContext, bool equivalenceCheck = false);
 					/*!
 					 *	Runs the satisfiability test of the class whose saturation the decider found unreliable,
 					 *	with the label of the root node reported back, while the sub class search of the concept

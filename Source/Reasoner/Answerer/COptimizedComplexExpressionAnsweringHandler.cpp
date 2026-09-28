@@ -394,8 +394,10 @@ namespace Konclude {
 
 
 				bool requiresProcessing = false;
-				subClassNodesComputationRequired |= equivalentClassNodesComputationRequired || subClassRealizationRequired;
-				superClassNodesComputationRequired |= subClassNodesComputationRequired || !instancesDirectResolveable;
+				// the equivalent classes step decides the equivalence from the direct super classes, with at most one
+				// subsumption test, instead of from the sub classes (issue #12)
+				subClassNodesComputationRequired |= subClassRealizationRequired;
+				superClassNodesComputationRequired |= subClassNodesComputationRequired || equivalentClassNodesComputationRequired || !instancesDirectResolveable;
 				satisfiableComputationRequired |= superClassNodesComputationRequired;
 				if (satisfiableComputationRequired) {
 					requiresProcessing |= initializeQueryProcessingStep(computationProcess->getSatisfiableClassNodesComputationProcess(true), conceptItem, queryProcessingData, buildingVarItem);
@@ -1187,8 +1189,8 @@ namespace Konclude {
 								// for the direct instances, a direct sub/super classes query does not need it
 								bool subClassRealizationRequired = direct && instanceComputationRequired;
 								// the super classes are answered strictly, without a class that is equivalent to the
-								// expression, which only the sub classes tell apart from a plain super class (issue #12)
-								subClassNodesComputationRequired |= superClassNodesComputationRequired;
+								// expression, which the equivalent classes step decides (issue #12)
+								equivalentClassNodesComputationRequired |= superClassNodesComputationRequired;
 
 								queryProcessing |= initializeComplexConceptQueryProcessing(queryProcessingData, nullptr, classTermExpOfInt, satisfiableComputationRequired, superClassNodesComputationRequired, subClassNodesComputationRequired, equivalentClassNodesComputationRequired, subClassRealizationRequired, instanceComputationRequired? -1 : 0, nullptr);
 							}
@@ -4930,8 +4932,37 @@ namespace Konclude {
 					compStep->setComputationProcessQueued(false);
 					if (!compStep->isComputationProcessStarted()) {
 						compStep->setComputationProcessStarted(true);
+						// A class node N is equivalent to the expression X if and only if N is the only direct super class
+						// of X and N is subsumed by X: an equivalent class is the one most specific super class. So one
+						// subsumption decision settles it, where the sub classes are a search through the class hierarchy
+						// below the direct super classes, which took seconds on SNOMED CT for an expression whose only
+						// direct super class is owl:Thing (issue #12).
+						if (!conceptItem->isEquivalenceDecided()) {
+							CComplexConceptStepComputationProcess* subStep = conceptItem->getComputationProcess()->getSubClassNodesComputationProcess(false);
+							QSet<CHierarchyNode*>* parentNodeSet = conceptItem->getDirectSuperClassNodeSet();
+							if (subStep && subStep->isComputationProcessFinished()) {
+								conceptItem->setDecidedEquivalentClassNode(getEquivalentClassNode(conceptItem));
+							} else if (!conceptItem->isSatisfiable()) {
+								conceptItem->setDecidedEquivalentClassNode(mOntoAnsweringItem->getOntology()->getClassification()->getClassConceptClassification()->getClassConceptTaxonomy()->getBottomHierarchyNode());
+							} else if (!parentNodeSet || parentNodeSet->size() != 1) {
+								conceptItem->setDecidedEquivalentClassNode(nullptr);
+							} else {
+								CHierarchyNode* candidateNode = *parentNodeSet->constBegin();
+								CSaturationSubsumptionDecider::Verdict verdict = decideSubClassSubsumptionFromSaturation(conceptItem, candidateNode);
+								if (verdict == CSaturationSubsumptionDecider::SUBSUMED) {
+									conceptItem->setDecidedEquivalentClassNode(candidateNode);
+								} else if (verdict == CSaturationSubsumptionDecider::NOT_SUBSUMED) {
+									conceptItem->setDecidedEquivalentClassNode(nullptr);
+								} else if (createSubClassSubsumptionTest(conceptItem, candidateNode, answererContext, true)) {
+									// the step is finished when the test completes
+									processing = true;
+									compStep->setComputationProcessProcessing(true);
+									compStep->incCurrentlyRunningComputationCount();
+								}
+							}
+						}
 					}
-					if (!processing) {
+					if (!processing && !compStep->isComputationProcessProcessing()) {
 						finishCalculationStepProcessing(conceptItem, compStep, answererContext);
 					}
 				}
@@ -11574,13 +11605,13 @@ namespace Konclude {
 
 
 
-			bool COptimizedComplexExpressionAnsweringHandler::createSubClassSubsumptionTest(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode, CAnswererContext* answererContext) {
+			bool COptimizedComplexExpressionAnsweringHandler::createSubClassSubsumptionTest(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode, CAnswererContext* answererContext, bool equivalenceCheck) {
 				CSatisfiableCalculationJob* satCalcJob = nullptr;
 				CSatisfiableCalculationJobGenerator satCalcJobGen(mOntoAnsweringItem->getTestingOntology());
 				CConcept* subClassConcept = testingNode->getOneEquivalentConcept();
 				satCalcJob = extendProcessingByTopPropagation(satCalcJobGen, satCalcJob, conceptItem->isTopObjectPropertyUsed(), answererContext);
 				satCalcJob = satCalcJobGen.getSatisfiableCalculationJob(subClassConcept, false, conceptItem->getConcept(), !conceptItem->getConceptNegation(), nullptr, satCalcJob);
-				CAnsweringMessageDataCalculationCompletedSubsumptionSubClass* completedMessage = new CAnsweringMessageDataCalculationCompletedSubsumptionSubClass(satCalcJob, conceptItem, testingNode);
+				CAnsweringMessageDataCalculationCompletedSubsumptionSubClass* completedMessage = new CAnsweringMessageDataCalculationCompletedSubsumptionSubClass(satCalcJob, conceptItem, testingNode, equivalenceCheck);
 				mOntoAnsweringItem->getAnsweringHandlingStatistics()->incComplexConceptItemsSubClassSubsumptionTestingCount();
 				processCalculationJob(answererContext, satCalcJob, completedMessage);
 				return true;
@@ -12610,9 +12641,13 @@ namespace Konclude {
 
 
 
-			// The class node that is equivalent to the expression of the item, or null: the one node that is its only direct
-			// super and its only direct sub class, since the sub and super classes of an item include the equivalent node.
+			// The class node that is equivalent to the expression of the item, or null: as the equivalent classes step decided
+			// it, or else the one node that is its only direct super and its only direct sub class, since the sub and super
+			// classes of an item include the equivalent node.
 			CHierarchyNode* COptimizedComplexExpressionAnsweringHandler::getEquivalentClassNode(COptimizedComplexConceptItem* conceptItem) {
+				if (conceptItem->isEquivalenceDecided()) {
+					return conceptItem->getDecidedEquivalentClassNode();
+				}
 				QSet<CHierarchyNode*>* childNodeSet = conceptItem->getDirectSubClassNodeSet();
 				QSet<CHierarchyNode*>* parentNodeSet = conceptItem->getDirectSuperClassNodeSet();
 				if (parentNodeSet && childNodeSet && parentNodeSet->size() == 1 && childNodeSet->size() == 1) {
@@ -12863,6 +12898,16 @@ namespace Konclude {
 				COptimizedComplexConceptItem* conceptItem = message->getConceptItem();
 				bool satisfiable = message->getCalculationCallbackContextData()->isSatisfiable();
 				CHierarchyNode* subClassNode = message->getSubClassNode();
+				if (message->isEquivalenceCheck()) {
+					// the only direct super class is equivalent if it is subsumed as well
+					CComplexConceptStepComputationProcess* eqStep = conceptItem->getComputationProcess()->getEquivalentClassNodesComputationProcess(true);
+					conceptItem->setDecidedEquivalentClassNode(satisfiable ? nullptr : subClassNode);
+					eqStep->incFinishedComputationCount();
+					eqStep->decCurrentlyRunningComputationCount();
+					eqStep->setComputationProcessProcessing(false);
+					finishCalculationStepProcessing(conceptItem, eqStep, answererContext);
+					return true;
+				}
 				CComplexConceptStepComputationProcess* compStep = conceptItem->getComputationProcess()->getSubClassNodesComputationProcess(true);
 				// the test says whether the node's class conjoined with the negated concept is satisfiable
 				if (addSubClassSubsumptionResult(conceptItem, subClassNode, !satisfiable)) {

@@ -65,6 +65,8 @@ namespace Konclude {
 				mPossibleInstanceCandidatePropagationBeginningKnownInstancesCount = 0;
 
 				mMaximumSubClassNodeSet = nullptr;
+				mEquivalenceDecided = false;
+				mDecidedEquivalentClassNode = nullptr;
 
 				mLazyRealizationInitialized = false;
 				mLazyRealizationInitializationRequested = false;
@@ -505,6 +507,21 @@ namespace Konclude {
 
 			QSet<CHierarchyNode*>* COptimizedComplexConceptItem::getMaximumSubClassNodeSet() {
 				return mMaximumSubClassNodeSet;
+			}
+
+
+			bool COptimizedComplexConceptItem::isEquivalenceDecided() {
+				return mEquivalenceDecided;
+			}
+
+			CHierarchyNode* COptimizedComplexConceptItem::getDecidedEquivalentClassNode() {
+				return mDecidedEquivalentClassNode;
+			}
+
+			COptimizedComplexConceptItem* COptimizedComplexConceptItem::setDecidedEquivalentClassNode(CHierarchyNode* node) {
+				mEquivalenceDecided = true;
+				mDecidedEquivalentClassNode = node;
+				return this;
 			}
 
 
