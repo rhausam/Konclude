@@ -367,8 +367,13 @@ run. Driving them against the library brought out the following, all of which ar
   The engine's direct sub classes are minimal since #50, see below. Since #12 the engine also
   answers strictly: the sub and super classes of a concept item still include the equivalent
   node, which is how the equivalence is found, and the answer of a sub or super classes query
-  starts from that node's children or parents instead of from the node. A super classes query
-  computes the sub classes too for that, as the bridge's equivalents query did. The bridge asks
+  starts from that node's children or parents instead of from the node. Which node that is,
+  the equivalent classes step decides without the sub classes: a node N is equivalent to the
+  expression X exactly when N is the only direct super class of X and N is subsumed by X, so
+  one decision settles it, by the saturation or by one subsumption test. The super and the
+  equivalent classes of an expression therefore no longer wait for the search of its sub
+  classes, which on SNOMED CT took 15 to 20 s for an expression whose only direct super class
+  is `owl:Thing`. The bridge asks
   for the direct or the complete answer and passes it on. Over OWLlink, `GetSubClasses` and
   `GetSuperClasses` of an expression no longer list its equivalent class either. An
   unsatisfiable expression now has the super classes of `owl:Nothing`, where the bridge had
