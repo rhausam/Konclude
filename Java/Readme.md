@@ -79,7 +79,7 @@ arguments instead of extending them, so it has to start from that constant.
 | --- | --- |
 | `hierarchy` | the class hierarchy of a small family ontology, direct and indirect, and the top and the bottom node |
 | `expressions-tableau` | the `expressions` checks with the decision of the sub classes from the saturation switched off, so that the tableau path stays tested, see SUB CLASSES OF AN EXPRESSION FROM THE SATURATION |
-| `expressions-el` | equivalent and super classes of `hasChild some Person` and `Man and hasChild some Person` over an EL ontology without individuals, whose saturation keeps reduced labels that the tableau must not take as expanded (issue #47) |
+| `expressions-el` | equivalent and super classes of `hasChild some Person` and `Man and hasChild some Person` over an EL ontology without individuals, whose saturation keeps reduced labels that the tableau must not take as expanded (issue #47); and, without the domain and range of `hasChild`, the equivalent, direct super and direct sub classes of the conjunction asked after `hasChild some Person` (issue #50) |
 | `expressions` | the questions about anonymous class expressions, as the DL query tab of Protege asks them: equivalent, sub and super classes, satisfiability and instances of `ObjectSomeValuesFrom`, `ObjectIntersectionOf`, `ObjectUnionOf` and `ObjectComplementOf` expressions, and a fresh entity inside one |
 | `individuals` | the types, the instances, the same individuals, the grouping by sameAs and the object property values |
 | `properties` | the object property hierarchy, sub, super and equivalent, direct and indirect |
@@ -362,7 +362,9 @@ run. Driving them against the library brought out the following, all of which ar
   and takes the direct sub or super classes of any other expression from the hierarchy as
   well: those classes of the complete answer none of whose parents, or children, is in it.
   Fixing this in the engine is tracked as
-  [rhausam/Konclude#12](https://github.com/rhausam/Konclude/issues/12).
+  [rhausam/Konclude#12](https://github.com/rhausam/Konclude/issues/12). The engine's direct
+  sub classes are minimal since #50, see below; the equivalent class is still among them, so
+  the workaround stays.
 
   The answering engine lost part of an expression once a sub expression of it had been asked
   about before, over OWLlink as well
@@ -388,6 +390,24 @@ run. Driving them against the library brought out the following, all of which ar
   and the tableau does not take a reduced label over. With an inverse property, an individual
   or a negation in the ontology the labels are complete, which is why the `expressions`
   scenario did not show it; the `expressions-el` scenario does.
+
+  The equivalent classes of an expression depended on what had been asked before
+  ([rhausam/Konclude#50](https://github.com/rhausam/Konclude/issues/50)): without the domain
+  and the range of `hasChild`, `Man and (hasChild some Person)` was equivalent to `Father`
+  when asked first, and had no equivalent class after questions about `hasChild some Person`.
+  The engine reports an equivalent class when the direct super and the direct sub classes of
+  the expression are the same single node. The sub classes are searched top down from a set
+  of candidates, stopping at every subsumed node, and the search reaches a node over several
+  paths: for `hasChild some Person` it found `Parent` through `Person`, `Father` through `Man`
+  and `owl:Nothing` through `Woman`, and kept all three as direct. The later expression took
+  those as its candidates, found `Father` and `owl:Nothing`, and so had two direct sub
+  classes. Two changes: the direct sub classes are reduced to the topmost of the found nodes,
+  the bottom node dropped next to any other; and the candidates taken from an earlier
+  subsuming expression are its topmost sub classes, not its most specific ones, which would
+  miss the sub classes below the others. The candidates now start lower than before, and on
+  SNOMED CT two conjunctions asked after their existential part took 0.4 s and 1 ms instead
+  of 12.5 and 11.5 s, with the same answers. The `expressions-el` scenario asks in that
+  order over the ontology without the domain and the range.
 
 
 - The bottom node was a direct child of the top node in every taxonomy, so `owl:Nothing`
