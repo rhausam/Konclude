@@ -1186,6 +1186,9 @@ namespace Konclude {
 								// the realization of the direct sub classes is only needed to subtract their instances
 								// for the direct instances, a direct sub/super classes query does not need it
 								bool subClassRealizationRequired = direct && instanceComputationRequired;
+								// the super classes are answered strictly, without a class that is equivalent to the
+								// expression, which only the sub classes tell apart from a plain super class (issue #12)
+								subClassNodesComputationRequired |= superClassNodesComputationRequired;
 
 								queryProcessing |= initializeComplexConceptQueryProcessing(queryProcessingData, nullptr, classTermExpOfInt, satisfiableComputationRequired, superClassNodesComputationRequired, subClassNodesComputationRequired, equivalentClassNodesComputationRequired, subClassRealizationRequired, instanceComputationRequired? -1 : 0, nullptr);
 							}
@@ -4208,16 +4211,20 @@ namespace Konclude {
 						if (!direct) {
 							visitedHierNodeSet = new QSet<CHierarchyNode*>();
 						}
+						// The sub and super classes of the item include a class that is equivalent to the expression, the
+						// equivalence is found through that, while the answers are the strict sub and super classes, as for
+						// a named class: those of an equivalent class start from its children and its parents (issue #12).
+						CHierarchyNode* equivalentNode = getEquivalentClassNode(conceptItem);
 						QList<CHierarchyNode*> visitHierNodetList;
 						if (subClasses) {
-							QSet<CHierarchyNode*>* childNodeSet = conceptItem->getDirectSubClassNodeSet();
+							QSet<CHierarchyNode*>* childNodeSet = equivalentNode ? equivalentNode->getChildNodeSet() : conceptItem->getDirectSubClassNodeSet();
 							for (QSet<CHierarchyNode*>::const_iterator it = childNodeSet->constBegin(), itEnd = childNodeSet->constEnd(); it != itEnd; ++it) {
 								CHierarchyNode* childNode(*it);
 								visitHierNodetList.append(childNode);
 							}
 						}
 						if (superClasses) {
-							QSet<CHierarchyNode*>* parentNodeSet = conceptItem->getDirectSuperClassNodeSet();
+							QSet<CHierarchyNode*>* parentNodeSet = equivalentNode ? equivalentNode->getParentNodeSet() : conceptItem->getDirectSuperClassNodeSet();
 							for (QSet<CHierarchyNode*>::const_iterator it = parentNodeSet->constBegin(), itEnd = parentNodeSet->constEnd(); it != itEnd; ++it) {
 								CHierarchyNode* parentNode(*it);
 								visitHierNodetList.append(parentNode);
@@ -4259,16 +4266,12 @@ namespace Konclude {
 					}
 					if (compConQuery->isEquivalentClassNodesComputationRequired()) {
 						CClassSetResult* classesResult = new CClassSetResult();
-						QSet<CHierarchyNode*>* childNodeSet = conceptItem->getDirectSubClassNodeSet();
-						QSet<CHierarchyNode*>* parentNodeSet = conceptItem->getDirectSuperClassNodeSet();
 						bool abbreviatedIRIs = false;
-						if (parentNodeSet && childNodeSet && parentNodeSet->size() == 1 && childNodeSet->size() == 1) {
-							CHierarchyNode* node = (*childNodeSet->constBegin());
-							if (parentNodeSet->contains(node)) {
-								QStringList eqClassNameList(node->getEquivalentConceptStringList(abbreviatedIRIs));
-								for (QStringList::const_iterator it = eqClassNameList.constBegin(), itEnd = eqClassNameList.constEnd(); it != itEnd; ++it) {
-									classesResult->addClass(*it);
-								}
+						CHierarchyNode* node = getEquivalentClassNode(conceptItem);
+						if (node) {
+							QStringList eqClassNameList(node->getEquivalentConceptStringList(abbreviatedIRIs));
+							for (QStringList::const_iterator it = eqClassNameList.constBegin(), itEnd = eqClassNameList.constEnd(); it != itEnd; ++it) {
+								classesResult->addClass(*it);
 							}
 						}
 						query->setQueryResult(classesResult);
@@ -12604,6 +12607,22 @@ namespace Konclude {
 			}
 
 
+
+
+
+			// The class node that is equivalent to the expression of the item, or null: the one node that is its only direct
+			// super and its only direct sub class, since the sub and super classes of an item include the equivalent node.
+			CHierarchyNode* COptimizedComplexExpressionAnsweringHandler::getEquivalentClassNode(COptimizedComplexConceptItem* conceptItem) {
+				QSet<CHierarchyNode*>* childNodeSet = conceptItem->getDirectSubClassNodeSet();
+				QSet<CHierarchyNode*>* parentNodeSet = conceptItem->getDirectSuperClassNodeSet();
+				if (parentNodeSet && childNodeSet && parentNodeSet->size() == 1 && childNodeSet->size() == 1) {
+					CHierarchyNode* node = *childNodeSet->constBegin();
+					if (parentNodeSet->contains(node)) {
+						return node;
+					}
+				}
+				return nullptr;
+			}
 
 
 

@@ -470,42 +470,15 @@ namespace Konclude {
 					COntologyRevision* ontRev = mOntRevData->getOntologyRevision();
 					CConcreteOntology* ont = ontRev->getOntology();
 
-					// the complex query reports a class that is equivalent to the expression among its sub
-					// and its super classes, and for the direct ones reports nothing else, while the OWL API
-					// asks for the strict ones. An expression that is equivalent to a class therefore has
-					// the sub and super classes of that class, which the class hierarchy answers directly.
-					QStringList equivalentClassNames;
-					if (!computeClassExpressionEquivalentClassNames(classTermExp,equivalentClassNames,errorMessage)) {
-						return false;
-					}
-					for (const QString& className : equivalentClassNames) {
-						CConcept* concept = ont->getStringMapping()->getConceptFromName(className);
-						if (concept) {
-							CCalculationConfigurationExtension* calcConfig = new CCalculationConfigurationExtension(ontRev->getOntologyConfiguration());
-							CSubSuperClassesResultVisitCallbackQuery* subSuperClassQuery = new CSubSuperClassesResultVisitCallbackQuery(ont,calcConfig,concept,className,subClasses,superClasses,direct);
-							mJNICommandProcessor->calculateOntologyQuery(subSuperClassQuery);
-							CQueryResult* result = subSuperClassQuery->getQueryResult();
-							if (result) {
-								subSuperClassQuery->callbackVisitingClasses(visitingCallback);
-							} else {
-								errorMessage = QString("The sub/super classes query for '%1', which is equivalent to the asked class expression, was not answered.").arg(className);
-							}
-							delete subSuperClassQuery;
-							return result != nullptr;
-						}
-					}
-
-					// the complex query is always asked for all sub or super classes, its direct ones are
-					// not minimal, a class below another one of the answer is reported as direct as well,
-					// so the direct ones are taken from the class hierarchy: a sub class of the answer is
-					// direct if none of its parents is in the answer, a super class if none of its children
+					// the complex query answers the strict sub or super classes, without a class that is equivalent to
+					// the expression, and its direct ones are minimal (issues #12 and #50), as the OWL API asks for them
 					CComplexConceptAnsweringQuery* query = nullptr;
 					if (subClasses) {
 						query = new CComplexSubClassesAnsweringQuery(ont,mExpressionOntRev->getOntology(),classTermExp,ontRev->getOntologyConfiguration(),QString("JNI-Class-Expression-SubClasses-Query"));
 					} else {
 						query = new CComplexSuperClassesAnsweringQuery(ont,mExpressionOntRev->getOntology(),classTermExp,ontRev->getOntologyConfiguration(),QString("JNI-Class-Expression-SuperClasses-Query"));
 					}
-					query->setDirect(false);
+					query->setDirect(direct);
 					CQueryResult* result = calculateClassExpressionQuery(query,errorMessage);
 					CClassSynsetsResult* synsetsResult = dynamic_cast<CClassSynsetsResult*>(result);
 					if (synsetsResult) {
@@ -529,19 +502,6 @@ namespace Konclude {
 							}
 						}
 						for (CHierarchyNode* node : nodeList) {
-							if (direct) {
-								bool nodeDirect = true;
-								QSet<CHierarchyNode*>* neighbourNodeSet = subClasses ? node->getParentNodeSet() : node->getChildNodeSet();
-								for (CHierarchyNode* neighbourNode : *neighbourNodeSet) {
-									if (nodeSet.contains(neighbourNode)) {
-										nodeDirect = false;
-										break;
-									}
-								}
-								if (!nodeDirect) {
-									continue;
-								}
-							}
 							visitingCallback->startEntityExpressionSet(ont);
 							for (CConcept* concept : *node->getEquivalentConceptList()) {
 								visitingCallback->visitConceptAssociatedEntityExpression(concept,ont);
