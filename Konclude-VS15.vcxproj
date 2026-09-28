@@ -2758,6 +2758,7 @@
     <ClCompile Include="Source\Reasoner\Preprocess\CDatatypeNormalizerPreProcess.cpp" />
     <ClCompile Include="Source\Reasoner\Preprocess\CDisjunctSortingPreProcess.cpp" />
     <ClCompile Include="Source\Reasoner\Preprocess\CExtractPropagationIntoCreationDirectionPreProcess.cpp" />
+    <ClCompile Include="Source\Reasoner\Preprocess\CNonSimpleRoleRestrictionCheckPreProcess.cpp" />
     <ClCompile Include="Source\Reasoner\Preprocess\CExtractRelevantConceptRolePreProcess.cpp" />
     <ClCompile Include="Source\Reasoner\Preprocess\CFullNominalSchemaGroundingPreProcess.cpp" />
     <ClCompile Include="Source\Reasoner\Preprocess\CLexicalNormalisationPreProcess.cpp" />
@@ -5618,6 +5619,7 @@
     <ClInclude Include="Source\Reasoner\Preprocess\CDatatypeNormalizerPreProcess.h" />
     <ClInclude Include="Source\Reasoner\Preprocess\CDisjunctSortingPreProcess.h" />
     <ClInclude Include="Source\Reasoner\Preprocess\CExtractPropagationIntoCreationDirectionPreProcess.h" />
+    <ClInclude Include="Source\Reasoner\Preprocess\CNonSimpleRoleRestrictionCheckPreProcess.h" />
     <ClInclude Include="Source\Reasoner\Preprocess\CExtractRelevantConceptRolePreProcess.h" />
     <ClInclude Include="Source\Reasoner\Preprocess\CFullNominalSchemaGroundingPreProcess.h" />
     <ClInclude Include="Source\Reasoner\Preprocess\CLexicalNormalisationPreProcess.h" />
