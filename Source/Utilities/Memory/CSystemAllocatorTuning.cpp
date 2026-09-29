@@ -27,6 +27,12 @@
 #include <malloc.h>
 #endif
 
+#if defined(KONCLUDE_JEMALLOC_IN_LIBRARY)
+// jemalloc's control interface; hidden in the library with the rest of jemalloc, see
+// CLibraryAllocatorWrappers.cpp
+extern "C" int mallctl(const char* name, void* oldp, size_t* oldlenp, void* newp, size_t newlen);
+#endif
+
 
 namespace Konclude {
 
@@ -39,7 +45,10 @@ namespace Konclude {
 				static std::once_flag onceFlag;
 				static QString description;
 				std::call_once(onceFlag, []() {
-#if defined(__GLIBC__)
+#if defined(KONCLUDE_JEMALLOC_IN_LIBRARY)
+					// the library allocates with jemalloc, glibc's malloc serves only the program
+					description = QString("jemalloc inside the library");
+#elif defined(__GLIBC__)
 					const char* setting = std::getenv("KONCLUDE_MALLOC_TUNING");
 					if (setting) {
 						QString value = QString::fromLatin1(setting).trimmed().toLower();
@@ -69,7 +78,10 @@ namespace Konclude {
 
 
 			bool CSystemAllocatorTuning::releaseFreeMemory() {
-#if defined(__GLIBC__)
+#if defined(KONCLUDE_JEMALLOC_IN_LIBRARY)
+				// returns the unused pages of every arena to the system; 4096 is MALLCTL_ARENAS_ALL
+				return mallctl("arena.4096.purge", nullptr, nullptr, nullptr, 0) == 0;
+#elif defined(__GLIBC__)
 				return malloc_trim(0) == 1;
 #else
 				return false;

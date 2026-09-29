@@ -1451,13 +1451,35 @@ jemalloc's faster allocation itself; the tunable tcache made no difference.
   `qmake CONFIG+=jemalloc`, with `JEMALLOC_LIB=<file>` for a particular library, e.g.
   `/usr/lib/aarch64-linux-gnu/libjemalloc.so.2` of Debian's `libjemalloc2` without the
   development package. The tuning is then harmless, since glibc's malloc is no longer used.
-- The library cannot use jemalloc. Loaded into the Java virtual machine, a shared jemalloc would
-  not replace the malloc that the process already has. A static one linked with its symbols
-  hidden would serve the library alone, while the functions of the C library that return
-  allocated memory, `realpath` and `strdup` among those that Qt imports and frees, keep using
-  glibc's, so one allocator would free the memory of the other. Preloading jemalloc into the
-  whole virtual machine (`LD_PRELOAD` in Protege's start script) works, and gains a little more
-  in the translation.
+- The library links jemalloc itself on Linux, in the release packages (`KoncludeLIB.pro` with
+  `CONFIG+=jemalloc JEMALLOC_LIB=<libjemalloc_pic.a>`, built by
+  `.github/scripts/build-jemalloc-library.sh`), since how Protege or another program using the
+  wrapper is started is not under Konclude's control. A shared jemalloc would not help: loaded into
+  the running Java virtual machine it does not replace the malloc the process already has. A static
+  one is linked in whole with its symbols hidden (`--exclude-libs,ALL`), so that the malloc and free
+  of Konclude, of the static Qt and of the static C++ runtime in the library are jemalloc's, while
+  the virtual machine and the other plug-ins keep glibc's. It is built with
+  `--disable-initial-exec-tls`, which a library loaded with `dlopen` needs, and without its C++
+  operators, the C++ runtime's call its malloc.
+
+  What makes this safe is the boundary to the C library: memory must not be allocated by one
+  allocator and freed by the other. Of the 273 functions the library imports (the same on x64 and
+  arm64, `nm -D --undefined-only`), four return memory the C library allocated for the caller to
+  free: `realpath` and `getcwd` with a null buffer, `strdup`, all three used by Qt, and
+  `backtrace_symbols`. The linker renames the library's calls to them (`--wrap`) to the functions
+  of `Source/Utilities/Memory/CLibraryAllocatorWrappers.cpp`, which return the same in jemalloc's
+  memory. The others either take the caller's buffer or a static one (`vsnprintf`, `readlink`,
+  `getpwuid_r`, `strerror`, `setlocale`, `getenv` ...), or allocate and free on the C library's
+  side through their own pair (`getaddrinfo`/`freeaddrinfo`, `opendir`/`closedir`,
+  `iconv_open`/`iconv_close`, `newlocale`/`freelocale`, the `FILE` functions, and zlib, a shared
+  library of its own). None frees or keeps memory the library allocated. The release workflow
+  checks that the library neither imports nor exports an allocation function, and with the input
+  `jemalloc_debug` links a debug jemalloc, which aborts on a pointer it did not allocate.
+
+  With jemalloc in the library, `CSystemAllocatorTuning` leaves glibc's malloc alone, since the
+  library no longer uses it, and `closeKoncludeLibraryInstance` purges jemalloc's arenas
+  (`arena.4096.purge`, all arenas) instead of calling `malloc_trim`. Libraries built without the
+  option, the macOS and Windows ones and local Linux builds, use the program's malloc as before.
 
 
 ## OTHER LIMITATIONS
