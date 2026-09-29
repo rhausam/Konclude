@@ -603,8 +603,10 @@ jobs:
         run: |
           mkdir -p konclude-lib library
           cd konclude-lib
-          ../qt-static/bin/qmake -o Makefile ../konclude-static/KoncludeLIB.pro -after "QT-=gui" "CONFIG-=static staticlib" "CONFIG+=shared dll" \
+          # the jemalloc settings before -after, since KoncludeLIB.pro's jemalloc scope has to see them
+          ../qt-static/bin/qmake -o Makefile ../konclude-static/KoncludeLIB.pro \
             "CONFIG+=jemalloc" "JEMALLOC_LIB=$GITHUB_WORKSPACE/jemalloc-library/libjemalloc_pic.a" \
+            -after "QT-=gui" "CONFIG-=static staticlib" "CONFIG+=shared dll" \
             "QMAKE_LFLAGS+=-static-libstdc++ -static-libgcc -Wl,--exclude-libs,ALL"
           make -j"$(nproc)"
           ldd Release/libKonclude.so
