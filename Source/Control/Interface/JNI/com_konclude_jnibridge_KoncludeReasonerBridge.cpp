@@ -198,6 +198,10 @@ JNIEXPORT jobjectArray JNICALL Java_com_konclude_jnibridge_KoncludeReasonerBridg
 		entries.prepend("::Konclude::JNI");
 		entries.prepend("60");
 	}
+	if (entries.isEmpty()) {
+		// the usual case, after every call of the wrapper
+		return nullptr;
+	}
 	jclass stringClass = jenv->FindClass("java/lang/String");
 	jobjectArray array = jenv->NewObjectArray(entries.size(), stringClass, nullptr);
 	if (!array) {

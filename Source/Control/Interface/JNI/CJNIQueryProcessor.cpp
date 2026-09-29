@@ -125,13 +125,49 @@ namespace Konclude {
 
 
 
+				// A query about a named class went through the command processor, the commander and the reasoner manager
+				// thread, with two log messages, to look the class up in the taxonomy: about 0.15 ms a call, 20 to 100
+				// times the other reasoners in Protege, 3.3 minutes for the equivalent and direct super classes of the
+				// 558 000 classes of SNOMED CT AU. Once the classification is complete the taxonomy is only read, so it
+				// is looked up here; the condition is the one the reasoner manager tests before it answers such a query.
+				// A class that is not in the taxonomy, or an incomplete classification, takes the way through the
+				// reasoner, which also computes what is missing.
+				void CJNIQueryProcessor::calculateNamedClassQuery(CTaxonomyPremisingQuery* query, CConcept* concept) {
+					CTaxonomy* taxonomy = getCompletedClassTaxonomy(query->getOntology());
+					if (taxonomy && taxonomy->hasHierarchyNode(concept)) {
+						query->constructResult(taxonomy);
+					} else {
+						mJNICommandProcessor->calculateOntologyQuery(query);
+					}
+				}
+
+
+				CTaxonomy* CJNIQueryProcessor::getCompletedClassTaxonomy(CConcreteOntology* ontology) {
+					if (!ontology || !ontology->getProcessingSteps()) {
+						return nullptr;
+					}
+					COntologyProcessingStep* classifyStep = COntologyProcessingStepVector::getProcessingStepVectorInstance()->getProcessingStep(COntologyProcessingStep::OPSCLASSCLASSIFY);
+					COntologyProcessingStepData* stepData = ontology->getProcessingSteps()->getOntologyProcessingStepDataVector()->getProcessingStepData(classifyStep->getProcessingStepID());
+					if (!stepData) {
+						return nullptr;
+					}
+					COntologyProcessingStatus* status = stepData->getProcessingStatus();
+					if (!status->hasPartialProcessingFlags(COntologyProcessingStatus::PSCOMPLETELYYPROCESSED) || !status->hasPartialErrorFlags(COntologyProcessingStatus::PSSUCESSFULL)) {
+						return nullptr;
+					}
+					CClassification* classification = ontology->getClassification();
+					CClassConceptClassification* classConClassification = classification ? classification->getClassConceptClassification() : nullptr;
+					return classConClassification ? classConClassification->getClassConceptTaxonomy() : nullptr;
+				}
+
+
 				bool CJNIQueryProcessor::queryOntologySubClasses(const QString& className, bool direct, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback) {
 					CConcreteOntology* ont = mOntRevData->getOntologyRevision()->getOntology();
 					CConcept* concept = ont->getStringMapping()->getConceptFromName(className);
 					if (concept) {
 						CCalculationConfigurationExtension* calcConfig = new CCalculationConfigurationExtension(mOntRevData->getOntologyRevision()->getOntologyConfiguration());
 						CSubSuperClassesResultVisitCallbackQuery* subSuperClassQuery = new CSubSuperClassesResultVisitCallbackQuery(mOntRevData->getOntologyRevision()->getOntology(),calcConfig,concept,className,true,false,direct);
-						mJNICommandProcessor->calculateOntologyQuery(subSuperClassQuery);
+						calculateNamedClassQuery(subSuperClassQuery,concept);
 						CQueryResult* result = subSuperClassQuery->getQueryResult();
 						if (result) {
 							subSuperClassQuery->callbackVisitingClasses(visitingCallback);
@@ -149,7 +185,7 @@ namespace Konclude {
 					if (concept) {
 						CCalculationConfigurationExtension* calcConfig = new CCalculationConfigurationExtension(mOntRevData->getOntologyRevision()->getOntologyConfiguration());
 						CSubSuperClassesResultVisitCallbackQuery* subSuperClassQuery = new CSubSuperClassesResultVisitCallbackQuery(mOntRevData->getOntologyRevision()->getOntology(),calcConfig,concept,className,false,true,direct);
-						mJNICommandProcessor->calculateOntologyQuery(subSuperClassQuery);
+						calculateNamedClassQuery(subSuperClassQuery,concept);
 						CQueryResult* result = subSuperClassQuery->getQueryResult();
 						if (result) {
 							subSuperClassQuery->callbackVisitingClasses(visitingCallback);
@@ -167,7 +203,7 @@ namespace Konclude {
 					if (concept) {
 						CCalculationConfigurationExtension* calcConfig = new CCalculationConfigurationExtension(mOntRevData->getOntologyRevision()->getOntologyConfiguration());
 						CEquivalentClassesResultVisitCallbackQuery* equivClassQuery = new CEquivalentClassesResultVisitCallbackQuery(mOntRevData->getOntologyRevision()->getOntology(),calcConfig,concept,className);
-						mJNICommandProcessor->calculateOntologyQuery(equivClassQuery);
+						calculateNamedClassQuery(equivClassQuery,concept);
 						CQueryResult* result = equivClassQuery->getQueryResult();
 						if (result) {
 							equivClassQuery->callbackVisitingClasses(visitingCallback);
