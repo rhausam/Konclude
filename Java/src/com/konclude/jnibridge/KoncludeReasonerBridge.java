@@ -66,7 +66,7 @@ public class KoncludeReasonerBridge {
 	 * The log messages Konclude wrote since the last call, for all library instances of the
 	 * process: three entries each, the level (30 information, 60 warning, 70 and above error),
 	 * the domain, for instance '::Konclude::Reasoner::Preprocess', and the text. Empty before
-	 * the first library instance was initialised.
+	 * the first library instance was initialised; null when there is nothing to take.
 	 */
 	public static native String[] takeKoncludeLogMessages();
 

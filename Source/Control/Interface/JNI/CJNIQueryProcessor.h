@@ -47,6 +47,8 @@
 #include "Reasoner/Query/CComplexEquivalentClassesAnsweringQuery.h"
 #include "Reasoner/Query/CComplexIndividualInstancesAnsweringQuery.h"
 #include "Reasoner/Query/CBooleanQueryResult.h"
+#include "Reasoner/Query/CTaxonomyPremisingQuery.h"
+#include "Reasoner/Ontology/COntologyProcessingStepVector.h"
 #include "Reasoner/Query/CClassSynsetsResult.h"
 #include "Reasoner/Query/CClassSetResult.h"
 #include "Reasoner/Query/CIndividualSynsetsResult.h"
@@ -111,6 +113,10 @@ namespace Konclude {
 
 						bool queryOntologySubClasses(const QString& className, bool direct, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback);
 						bool queryOntologySuperClasses(const QString& className, bool direct, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback);
+						// answers a query about a named class from the class taxonomy directly, on the calling thread, when the
+						// classification is complete and the class is in it, otherwise through the reasoner (see the .cpp)
+						void calculateNamedClassQuery(CTaxonomyPremisingQuery* query, CConcept* concept);
+						CTaxonomy* getCompletedClassTaxonomy(CConcreteOntology* ontology);
 						bool queryOntologyEquivalentClasses(const QString& className, CEntityExpressionSetResultVisitingCallback* visitingCallback);
 
 
