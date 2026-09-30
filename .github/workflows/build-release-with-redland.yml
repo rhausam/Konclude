@@ -16,6 +16,10 @@ on:
         description: 'Create a draft release with the built packages'
         type: boolean
         default: true
+      jemalloc_debug:
+        description: 'Link a debug build of jemalloc into the Linux libraries, which aborts on a pointer it did not allocate (for testing, not for a release)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -588,16 +592,37 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # jemalloc inside the library, hidden, for the library's allocations only; the program the
+      # library is loaded into keeps its malloc. See 'THE MEMORY ALLOCATOR ON LINUX' in Java/Readme.md.
+      - name: Compile jemalloc for the library
+        run: |
+          konclude-static/.github/scripts/build-jemalloc-library.sh jemalloc-work jemalloc-library \
+            ${{ (github.event_name == 'workflow_dispatch' && inputs.jemalloc_debug) && 'debug' || 'release' }}
+
       - name: Compile the Konclude library
         run: |
           mkdir -p konclude-lib library
           cd konclude-lib
-          ../qt-static/bin/qmake -o Makefile ../konclude-static/KoncludeLIB.pro -after "QT-=gui" "CONFIG-=static staticlib" "CONFIG+=shared dll" \
+          # the jemalloc settings before -after, since KoncludeLIB.pro's jemalloc scope has to see them
+          ../qt-static/bin/qmake -o Makefile ../konclude-static/KoncludeLIB.pro \
+            "CONFIG+=jemalloc" "JEMALLOC_LIB=$GITHUB_WORKSPACE/jemalloc-library/libjemalloc_pic.a" \
+            -after "QT-=gui" "CONFIG-=static staticlib" "CONFIG+=shared dll" \
             "QMAKE_LFLAGS+=-static-libstdc++ -static-libgcc -Wl,--exclude-libs,ALL"
           make -j"$(nproc)"
           ldd Release/libKonclude.so
           if ldd Release/libKonclude.so | grep -vE "(linux-vdso|ld-linux-[a-z0-9_-]+|libc|libm|libdl|libpthread|librt|libz)\.so"; then
             echo "::error::The library depends on the libraries listed above, which might not be available."
+            exit 1
+          fi
+          # every allocation of the library has to go to jemalloc: it must neither import nor export
+          # an allocation function of the C library
+          if nm -D Release/libKonclude.so | grep -E " (malloc|calloc|realloc|free|aligned_alloc|posix_memalign|memalign|valloc|mallctl)(@|$)"; then
+            echo "::error::The library imports or exports the allocation functions listed above, jemalloc is not used for all of its allocations."
+            exit 1
+          fi
+          # and its calls to its own functions must not be taken over by the program's libstdc++.so
+          if ! readelf -d Release/libKonclude.so | grep -q "(SYMBOLIC)"; then
+            echo "::error::The library is not linked with -Bsymbolic, the program's libstdc++.so would supply some of its C++ functions, which allocate with the program's malloc."
             exit 1
           fi
           cp -L Release/libKonclude.so ../library/
