@@ -620,6 +620,11 @@ jobs:
             echo "::error::The library imports or exports the allocation functions listed above, jemalloc is not used for all of its allocations."
             exit 1
           fi
+          # and its calls to its own functions must not be taken over by the program's libstdc++.so
+          if ! readelf -d Release/libKonclude.so | grep -q "(SYMBOLIC)"; then
+            echo "::error::The library is not linked with -Bsymbolic, the program's libstdc++.so would supply some of its C++ functions, which allocate with the program's malloc."
+            exit 1
+          fi
           cp -L Release/libKonclude.so ../library/
 
       - name: Konclude Library Test

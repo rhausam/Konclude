@@ -48,12 +48,16 @@ include(Konclude.pri)
 # keeps its own. The C library functions that return memory for the caller to free are wrapped,
 # see Source/Utilities/Memory/CLibraryAllocatorWrappers.cpp. Without the option the library uses
 # the program's malloc and tunes glibc's, see 'THE MEMORY ALLOCATOR ON LINUX' in Java/Readme.md.
+# -Bsymbolic binds the library's calls to its own functions: it exports the C++ template
+# instances it contains, and without it the program's libstdc++.so, which the Java virtual
+# machine loads, would supply the ones it has as well (std::wstring's _M_construct among them),
+# which allocate with the program's malloc what the library later frees with jemalloc.
 linux:jemalloc {
 	isEmpty(JEMALLOC_LIB): error("CONFIG+=jemalloc needs JEMALLOC_LIB, the path of libjemalloc_pic.a")
 	message("Linking jemalloc from $$JEMALLOC_LIB into the library.")
 	DEFINES += KONCLUDE_JEMALLOC_IN_LIBRARY
 	SOURCES += ./Source/Utilities/Memory/CLibraryAllocatorWrappers.cpp
 	LIBS += -Wl,--whole-archive $$JEMALLOC_LIB -Wl,--no-whole-archive -lpthread -ldl
-	QMAKE_LFLAGS += -Wl,--exclude-libs,ALL \
+	QMAKE_LFLAGS += -Wl,--exclude-libs,ALL -Wl,-Bsymbolic \
 		-Wl,--wrap=realpath -Wl,--wrap=getcwd -Wl,--wrap=strdup -Wl,--wrap=backtrace_symbols
 }

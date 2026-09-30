@@ -1472,9 +1472,20 @@ jemalloc's faster allocation itself; the tunable tcache made no difference.
   `getpwuid_r`, `strerror`, `setlocale`, `getenv` ...), or allocate and free on the C library's
   side through their own pair (`getaddrinfo`/`freeaddrinfo`, `opendir`/`closedir`,
   `iconv_open`/`iconv_close`, `newlocale`/`freelocale`, the `FILE` functions, and zlib, a shared
-  library of its own). None frees or keeps memory the library allocated. The release workflow
-  checks that the library neither imports nor exports an allocation function, and with the input
-  `jemalloc_debug` links a debug jemalloc, which aborts on a pointer it did not allocate.
+  library of its own). None frees or keeps memory the library allocated.
+
+  The other boundary is the C++ runtime. The library exports the C++ template instances it
+  contains, and the virtual machine loads the system's `libstdc++.so`, which has some of them as
+  well. Without `-Bsymbolic` the dynamic linker binds the library's calls to those to
+  `libstdc++.so`'s, which allocate with glibc: `std::wstring`'s `_M_construct` built the static
+  token names of the functional-syntax parser in glibc's memory, and the library's inlined delete
+  handed them to jemalloc when the virtual machine exited, which crashed it. With `-Bsymbolic` the
+  library's calls to its own functions stay inside it.
+
+  The release workflow checks that the library neither imports nor exports an allocation function
+  and that it is linked with `-Bsymbolic`. With the input `jemalloc_debug` it links a debug
+  jemalloc, which checks more of what it is handed, though a pointer from another allocator can
+  still crash it rather than fail an assertion.
 
   With jemalloc in the library, `CSystemAllocatorTuning` leaves glibc's malloc alone, since the
   library no longer uses it, and `closeKoncludeLibraryInstance` purges jemalloc's arenas
