@@ -20888,6 +20888,7 @@ namespace Konclude {
 								if (superConDes->getNegation() != subConDes->getNegation()) {
 									clashDescriptors = createClashedConceptDescriptor(clashDescriptors, subSetIndi, subConDes, subDepTrackPoint, calcAlgContext);
 									clashDescriptors = createClashedConceptDescriptor(clashDescriptors, superSetIndi, superConDes, superDepTrackPoint, calcAlgContext);
+									return true;
 								}
 							}
 							subConSetIt.moveNext();

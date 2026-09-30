@@ -1080,6 +1080,41 @@ public class KoncludeOWLAPITest {
 		} finally {
 			harmlessReasoner.dispose();
 		}
+
+		// A node with a few concepts merged into one with more than twenty times as many, where
+		// the two contradict each other (issue 28). 'A' has an s successor with at most one r
+		// successor, which is in B and in seventy other classes. Not X puts a second r successor
+		// there that is not in B, but only after P was derived for A, by which time the first one
+		// has its whole label. The two have to be merged, which is a clash, so A is subsumed by X.
+		// The clash test of the merge had a path for labels of such different sizes that found
+		// the clash and did not report it, and the merge then dropped the contradicting concept.
+		OWLClassExpression filler = cls("B");
+		for (int i = 0; i < 70; ++i) {
+			filler = DF.getOWLObjectIntersectionOf(filler, cls("C" + i));
+		}
+		OWLOntology unequal = manager.createOntology(IRI.create(NS + "unequal"));
+		manager.addAxioms(unequal, new HashSet<OWLAxiom>(Arrays.<OWLAxiom>asList(
+			DF.getOWLSubClassOfAxiom(cls("A"), DF.getOWLObjectIntersectionOf(cls("Z"),
+					DF.getOWLObjectSomeValuesFrom(objectProperty("s"), DF.getOWLObjectIntersectionOf(
+							DF.getOWLObjectSomeValuesFrom(objectProperty("r"), filler),
+							DF.getOWLObjectMaxCardinality(1, objectProperty("r")))))),
+			DF.getOWLEquivalentClassesAxiom(cls("P"), DF.getOWLObjectIntersectionOf(cls("Z"),
+					DF.getOWLObjectSomeValuesFrom(objectProperty("s"),
+							DF.getOWLObjectSomeValuesFrom(objectProperty("r"), cls("B"))))),
+			DF.getOWLEquivalentClassesAxiom(cls("X"), DF.getOWLObjectIntersectionOf(cls("P"),
+					DF.getOWLObjectSomeValuesFrom(objectProperty("s"),
+							DF.getOWLObjectAllValuesFrom(objectProperty("r"), cls("B")))))
+		)));
+		// asked before anything else, the classification finds the subsumption in another order
+		OWLReasoner unequalReasoner = reasonerFor(unequal);
+		try {
+			check("isSatisfiable(A and not X)     ", Boolean.valueOf(unequalReasoner.isSatisfiable(
+					DF.getOWLObjectIntersectionOf(cls("A"), DF.getOWLObjectComplementOf(cls("X"))))), Boolean.FALSE);
+			checkContains("superClasses(A, false)         ",
+					names(unequalReasoner.getSuperClasses(cls("A"), false)), "P", "X", "Z");
+		} finally {
+			unequalReasoner.dispose();
+		}
 	}
 
 	/**
