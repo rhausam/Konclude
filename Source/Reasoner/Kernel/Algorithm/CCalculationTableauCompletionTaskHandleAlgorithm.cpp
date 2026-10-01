@@ -4769,7 +4769,21 @@ namespace Konclude {
 						individualNode->clearProcessingRestrictionFlags(CIndividualProcessNode::PRFRETESTSATURATIONBLOCKINGCACHEDDUEDIRECTMODIFIED);
 					}
 					bool stillSaturationCached = false;
-					if (!individualNode->hasPartialProcessingRestrictionFlags(CIndividualProcessNode::PRFSATURATIONBLOCKINGCACHEDINVALIDATED)) {
+					// the root node of a classification test is not cached from the saturation: the classifier takes the
+					// possible subsumers from its label, and the saturation marks a successor with an unresolved disjunction
+					// insufficient without passing that on to the root, so blocking the successors of a cached root would
+					// leave the label incomplete (e.g., a laterality successor whose choice triggers absorbed definitions)
+					bool classificationRoot = false;
+					if (individualNode->getIndividualAncestorDepth() <= 0) {
+						CSatisfiableCalculationTask* satCalcTask = calcAlgContext->getUsedSatisfiableCalculationTask();
+						if (satCalcTask) {
+							CSatisfiableCalculationTask* rootTask = (CSatisfiableCalculationTask*)satCalcTask->getRootTask();
+							if (satCalcTask->getClassificationMessageAdapter() || rootTask && rootTask->getClassificationMessageAdapter()) {
+								classificationRoot = true;
+							}
+						}
+					}
+					if (!classificationRoot && !individualNode->hasPartialProcessingRestrictionFlags(CIndividualProcessNode::PRFSATURATIONBLOCKINGCACHEDINVALIDATED)) {
 
 						CSaturationNodeExpansionCacheHandler* satNodeExpCacheHandler = calcAlgContext->getSaturationNodeExpansionCacheHandler();
 						if (!stillSaturationCached && satNodeExpCacheHandler && mConfSaturationExpansionCacheReading) {
