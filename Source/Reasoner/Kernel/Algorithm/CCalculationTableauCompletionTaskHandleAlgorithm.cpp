@@ -19031,6 +19031,23 @@ namespace Konclude {
 
 					bool blocked = false;
 
+					if (testIndi->hasPartialProcessingRestrictionFlags(CIndividualProcessNode::PRFCONCRETEDATAINDINODE)) {
+						// a data node is not tested for a blocker itself (see the loop below), its blocking follows from its ancestor;
+						// its flags have to be updated here, otherwise an indirectly blocked data node that is to be retested
+						// because its ancestor lost the blocker keeps these flags and is queued for processing again and again
+						cint64 retestFlags = CIndividualProcessNode::PRFBLOCKINGRETESTDUEANCESTORMODIFIED | CIndividualProcessNode::PRFBLOCKINGRETESTDUEDIRECTMODIFIED | CIndividualProcessNode::PRFBLOCKINGRETESTDUEBLOCKERMODIFIED | CIndividualProcessNode::PRFBLOCKINGRETESTDUEINDIRECTBLOCKERLOSS;
+						cint64 blockedFlags = CIndividualProcessNode::PRFDIRECTBLOCKED | CIndividualProcessNode::PRFINDIRECTBLOCKED | CIndividualProcessNode::PRFPROCESSINGBLOCKED;
+						CIndividualProcessNode* locDataIndi = getLocalizedIndividual(testIndi,false,calcAlgContext);
+						CIndividualProcessNode* dataAncIndi = getAncestorIndividual(locDataIndi,calcAlgContext);
+						if (dataAncIndi && dataAncIndi->hasPartialProcessingRestrictionFlags(blockedFlags) && !dataAncIndi->hasPartialProcessingRestrictionFlags(retestFlags)) {
+							// the ancestor is still blocked and not to be retested, the data node stays blocked with it
+							locDataIndi->clearProcessingRestrictionFlags(retestFlags);
+							return true;
+						}
+						locDataIndi->clearProcessingRestrictionFlags(retestFlags | blockedFlags);
+						ancTestIndi = dataAncIndi;
+					}
+
 					bool blockingTesting = true;
 					if (!previousBlocked && mCompGraphCacheHandler && mConfIgnoreBlockingCompletionGraphCachedNonBlockingNodes) {
 						if (mCompGraphCacheHandler->isIndividualNodeCompletionGraphConsistencePresentNonBlocked(testIndi, calcAlgContext)) {
