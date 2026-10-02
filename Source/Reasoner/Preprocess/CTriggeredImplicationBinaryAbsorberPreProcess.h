@@ -98,7 +98,25 @@ namespace Konclude {
 
 					bool collectConjunctions(CConcept* concept, bool negated, QList< TConceptNegationPair >& conjList);
 
-					void collectPositiveConcepts(CConcept* concept, bool negated, QSet<TConceptNegationPair>* positiveConceptSet, bool recursiveDefinition = false);
+					/*! the concepts with their polarity that occur positively, by tag: a set of pairs cost a hash
+					 *  operation per visited operand, a third of the preprocessing of SNOMED CT */
+					class CConceptNegationFlags {
+						public:
+							bool contains(const TConceptNegationPair& conNegPair) const {
+								cint64 index = conNegPair.first->getConceptTag() * 2 + (conNegPair.second ? 1 : 0);
+								return index < mFlags.size() && mFlags.at(index);
+							}
+							void insert(const TConceptNegationPair& conNegPair) {
+								cint64 index = conNegPair.first->getConceptTag() * 2 + (conNegPair.second ? 1 : 0);
+								if (index >= mFlags.size()) {
+									mFlags.resize((int)qMax<cint64>(index + 1, (cint64)mFlags.size() * 2));
+								}
+								mFlags[index] = 1;
+							}
+						private:
+							QVector<quint8> mFlags;
+					};
+					void collectPositiveConcepts(CConcept* concept, bool negated, CConceptNegationFlags* positiveConceptSet, bool recursiveDefinition = false);
 
 					CConcept* getRoleDomainTriggerConcept(CRole* role);
 
@@ -349,7 +367,7 @@ namespace Konclude {
 					QHash<CRole*,CRole*> mRoleInverseRoleCreateHash;
 					CBOXHASH<cint64,CConcept*>* mIndividualTriggerConceptHash;
 
-					QSet<TConceptNegationPair> mPositiveConceptReferencedSet;
+					CConceptNegationFlags mPositiveConceptReferencedSet;
 					CImplicationReplacementVector* mImpRepVec = nullptr;
 
 					cint64 mNextVariableID;
