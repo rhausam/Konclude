@@ -56,7 +56,13 @@ namespace Konclude {
 				} else if (mTriggerComplexity < conceptTriggerLinker.mTriggerComplexity) {
 					return false;
 				} 
-				return mTriggerConcept >= conceptTriggerLinker.mTriggerConcept;
+				// triggers of the same complexity are ordered by their concept's tag, not by the concept's address:
+				// the absorber pairs the triggers in this order and reuses an implication whenever a pair already has
+				// one, and with the addresses the pairing followed the memory layout, which the allocator chooses
+				// differently from one build to the next; on SNOMED CT one build in two to four then reused some 8 000
+				// implications more, its saturation labels grew by 60 % and the precomputation took half as long
+				// again with half as much memory again; the later concepts first is the pairing of the good builds
+				return mTriggerConcept->getConceptTag() >= conceptTriggerLinker.mTriggerConcept->getConceptTag();
 			}
 
 
