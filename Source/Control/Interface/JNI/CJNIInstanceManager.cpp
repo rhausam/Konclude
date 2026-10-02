@@ -20,6 +20,13 @@
 
 #include "CJNIInstanceManager.h"
 
+// the members are deleted here, which needs their complete types: with only the forward
+// declarations of JNISettings.h, delete frees the memory without running the destructors, and
+// the command processor's thread and its precondition synchronizer kept running (issue #45)
+#include "CJNICommandProcessor.h"
+#include "CJNIHandler.h"
+#include "CJNIAxiomExpressionVisitingLoader.h"
+
 
 namespace Konclude {
 

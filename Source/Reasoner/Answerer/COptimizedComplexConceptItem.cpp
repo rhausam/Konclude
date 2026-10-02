@@ -20,6 +20,9 @@
 
 #include "COptimizedComplexConceptItem.h"
 
+// complete type for the deletion of the realization iterator, otherwise no destructor runs (issue #45)
+#include "Reasoner/Realization/CRealizationIndividualInstanceItemReferenceIterator.h"
+
 
 namespace Konclude {
 
