@@ -85,6 +85,9 @@ namespace Konclude {
 				mConfExtendedLogging = CConfigDataReader::readConfigBoolean(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.ExtendedLogging", false);
 				mConfSaturationSubClassDecision = CConfigDataReader::readConfigBoolean(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.SaturationBasedSubClassDecision", true);
 				mConfSaturationSubClassLabelCompletion = CConfigDataReader::readConfigBoolean(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.SaturationBasedSubClassLabelCompletion", true);
+				mConfLabelCompletionSampleSize = CConfigDataReader::readConfigInteger(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.SaturationBasedSubClassLabelCompletionSampleSize", 2000);
+				mConfLabelCompletionMinimumDecisivePercent = CConfigDataReader::readConfigInteger(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.SaturationBasedSubClassLabelCompletionMinimumDecisivePercent", 30);
+				mLabelCompletionStopped = false;
 				mLabelCompletionTestCount = 0;
 				mSaturationSubsumptionDecider = nullptr;
 				mConfVariablePreAbsorption = CConfigDataReader::readConfigBoolean(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.QueryAbsorption.Preabsorption", true);
@@ -4865,7 +4868,7 @@ namespace Konclude {
 									addSubClassSubsumptionResult(conceptItem, testingNode, true);
 								} else if (verdict == CSaturationSubsumptionDecider::NOT_SUBSUMED) {
 									addSubClassSubsumptionResult(conceptItem, testingNode, false);
-								} else if (verdict == CSaturationSubsumptionDecider::NEEDS_COMPLETION && mConfSaturationSubClassLabelCompletion
+								} else if (verdict == CSaturationSubsumptionDecider::NEEDS_COMPLETION && mConfSaturationSubClassLabelCompletion && isLabelCompletionWorthwhile()
 										&& createLabelCompletionTest(conceptItem, testingNode, mSaturationSubsumptionDecider->getCompletionConcept(), answererContext)) {
 									// the node is taken up again once the label of the class is completed
 									processing = true;
@@ -10543,6 +10546,7 @@ namespace Konclude {
 							.arg(mSaturationSubsumptionDecider->getUndecidedCount()).arg(codeStrings.join(" ")).arg(mSaturationSubsumptionDecider->getFiredImplicationCount())
 							.arg(mSaturationSubsumptionDecider->getCompletionRequestCount()).arg(mLabelCompletionTestCount).arg(mSaturationSubsumptionDecider->getCompletedDecisionCount()),this);
 					LOG(INFO, getDomain(), logTr("Saturation merges: %1 by the label scan, %2 by the closure.").arg(mSaturationSubsumptionDecider->getFastDecisionCount()).arg(mSaturationSubsumptionDecider->getClosureDecisionCount()),this);
+					LOG(INFO, getDomain(), logTr("Completed labels decided %1 sub class candidates and left %2 undecided, label completion %3.").arg(mSaturationSubsumptionDecider->getCompletedLabelDecisiveCount()).arg(mSaturationSubsumptionDecider->getCompletedLabelUndecidedCount()).arg(mLabelCompletionStopped ? "stopped" : "active"),this);
 				}
 				// the search goes down from several nodes and stops at every subsumed one, so it also finds nodes below
 				// one that it found subsumed over another path, Father below Parent through Man, or the bottom node
@@ -12816,6 +12820,29 @@ namespace Konclude {
 						}
 						finishCalculationStepProcessing(conceptItem, compStep, answererContext);
 					}
+				}
+				return true;
+			}
+
+
+			bool COptimizedComplexExpressionAnsweringHandler::isLabelCompletionWorthwhile() {
+				// a completion is a tableau test of its own, and it pays only if the completed label then
+				// decides the candidate; where the saturation of most classes is insufficient because of
+				// universal or cardinality restrictions in their role groups, the completed label rarely
+				// does, and the candidate needs its subsumption test on top (issue #33)
+				if (mLabelCompletionStopped) {
+					return false;
+				}
+				CSaturationSubsumptionDecider* decider = getSaturationSubsumptionDecider();
+				if (!decider || mConfLabelCompletionSampleSize <= 0) {
+					return true;
+				}
+				cint64 decisiveCount = decider->getCompletedLabelDecisiveCount();
+				cint64 totalCount = decisiveCount + decider->getCompletedLabelUndecidedCount();
+				if (totalCount >= mConfLabelCompletionSampleSize && decisiveCount * 100 < totalCount * mConfLabelCompletionMinimumDecisivePercent) {
+					mLabelCompletionStopped = true;
+					LOG(INFO, getDomain(), logTr("Label completion stopped: the completed labels decided %1 of %2 sub class candidates, the remaining candidates go to the tableau directly.").arg(decisiveCount).arg(totalCount), this);
+					return false;
 				}
 				return true;
 			}

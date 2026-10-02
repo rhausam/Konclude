@@ -1754,6 +1754,14 @@ namespace Konclude {
 						"Determines whether a class whose saturation is not reliable enough for the decision of the sub classes of a class expression gets its label completed once with a satisfiability test, instead of a test for every query that visits it, see Konclude.Answering.SaturationBasedSubClassDecision.",
 						new CBooleanConfigType(true)),
 						new CBooleanConfigType(true));
+				addConfigProperty(new CConfigDescription("Konclude.Answering.SaturationBasedSubClassLabelCompletionSampleSize",
+						"Number of decisions from completed labels after which the label completion is stopped for the rest of the reasoner's life if too few of them decided a sub class candidate, see Konclude.Answering.SaturationBasedSubClassLabelCompletionMinimumDecisivePercent. 0 never stops it.",
+						new CIntegerConfigType(2000)),
+						new CIntegerConfigType(2000));
+				addConfigProperty(new CConfigDescription("Konclude.Answering.SaturationBasedSubClassLabelCompletionMinimumDecisivePercent",
+						"Percentage of the decisions from completed labels that have to decide the candidate for the label completion to go on once the sample of Konclude.Answering.SaturationBasedSubClassLabelCompletionSampleSize is reached; below it the candidates go to the tableau directly, labels completed before are still used.",
+						new CIntegerConfigType(30)),
+						new CIntegerConfigType(30));
 
 				addConfigProperty(new CConfigDescription("Konclude.Answering.InterpretNonAnswerIndividualVariablesAsAnonymousVariables",
 						"Determines whether non-answer individual variables are interpreted as anonymous variables.",
