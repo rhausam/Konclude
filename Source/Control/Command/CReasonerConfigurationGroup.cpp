@@ -90,7 +90,7 @@ namespace Konclude {
 				// Parallelisation configurations
 
 				addConfigProperty(new CConfigDescription("Konclude.Calculation.ProcessorCount",
-						"Number of Processor-Threads that are used for task based reasoning.",
+						"Number of processor threads that run the tableau and saturation tasks, or 'AUTO' for one per core. With 1, all tasks run on one thread, but the threads that coordinate the reasoning steps and the cache threads run beside it.",
 						new CStringConfigType("1")),
 						new CStringConfigType("1"));
 				addConfigProperty(new CConfigDescription("Konclude.Calculation.AdaptThreadPoolSizeProcessorCount",
