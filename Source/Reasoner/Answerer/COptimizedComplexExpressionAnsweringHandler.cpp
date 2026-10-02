@@ -85,7 +85,7 @@ namespace Konclude {
 				mConfExtendedLogging = CConfigDataReader::readConfigBoolean(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.ExtendedLogging", false);
 				mConfSaturationSubClassDecision = CConfigDataReader::readConfigBoolean(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.SaturationBasedSubClassDecision", true);
 				mConfSaturationSubClassLabelCompletion = CConfigDataReader::readConfigBoolean(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.SaturationBasedSubClassLabelCompletion", true);
-				mConfLabelCompletionSampleSize = CConfigDataReader::readConfigInteger(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.SaturationBasedSubClassLabelCompletionSampleSize", 2000);
+				mConfLabelCompletionSampleSize = CConfigDataReader::readConfigInteger(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.SaturationBasedSubClassLabelCompletionSampleSize", 0);
 				mConfLabelCompletionMinimumDecisivePercent = CConfigDataReader::readConfigInteger(ontoAnsweringItem->getCalculationConfiguration(), "Konclude.Answering.SaturationBasedSubClassLabelCompletionMinimumDecisivePercent", 30);
 				mLabelCompletionStopped = false;
 				mLabelCompletionTestCount = 0;
@@ -12829,7 +12829,9 @@ namespace Konclude {
 				// a completion is a tableau test of its own, and it pays only if the completed label then
 				// decides the candidate; where the saturation of most classes is insufficient because of
 				// universal or cardinality restrictions in their role groups, the completed label rarely
-				// does, and the candidate needs its subsumption test on top (issue #33)
+				// does, and the candidate needs its subsumption test on top (issue #33); but the label is
+				// completed once and used by every later query, so the stop is off by default and pays only
+				// for a reasoner that answers a few queries
 				if (mLabelCompletionStopped) {
 					return false;
 				}
