@@ -176,6 +176,14 @@ are logged beside the processor count. The keys and their defaults are those of
 `+=Konclude.<Key>=<Value>` does the same, which is how a setting is tried out before it goes
 into `jvm.conf`.
 
+Once the class hierarchy is computed, the wrapper reads the whole class taxonomy from the
+library in one call and answers the direct sub and super classes and the equivalent classes of a
+named class from it, without a call through the bridge each time. A program that walks the whole
+hierarchy, such as the classification service of the SNOMED CT toolkit, otherwise makes about two
+million such calls for SNOMED CT. Expressions, `direct=false` and the instances still go through
+the bridge, and the taxonomy is read again after every `flush()` that has changes to apply.
+`-Dkonclude.taxonomyCache=false` switches it off, for instance to compare the answers.
+
 `run-protege-plugin-test.sh [<Protege directory>] [<library>]` builds the plug-in and then
 runs it inside the OSGi framework of the given Protege installation rather than on a class
 path: it starts Felix from Protege's `bundles` directory, installs every bundle in there,

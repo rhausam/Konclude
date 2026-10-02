@@ -41,9 +41,11 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
@@ -274,6 +276,22 @@ public class KoncludeReasoner implements OWLReasoner {
 	/** the inference types that were computed for the ontology currently installed in the library */
 	private final Set<InferenceType> mPrecomputed = EnumSet.noneOf(InferenceType.class);
 
+	/**
+	 * The class taxonomy, read from the native side at once after the classification, see
+	 * ClassTaxonomy; null until it is read and after every reinstallation.
+	 */
+	private ClassTaxonomy mClassTaxonomy;
+	/**
+	 * whether the taxonomy may be asked for, false after a request found no complete classification;
+	 * it is asked for again after the class hierarchy is precomputed, or once after the next hierarchy
+	 * query about a named class, which classifies, so that an ontology that is never classified, an
+	 * inconsistent one, does not pay a request per query
+	 */
+	private boolean mClassTaxonomyRequestable = true;
+	private boolean mClassTaxonomyRetried = false;
+	/** -Dkonclude.taxonomyCache=false answers every hierarchy query of a named class natively */
+	private static final boolean TAXONOMY_CACHE = !"false".equalsIgnoreCase(System.getProperty("konclude.taxonomyCache"));
+
 	private final OWLOntologyChangeListener mChangeListener = new OWLOntologyChangeListener() {
 		@Override
 		public void ontologiesChanged(List<? extends OWLOntologyChange> changes) {
@@ -478,6 +496,9 @@ public class KoncludeReasoner implements OWLReasoner {
 	private void uninstall() {
 		// what was computed belongs to the ontology that is being removed from the library
 		mPrecomputed.clear();
+		mClassTaxonomy = null;
+		mClassTaxonomyRequestable = true;
+		mClassTaxonomyRetried = false;
 		guard("uninstall", new NativeCall<Void>() {
 			@Override
 			public Void call() {
@@ -653,6 +674,7 @@ public class KoncludeReasoner implements OWLReasoner {
 					monitor.reasonerTaskStopped();
 				}
 				mPrecomputed.add(inferenceType);
+				mClassTaxonomyRequestable = true;
 			} else if (InferenceType.CLASS_ASSERTIONS == inferenceType) {
 				monitor.reasonerTaskStarted(ReasonerProgressMonitor.REALIZING);
 				ProgressReporter reporter = new ProgressReporter(monitor, true);
@@ -843,6 +865,12 @@ public class KoncludeReasoner implements OWLReasoner {
 		if (!isKnown(classExpression)) {
 			return new OWLClassNodeSet();
 		}
+		if (direct && !classExpression.isAnonymous()) {
+			ClassTaxonomy taxonomy = getClassTaxonomy();
+			if (taxonomy != null && taxonomy.contains(classExpression.asOWLClass())) {
+				return taxonomy.getDirectSubClasses(classExpression.asOWLClass());
+			}
+		}
 		final SetOfObjectSetCallbackListener callback = new SetOfObjectSetCallbackListener();
 		guard(describe("getSubClasses", classExpression), new NativeCall<Void>() {
 			@Override
@@ -857,6 +885,7 @@ public class KoncludeReasoner implements OWLReasoner {
 				return null;
 			}
 		});
+		allowClassTaxonomyRetry(classExpression);
 		return classNodeSet(callback);
 	}
 
@@ -865,6 +894,12 @@ public class KoncludeReasoner implements OWLReasoner {
 		requireClassExpression(classExpression);
 		if (!isKnown(classExpression)) {
 			return new OWLClassNodeSet();
+		}
+		if (direct && !classExpression.isAnonymous()) {
+			ClassTaxonomy taxonomy = getClassTaxonomy();
+			if (taxonomy != null && taxonomy.contains(classExpression.asOWLClass())) {
+				return taxonomy.getDirectSuperClasses(classExpression.asOWLClass());
+			}
 		}
 		final SetOfObjectSetCallbackListener callback = new SetOfObjectSetCallbackListener();
 		guard(describe("getSuperClasses", classExpression), new NativeCall<Void>() {
@@ -880,6 +915,7 @@ public class KoncludeReasoner implements OWLReasoner {
 				return null;
 			}
 		});
+		allowClassTaxonomyRetry(classExpression);
 		return classNodeSet(callback);
 	}
 
@@ -889,6 +925,12 @@ public class KoncludeReasoner implements OWLReasoner {
 		final boolean anonymous = classExpression.isAnonymous();
 		if (!isKnown(classExpression)) {
 			return anonymous ? new OWLClassNode() : new OWLClassNode(classExpression.asOWLClass());
+		}
+		if (!anonymous) {
+			ClassTaxonomy taxonomy = getClassTaxonomy();
+			if (taxonomy != null && taxonomy.contains(classExpression.asOWLClass())) {
+				return taxonomy.getEquivalentClasses(classExpression.asOWLClass());
+			}
 		}
 		final ObjectSetCallbackListener callback = new ObjectSetCallbackListener();
 		guard(describe("getEquivalentClasses", classExpression), new NativeCall<Void>() {
@@ -1564,6 +1606,115 @@ public class KoncludeReasoner implements OWLReasoner {
 			}
 		}
 		return result;
+	}
+
+	/**
+	 * The class taxonomy, read once the classification is complete, null before that or if the
+	 * cache is switched off. A caller that walks the whole hierarchy, such as the classification
+	 * service of the SNOMED CT toolkit with its ReasonerTaxonomyWalker, asks for the direct sub and
+	 * super classes of every class, about two million calls for SNOMED CT, and each of them
+	 * through the bridge cost about 60 microseconds, two minutes in all; the taxonomy answers them
+	 * on the caller's thread.
+	 */
+	private ClassTaxonomy getClassTaxonomy() {
+		checkOpen();
+		if (!TAXONOMY_CACHE) {
+			return null;
+		}
+		if (mClassTaxonomy == null && mClassTaxonomyRequestable) {
+			final SetOfObjectSetCallbackListener callback = new SetOfObjectSetCallbackListener();
+			int[] edges = guard("getClassTaxonomy", new NativeCall<int[]>() {
+				@Override
+				public int[] call() {
+					return mQuerying.queryOWLClassHierarchy(mBridge, callback);
+				}
+			});
+			if (edges == null) {
+				// not classified yet: the hierarchy query that the caller makes natively classifies,
+				// after that the taxonomy is asked for again
+				mClassTaxonomyRequestable = false;
+			} else {
+				mClassTaxonomy = new ClassTaxonomy(callback.getObjectSets(), edges);
+			}
+		}
+		return mClassTaxonomy;
+	}
+
+	private void allowClassTaxonomyRetry(OWLClassExpression classExpression) {
+		if (mClassTaxonomy == null && !mClassTaxonomyRequestable && !mClassTaxonomyRetried && !classExpression.isAnonymous()) {
+			mClassTaxonomyRetried = true;
+			mClassTaxonomyRequestable = true;
+		}
+	}
+
+	/**
+	 * The class taxonomy on the Java side: the nodes in the order the native side reported them,
+	 * with their direct children and parents as positions. A node without a class object is kept,
+	 * since edges run through it, but left out of every answer, as classNodeSet leaves it out.
+	 */
+	private static final class ClassTaxonomy {
+		private final OWLClassNode[] mNodes;
+		private final int[][] mChildren;
+		private final int[][] mParents;
+		private final Map<OWLClass, Integer> mNodePositions = new HashMap<OWLClass, Integer>();
+
+		ClassTaxonomy(List<List<Object>> nodeObjectSets, int[] edges) {
+			int nodeCount = nodeObjectSets.size();
+			mNodes = new OWLClassNode[nodeCount];
+			for (int i = 0; i < nodeCount; ++i) {
+				Set<OWLClass> classes = collect(nodeObjectSets.get(i), OWLClass.class);
+				mNodes[i] = classes.isEmpty() ? null : new OWLClassNode(classes);
+				for (OWLClass cls : classes) {
+					mNodePositions.put(cls, Integer.valueOf(i));
+				}
+			}
+			int[] childCounts = new int[nodeCount];
+			int[] parentCounts = new int[nodeCount];
+			for (int e = 0; e + 1 < edges.length; e += 2) {
+				++childCounts[edges[e]];
+				++parentCounts[edges[e + 1]];
+			}
+			mChildren = new int[nodeCount][];
+			mParents = new int[nodeCount][];
+			for (int i = 0; i < nodeCount; ++i) {
+				mChildren[i] = new int[childCounts[i]];
+				mParents[i] = new int[parentCounts[i]];
+			}
+			int[] childFill = new int[nodeCount];
+			int[] parentFill = new int[nodeCount];
+			for (int e = 0; e + 1 < edges.length; e += 2) {
+				int parent = edges[e];
+				int child = edges[e + 1];
+				mChildren[parent][childFill[parent]++] = child;
+				mParents[child][parentFill[child]++] = parent;
+			}
+		}
+
+		boolean contains(OWLClass cls) {
+			return mNodePositions.containsKey(cls);
+		}
+
+		NodeSet<OWLClass> getDirectSubClasses(OWLClass cls) {
+			return nodeSet(mChildren[mNodePositions.get(cls).intValue()]);
+		}
+
+		NodeSet<OWLClass> getDirectSuperClasses(OWLClass cls) {
+			return nodeSet(mParents[mNodePositions.get(cls).intValue()]);
+		}
+
+		Node<OWLClass> getEquivalentClasses(OWLClass cls) {
+			return mNodes[mNodePositions.get(cls).intValue()];
+		}
+
+		private NodeSet<OWLClass> nodeSet(int[] positions) {
+			Set<Node<OWLClass>> nodes = new LinkedHashSet<Node<OWLClass>>();
+			for (int position : positions) {
+				if (mNodes[position] != null) {
+					nodes.add(mNodes[position]);
+				}
+			}
+			return new OWLClassNodeSet(nodes);
+		}
 	}
 
 	private static NodeSet<OWLClass> classNodeSet(SetOfObjectSetCallbackListener callback) {
