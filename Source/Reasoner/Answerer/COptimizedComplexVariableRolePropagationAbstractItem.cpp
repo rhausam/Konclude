@@ -20,6 +20,9 @@
 
 #include "COptimizedComplexVariableRolePropagationAbstractItem.h"
 
+// complete type for the deletion of the requirements, otherwise no destructor runs (issue #45)
+#include "Reasoner/Ontology/COntologyProcessingRequirement.h"
+
 
 namespace Konclude {
 
