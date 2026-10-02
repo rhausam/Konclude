@@ -48,6 +48,8 @@ namespace Konclude {
 				mRootBaseNode = nullptr;
 				mCompletionRequestCount = 0;
 				mCompletedDecisionCount = 0;
+				mCompletedLabelDecisiveCount = 0;
+				mCompletedLabelUndecidedCount = 0;
 				// the saturation of the ontology, as CPrecomputedSaturationSubsumerExtractor takes it
 				CPrecomputation* precomputation = mOntology->getPrecomputation();
 				if (precomputation) {
@@ -242,6 +244,14 @@ namespace Konclude {
 				return mFiredImplicationCount;
 			}
 
+			cint64 CSaturationSubsumptionDecider::getCompletedLabelDecisiveCount() {
+				return mCompletedLabelDecisiveCount;
+			}
+
+			cint64 CSaturationSubsumptionDecider::getCompletedLabelUndecidedCount() {
+				return mCompletedLabelUndecidedCount;
+			}
+
 			cint64 CSaturationSubsumptionDecider::getFastDecisionCount() {
 				return mFastDecisionCount;
 			}
@@ -270,6 +280,11 @@ namespace Konclude {
 								verdict = SUBSUMED;
 							} else if (!label->mFailed) {
 								verdict = decideEntailedCompleted(label, queryConcept, queryNegation, 0);
+								if (verdict == SUBSUMED || verdict == NOT_SUBSUMED) {
+									++mCompletedLabelDecisiveCount;
+								} else {
+									++mCompletedLabelUndecidedCount;
+								}
 							}
 						} else {
 							mCompletionConcept = subClassConcept;

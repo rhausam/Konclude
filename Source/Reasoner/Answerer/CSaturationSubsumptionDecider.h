@@ -136,6 +136,9 @@ namespace Konclude {
 					cint64 getUndecidedCount();
 					cint64 getCompletionRequestCount();
 					cint64 getCompletedDecisionCount();
+					//! how often the completed label of a sub class candidate decided it, and how often it left it undecided (issue #33)
+					cint64 getCompletedLabelDecisiveCount();
+					cint64 getCompletedLabelUndecidedCount();
 					//! the operator codes of the label concepts that kept a merge from being decided, with their counts
 					QHash<cint64,cint64>* getUndecidedMergeConceptCodeCounts();
 					cint64 getFiredImplicationCount();
@@ -346,6 +349,8 @@ namespace Konclude {
 					CIndividualSaturationProcessNode* mRootBaseNode;
 					cint64 mCompletionRequestCount;
 					cint64 mCompletedDecisionCount;
+					cint64 mCompletedLabelDecisiveCount;
+					cint64 mCompletedLabelUndecidedCount;
 
 				// private methods
 				private:

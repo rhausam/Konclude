@@ -483,6 +483,7 @@ namespace Konclude {
 					 *	with the label of the root node reported back, while the sub class search of the concept
 					 *	item waits at the testing node.
 					 */
+					bool isLabelCompletionWorthwhile();
 					bool createLabelCompletionTest(COptimizedComplexConceptItem* conceptItem, CHierarchyNode* testingNode, CConcept* completionConcept, CAnswererContext* answererContext);
 					/*!
 					 *	Decides from the saturation whether the class of the node is subsumed by the concept
@@ -827,6 +828,10 @@ namespace Konclude {
 					bool mConfExtendedLogging;
 					bool mConfSaturationSubClassDecision;
 					bool mConfSaturationSubClassLabelCompletion;
+					cint64 mConfLabelCompletionSampleSize;
+					cint64 mConfLabelCompletionMinimumDecisivePercent;
+					//! set once the completed labels decided too few candidates, the completion is not requested any more (issue #33)
+					bool mLabelCompletionStopped;
 					CSaturationSubsumptionDecider* mSaturationSubsumptionDecider;
 					cint64 mLabelCompletionTestCount;
 
