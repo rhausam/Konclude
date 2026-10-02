@@ -48,8 +48,6 @@ namespace Konclude {
 				mRootBaseNode = nullptr;
 				mCompletionRequestCount = 0;
 				mCompletedDecisionCount = 0;
-				mCompletedLabelDecisiveCount = 0;
-				mCompletedLabelUndecidedCount = 0;
 				// the saturation of the ontology, as CPrecomputedSaturationSubsumerExtractor takes it
 				CPrecomputation* precomputation = mOntology->getPrecomputation();
 				if (precomputation) {
@@ -245,11 +243,23 @@ namespace Konclude {
 			}
 
 			cint64 CSaturationSubsumptionDecider::getCompletedLabelDecisiveCount() {
-				return mCompletedLabelDecisiveCount;
+				cint64 count = 0;
+				for (const CQueryCompletionStatistics& statistics : mQueryCompletionStatisticsHash) {
+					if (statistics.mReliableDecisiveCount > 0) {
+						count += statistics.mCompletedDecisiveCount;
+					}
+				}
+				return count;
 			}
 
 			cint64 CSaturationSubsumptionDecider::getCompletedLabelUndecidedCount() {
-				return mCompletedLabelUndecidedCount;
+				cint64 count = 0;
+				for (const CQueryCompletionStatistics& statistics : mQueryCompletionStatisticsHash) {
+					if (statistics.mReliableDecisiveCount > 0) {
+						count += statistics.mCompletedUndecidedCount;
+					}
+				}
+				return count;
 			}
 
 			cint64 CSaturationSubsumptionDecider::getFastDecisionCount() {
@@ -280,10 +290,11 @@ namespace Konclude {
 								verdict = SUBSUMED;
 							} else if (!label->mFailed) {
 								verdict = decideEntailedCompleted(label, queryConcept, queryNegation, 0);
+								CQueryCompletionStatistics& statistics = mQueryCompletionStatisticsHash[QPair<CConcept*,bool>(queryConcept, queryNegation)];
 								if (verdict == SUBSUMED || verdict == NOT_SUBSUMED) {
-									++mCompletedLabelDecisiveCount;
+									++statistics.mCompletedDecisiveCount;
 								} else {
-									++mCompletedLabelUndecidedCount;
+									++statistics.mCompletedUndecidedCount;
 								}
 							}
 						} else {
@@ -308,6 +319,9 @@ namespace Konclude {
 							verdict = SUBSUMED;
 						} else {
 							verdict = decideEntailed(node, reliable, queryConcept, queryNegation, 0);
+							if (verdict == SUBSUMED || verdict == NOT_SUBSUMED) {
+								++mQueryCompletionStatisticsHash[QPair<CConcept*,bool>(queryConcept, queryNegation)].mReliableDecisiveCount;
+							}
 						}
 					}
 				}

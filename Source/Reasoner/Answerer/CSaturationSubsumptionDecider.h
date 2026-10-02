@@ -136,7 +136,10 @@ namespace Konclude {
 					cint64 getUndecidedCount();
 					cint64 getCompletionRequestCount();
 					cint64 getCompletedDecisionCount();
-					//! how often the completed label of a sub class candidate decided it, and how often it left it undecided (issue #33)
+					//! how often the completed label of a sub class candidate decided it, and how often it left it undecided,
+					//! counted only for the queries for which a reliable saturation decided some candidate: for a query that
+					//! the saturation cannot decide at all, such as an existential restriction over a plain EL ontology, a
+					//! completed label cannot help either, and its candidates say nothing about the labels' worth (issue #33)
 					cint64 getCompletedLabelDecisiveCount();
 					cint64 getCompletedLabelUndecidedCount();
 					//! the operator codes of the label concepts that kept a merge from being decided, with their counts
@@ -349,8 +352,13 @@ namespace Konclude {
 					CIndividualSaturationProcessNode* mRootBaseNode;
 					cint64 mCompletionRequestCount;
 					cint64 mCompletedDecisionCount;
-					cint64 mCompletedLabelDecisiveCount;
-					cint64 mCompletedLabelUndecidedCount;
+					class CQueryCompletionStatistics {
+						public:
+							cint64 mReliableDecisiveCount = 0;
+							cint64 mCompletedDecisiveCount = 0;
+							cint64 mCompletedUndecidedCount = 0;
+					};
+					QHash<QPair<CConcept*,bool>, CQueryCompletionStatistics> mQueryCompletionStatisticsHash;
 
 				// private methods
 				private:
