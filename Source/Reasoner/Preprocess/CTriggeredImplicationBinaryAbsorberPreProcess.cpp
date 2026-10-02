@@ -726,7 +726,7 @@ namespace Konclude {
 
 
 
-			void CTriggeredImplicationBinaryAbsorberPreProcess::collectPositiveConcepts(CConcept* initalConcept, bool initalNegated, QSet<TConceptNegationPair>* positiveConceptSet, bool recursiveDefinition) {
+			void CTriggeredImplicationBinaryAbsorberPreProcess::collectPositiveConcepts(CConcept* initalConcept, bool initalNegated, CConceptNegationFlags* positiveConceptSet, bool recursiveDefinition) {
 				TConceptNegationPair processConNegPair(initalConcept,initalNegated);
 				if (!positiveConceptSet->contains(processConNegPair)) {
 					positiveConceptSet->insert(processConNegPair);
