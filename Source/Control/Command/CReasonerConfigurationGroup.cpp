@@ -1755,9 +1755,9 @@ namespace Konclude {
 						new CBooleanConfigType(true)),
 						new CBooleanConfigType(true));
 				addConfigProperty(new CConfigDescription("Konclude.Answering.SaturationBasedSubClassLabelCompletionSampleSize",
-						"Number of decisions from completed labels after which the label completion is stopped for the rest of the reasoner's life if too few of them decided a sub class candidate, see Konclude.Answering.SaturationBasedSubClassLabelCompletionMinimumDecisivePercent. 0 never stops it.",
-						new CIntegerConfigType(2000)),
-						new CIntegerConfigType(2000));
+						"Number of decisions from completed labels after which the label completion is stopped for the rest of the reasoner's life if too few of them decided a sub class candidate, see Konclude.Answering.SaturationBasedSubClassLabelCompletionMinimumDecisivePercent. 0, the default, never stops it: a completed label is paid for once and used by every later query, so even a small share of decided candidates pays off over a session of queries, and stopping helps only a reasoner that answers a few queries, for which 2000 is a reasonable sample.",
+						new CIntegerConfigType(0)),
+						new CIntegerConfigType(0));
 				addConfigProperty(new CConfigDescription("Konclude.Answering.SaturationBasedSubClassLabelCompletionMinimumDecisivePercent",
 						"Percentage of the decisions from completed labels that have to decide the candidate for the label completion to go on once the sample of Konclude.Answering.SaturationBasedSubClassLabelCompletionSampleSize is reached; below it the candidates go to the tableau directly, labels completed before are still used.",
 						new CIntegerConfigType(30)),
