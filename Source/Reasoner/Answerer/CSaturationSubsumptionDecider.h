@@ -155,7 +155,7 @@ namespace Konclude {
 					 *	reports a clashed saturation, 'reliable' whether the saturation is complete enough
 					 *	to draw a negative conclusion from, both read as the classifier reads them.
 					 */
-					CIndividualSaturationProcessNode* getSaturationNode(CConcept* concept, bool* unsatisfiable, bool* reliable);
+					CIndividualSaturationProcessNode* getSaturationNode(CConcept* concept, bool* unsatisfiable, bool* reliable, bool negated = false);
 					//! the node at the end of the substitute chain, which holds the label and the successors
 					CIndividualSaturationProcessNode* getRepresentativeNode(CIndividualSaturationProcessNode* baseNode);
 					bool isReliable(CIndividualSaturationProcessNode* baseNode);
@@ -164,6 +164,10 @@ namespace Konclude {
 
 					//! whether every instance of the node's concept satisfies the concept, negated if 'negated'
 					Verdict decideEntailed(CIndividualSaturationProcessNode* baseNode, bool reliable, CConcept* concept, bool negated, cint64 depth);
+					bool isSubRoleOf(CRole* subRole, CRole* superRole);
+					Verdict decideExistentialFromLabel(CIndividualSaturationProcessNode* baseNode, CRole* role, CConcept* filler, bool fillerNegation, cint64 depth);
+					Verdict decideExistentialFromLabelUncached(CIndividualSaturationProcessNode* baseNode, CRole* role, CConcept* filler, bool fillerNegation, cint64 depth);
+					Verdict decideEntailedExistential(CIndividualSaturationProcessNode* baseNode, bool reliable, CConcept* concept, bool conceptNegated, CRole* role, CConcept* filler, bool fillerNegation, cint64 depth);
 					//! for a negated query: whether the node's concept and the named conjuncts have a common instance
 					Verdict decideConjunctionSatisfiable(CIndividualSaturationProcessNode* baseNode, bool reliable, const QList<CConcept*>& conjuncts);
 					//! the named classes of a conjunction, false if it contains something else
@@ -359,6 +363,10 @@ namespace Konclude {
 							cint64 mCompletedUndecidedCount = 0;
 					};
 					QHash<QPair<CConcept*,bool>, CQueryCompletionStatistics> mQueryCompletionStatisticsHash;
+					typedef QPair<QPair<CIndividualSaturationProcessNode*,CConcept*>,cint64> CExistentialMemoKey;
+					//! the existential restrictions decided from a node's label, by node, filler and role tag with the filler's sign (issue #19)
+					QHash<CExistentialMemoKey,Verdict> mExistentialMemoHash;
+					CConcept* mExistentialMemoQueryConcept;
 
 				// private methods
 				private:

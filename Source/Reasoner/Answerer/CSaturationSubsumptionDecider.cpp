@@ -47,6 +47,7 @@ namespace Konclude {
 				mRootSubClassConcept = nullptr;
 				mRootBaseNode = nullptr;
 				mCompletionRequestCount = 0;
+				mExistentialMemoQueryConcept = nullptr;
 				mCompletedDecisionCount = 0;
 				// the saturation of the ontology, as CPrecomputedSaturationSubsumerExtractor takes it
 				CPrecomputation* precomputation = mOntology->getPrecomputation();
@@ -277,6 +278,11 @@ namespace Konclude {
 				mCompletionConcept = nullptr;
 				mRootSubClassConcept = subClassConcept;
 				mRootBaseNode = nullptr;
+				if (queryConcept != mExistentialMemoQueryConcept) {
+					// the remembered decisions are about the fillers of one query
+					mExistentialMemoHash.clear();
+					mExistentialMemoQueryConcept = queryConcept;
+				}
 				if (mSatCalcTask && subClassConcept && queryConcept) {
 					bool unsatisfiable = false;
 					bool reliable = false;
@@ -310,7 +316,11 @@ namespace Konclude {
 						// -1600 nominal integrated, -1700 no label, -1000 functional role, -2500 and -3000
 						// universal restrictions reaching successors and self loops, -3500 derived successor,
 						// and for the query side -4600 no node, -4700 unreliable, -4800 flags, -4900 data
-						// value or nominal, -5000 no label
+						// value or nominal, -5000 no label; for an existential restriction of the query -5600 no
+						// label, -5700 a successor with a range or a qualified or cardinality restriction,
+						// -5800 a successor's filler undecided, -5900 the node unreliable, -6000 a role whose
+						// successors the saturation may not materialise, -6100 some successor undecided, -6200
+						// no saturation of a successor's filler
 						mUndecidedMergeConceptCodeCounts[-200] = mUndecidedMergeConceptCodeCounts.value(-200, 0) + 1;
 					}
 					if (node) {
@@ -339,7 +349,7 @@ namespace Konclude {
 
 
 
-			CIndividualSaturationProcessNode* CSaturationSubsumptionDecider::getSaturationNode(CConcept* concept, bool* unsatisfiable, bool* reliable) {
+			CIndividualSaturationProcessNode* CSaturationSubsumptionDecider::getSaturationNode(CConcept* concept, bool* unsatisfiable, bool* reliable, bool negated) {
 				CConceptProcessData* conProData = (CConceptProcessData*)concept->getConceptData();
 				if (!conProData) {
 					return nullptr;
@@ -348,7 +358,9 @@ namespace Konclude {
 				if (!conSatRefLinking) {
 					return nullptr;
 				}
-				CSaturationConceptReferenceLinking* satConRefLinking = (CSaturationConceptReferenceLinking*)conSatRefLinking->getPositiveConceptSaturationReferenceLinkingData();
+				// a negated concept has a saturation of its own if the saturation needed one, an existential
+				// restriction for instance, which is stored as a negated universal one
+				CSaturationConceptReferenceLinking* satConRefLinking = (CSaturationConceptReferenceLinking*)conSatRefLinking->getConceptSaturationReferenceLinkingData(negated);
 				if (!satConRefLinking) {
 					return nullptr;
 				}
@@ -444,6 +456,178 @@ namespace Konclude {
 
 
 
+			bool CSaturationSubsumptionDecider::isSubRoleOf(CRole* subRole, CRole* superRole) {
+				// by tag, the query side's roles are those of the answering ontology
+				if (subRole == superRole || subRole->getRoleTag() == superRole->getRoleTag()) {
+					return true;
+				}
+				for (CSortedNegLinker<CRole*>* superIt = subRole->getIndirectSuperRoleList(); superIt; superIt = superIt->getNext()) {
+					if (!superIt->isNegated() && superIt->getData()->getRoleTag() == superRole->getRoleTag()) {
+						return true;
+					}
+				}
+				return false;
+			}
+
+
+			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideExistentialFromLabel(CIndividualSaturationProcessNode* baseNode, CRole* role, CConcept* filler, bool fillerNegation, cint64 depth) {
+				// the verdict depends on the node and the restriction only, and the search visits the same nodes
+				// again and again, as ancestors of the candidates and as successors, so it is remembered; the
+				// saturation does not change while the answering thread asks
+				CExistentialMemoKey memoKey(QPair<CIndividualSaturationProcessNode*,CConcept*>(baseNode, filler), role->getRoleTag() * 2 + (fillerNegation ? 1 : 0));
+				QHash<CExistentialMemoKey,Verdict>::const_iterator memoIt = mExistentialMemoHash.constFind(memoKey);
+				if (memoIt != mExistentialMemoHash.constEnd()) {
+					return memoIt.value();
+				}
+				Verdict verdict = decideExistentialFromLabelUncached(baseNode, role, filler, fillerNegation, depth);
+				if (verdict != NEEDS_COMPLETION) {
+					mExistentialMemoHash.insert(memoKey, verdict);
+				}
+				return verdict;
+			}
+
+
+			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideExistentialFromLabelUncached(CIndividualSaturationProcessNode* baseNode, CRole* role, CConcept* filler, bool fillerNegation, cint64 depth) {
+				// every existential restriction of the label over the role or a sub role is a successor of the
+				// node's instances: the filler is entailed if one of them satisfies it, and not entailed if none
+				// can, which needs every one of them decided; a successor's range concepts, qualified and
+				// cardinality restrictions and a filler without a saturation are left undecided
+				CReapplyConceptSaturationLabelSet* labelSet = getRepresentativeNode(baseNode)->getReapplyConceptSaturationLabelSet(false);
+				if (!labelSet) {
+					mUndecidedMergeConceptCodeCounts[-5600] = mUndecidedMergeConceptCodeCounts.value(-5600, 0) + 1;
+					return UNDECIDED;
+				}
+				bool undecided = false;
+				for (CConceptSaturationDescriptor* conDesIt = labelSet->getConceptSaturationDescriptionLinker(); conDesIt; conDesIt = conDesIt->getNext()) {
+					CConcept* labelConcept = conDesIt->getConcept();
+					bool labelNegated = conDesIt->isNegated();
+					cint64 opCode = labelConcept->getOperatorCode();
+					CRole* labelRole = labelConcept->getRole();
+					if (!labelRole || labelRole->isDataRole()) {
+						continue;
+					}
+					bool existential = (!labelNegated && opCode == CCSOME) || (labelNegated && opCode == CCALL);
+					bool otherSuccessor = (!labelNegated && (opCode == CCAQSOME || opCode == CCATLEAST)) || (labelNegated && (opCode == CCAQALL || opCode == CCATMOST));
+					if (!existential && !otherSuccessor) {
+						continue;
+					}
+					if (!isSubRoleOf(labelRole, role)) {
+						continue;
+					}
+					CSortedNegLinker<CConcept*>* labelFillerLinker = labelConcept->getOperandList();
+					if (otherSuccessor || !labelFillerLinker || labelRole->getDomainRangeConceptList(true)) {
+						mUndecidedMergeConceptCodeCounts[-5700] = mUndecidedMergeConceptCodeCounts.value(-5700, 0) + 1;
+						undecided = true;
+						continue;
+					}
+					CConcept* successorConcept = labelFillerLinker->getData();
+					bool successorNegation = labelNegated ? !labelFillerLinker->isNegated() : labelFillerLinker->isNegated();
+					Verdict verdict = UNDECIDED;
+					if (successorConcept->hasClassName() && !successorNegation && filler->hasClassName() && !fillerNegation) {
+						// the class hierarchy is complete for named classes, the saturation is not always
+						verdict = decideNamedSubsumptionFromHierarchy(successorConcept, filler);
+					}
+					if (verdict == UNDECIDED) {
+						bool unsatisfiable = false;
+						bool reliable = false;
+						CIndividualSaturationProcessNode* successorNode = getSaturationNode(successorConcept, &unsatisfiable, &reliable, successorNegation);
+						if (successorNode && unsatisfiable) {
+							verdict = SUBSUMED;
+						} else if (successorNode) {
+							verdict = decideEntailed(successorNode, reliable, filler, fillerNegation, depth + 1);
+						} else {
+							mUndecidedMergeConceptCodeCounts[-6200] = mUndecidedMergeConceptCodeCounts.value(-6200, 0) + 1;
+						}
+					}
+					if (verdict == SUBSUMED || verdict == NEEDS_COMPLETION) {
+						return verdict;
+					} else if (verdict == UNDECIDED) {
+						mUndecidedMergeConceptCodeCounts[-5800] = mUndecidedMergeConceptCodeCounts.value(-5800, 0) + 1;
+						undecided = true;
+					}
+				}
+				return undecided ? UNDECIDED : NOT_SUBSUMED;
+			}
+
+
+			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideEntailedExistential(CIndividualSaturationProcessNode* baseNode, bool reliable, CConcept* concept, bool conceptNegated, CRole* role, CConcept* filler, bool fillerNegation, cint64 depth) {
+				// whether every instance of the node's concept has a successor under the role that satisfies the
+				// filler: the concept itself in the label, or a linked successor that satisfies the filler
+				if (hasLabelConcept(baseNode, concept, conceptNegated)) {
+					return SUBSUMED;
+				}
+				if (!role || role->isDataRole()) {
+					return UNDECIDED;
+				}
+				// why an existential restriction stays undecided is counted under -5600 and up, see decideSubClass
+				bool undecided = false;
+				CIndividualSaturationProcessNode* repNode = getRepresentativeNode(baseNode);
+				CLinkedRoleSaturationSuccessorHash* succHash = repNode->getLinkedRoleSuccessorHash(false);
+				// the saturation does not link every successor of a node, the existential restrictions of its
+				// label stand for them, so the label is searched as well as the linked successors (issue #19)
+				Verdict labelVerdict = decideExistentialFromLabel(baseNode, role, filler, fillerNegation, depth);
+				if (labelVerdict == SUBSUMED || labelVerdict == NEEDS_COMPLETION) {
+					return labelVerdict;
+				} else if (labelVerdict == UNDECIDED) {
+					undecided = true;
+				}
+				if (baseNode == mRootBaseNode && mRootSubClassConcept && !undecided) {
+					// a label the saturation left without a named subsumer also lacks that subsumer's
+					// existential restrictions, so those of the class's ancestors in the hierarchy, which is
+					// complete for named classes, are looked at as well
+					for (CConcept* ancestor : getHierarchyAncestors(mRootSubClassConcept)) {
+						bool ancestorUnsatisfiable = false;
+						bool ancestorReliable = false;
+						CIndividualSaturationProcessNode* ancestorNode = getSaturationNode(ancestor, &ancestorUnsatisfiable, &ancestorReliable);
+						if (!ancestorNode || ancestorNode == baseNode) {
+							continue;
+						}
+						Verdict ancestorVerdict = decideExistentialFromLabel(ancestorNode, role, filler, fillerNegation, depth);
+						if (ancestorVerdict == SUBSUMED || ancestorVerdict == NEEDS_COMPLETION) {
+							return ancestorVerdict;
+						} else if (ancestorVerdict == UNDECIDED || !ancestorReliable) {
+							undecided = true;
+							break;
+						}
+					}
+				}
+				if (succHash && succHash->hasLinkedRoleSuccessorData(role)) {
+					// the successors are linked under every super role, so the role itself suffices;
+					// looked up without the getter, whose subscript access modifies the node's hash
+					// from this thread while the tableau tasks read it
+					CLinkedRoleSaturationSuccessorData* roleSuccData = succHash->getLinkedRoleSuccessorHash()->value(role);
+					CPROCESSMAP<cint64,CSaturationSuccessorData*>* succMap = roleSuccData ? roleSuccData->getSuccessorNodeDataMap(false) : nullptr;
+					if (succMap) {
+						for (CPROCESSMAP<cint64,CSaturationSuccessorData*>::const_iterator it = succMap->constBegin(), itEnd = succMap->constEnd(); it != itEnd; ++it) {
+							CSaturationSuccessorData* succData = it.value();
+							if (succData->mActiveCount <= 0) {
+								continue;
+							}
+							if (succData->mVALUENominalConnection || !succData->mSuccIndiNode) {
+								mUndecidedMergeConceptCodeCounts[-5700] = mUndecidedMergeConceptCodeCounts.value(-5700, 0) + 1;
+								undecided = true;
+								continue;
+							}
+							CIndividualSaturationProcessNode* succNode = succData->mSuccIndiNode;
+							Verdict succVerdict = decideEntailed(succNode, isReliable(succNode), filler, fillerNegation, depth + 1);
+							if (succVerdict == SUBSUMED || succVerdict == NEEDS_COMPLETION) {
+								return succVerdict;
+							} else if (succVerdict == UNDECIDED) {
+								mUndecidedMergeConceptCodeCounts[-5800] = mUndecidedMergeConceptCodeCounts.value(-5800, 0) + 1;
+								undecided = true;
+							}
+						}
+					}
+				}
+				if (undecided || !reliable || !isSuccessorCreatingRole(role)) {
+					cint64 code = undecided ? -6100 : (!reliable ? -5900 : -6000);
+					mUndecidedMergeConceptCodeCounts[code] = mUndecidedMergeConceptCodeCounts.value(code, 0) + 1;
+					return UNDECIDED;
+				}
+				return NOT_SUBSUMED;
+			}
+
+
 			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideEntailed(CIndividualSaturationProcessNode* baseNode, bool reliable, CConcept* concept, bool negated, cint64 depth) {
 				if (depth > 64) {
 					return UNDECIDED;
@@ -453,6 +637,11 @@ namespace Konclude {
 
 				if (opCode == CCNOT && opLinker) {
 					return decideEntailed(baseNode, reliable, opLinker->getData(), !(opLinker->isNegated() ^ negated), depth + 1);
+				}
+				if (negated && opCode == CCALL && opLinker) {
+					// the ontology stores an existential restriction as a negated universal one, not r only not D
+					// for r some D, and a query of the form r some D arrives in that form (issue #19)
+					return decideEntailedExistential(baseNode, reliable, concept, true, concept->getRole(), opLinker->getData(), !opLinker->isNegated(), depth);
 				}
 
 				if (!negated) {
@@ -502,48 +691,7 @@ namespace Konclude {
 						return UNDECIDED;
 					}
 					if (opCode == CCSOME && opLinker) {
-						if (hasLabelConcept(baseNode, concept, false)) {
-							return SUBSUMED;
-						}
-						CRole* role = concept->getRole();
-						CConcept* filler = opLinker->getData();
-						bool fillerNegation = opLinker->isNegated();
-						if (!role || role->isDataRole()) {
-							return UNDECIDED;
-						}
-						bool undecided = false;
-						CIndividualSaturationProcessNode* repNode = getRepresentativeNode(baseNode);
-						CLinkedRoleSaturationSuccessorHash* succHash = repNode->getLinkedRoleSuccessorHash(false);
-						if (succHash && succHash->hasLinkedRoleSuccessorData(role)) {
-							// the successors are linked under every super role, so the role itself suffices;
-							// looked up without the getter, whose subscript access modifies the node's hash
-							// from this thread while the tableau tasks read it
-							CLinkedRoleSaturationSuccessorData* roleSuccData = succHash->getLinkedRoleSuccessorHash()->value(role);
-							CPROCESSMAP<cint64,CSaturationSuccessorData*>* succMap = roleSuccData ? roleSuccData->getSuccessorNodeDataMap(false) : nullptr;
-							if (succMap) {
-								for (CPROCESSMAP<cint64,CSaturationSuccessorData*>::const_iterator it = succMap->constBegin(), itEnd = succMap->constEnd(); it != itEnd; ++it) {
-									CSaturationSuccessorData* succData = it.value();
-									if (succData->mActiveCount <= 0) {
-										continue;
-									}
-									if (succData->mVALUENominalConnection || !succData->mSuccIndiNode) {
-										undecided = true;
-										continue;
-									}
-									CIndividualSaturationProcessNode* succNode = succData->mSuccIndiNode;
-									Verdict succVerdict = decideEntailed(succNode, isReliable(succNode), filler, fillerNegation, depth + 1);
-									if (succVerdict == SUBSUMED || succVerdict == NEEDS_COMPLETION) {
-										return succVerdict;
-									} else if (succVerdict == UNDECIDED) {
-										undecided = true;
-									}
-								}
-							}
-						}
-						if (undecided || !reliable || !isSuccessorCreatingRole(role)) {
-							return UNDECIDED;
-						}
-						return NOT_SUBSUMED;
+						return decideEntailedExistential(baseNode, reliable, concept, false, concept->getRole(), opLinker->getData(), opLinker->isNegated(), depth);
 					}
 					// universal and cardinality restrictions, nominals, self restrictions and data ranges are
 					// only recognised when the label carries the very concept
