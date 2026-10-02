@@ -72,6 +72,33 @@ JNIEXPORT jdoubleArray JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryO
 
 
 
+JNIEXPORT jintArray JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLClassHierarchy(JNIEnv* jenv, jobject processorObj, jobject bridgeObj, jobject jvisitCallback) {
+	// null when there is no completed classification, otherwise the edges between the nodes that the
+	// callback received, as pairs of positions, parent first
+	CJNIInstanceManager* jniInstanceManager = CJNIHandler::getJNIInstanceManager(jenv,bridgeObj);
+	if (!jniInstanceManager) {
+		return nullptr;
+	}
+	CJNIHandler* jniHandler = jniInstanceManager->getJNIHandler();
+	CJNIQueryProcessor* processor = jniHandler->getQueryingBridgeNativeData(jenv,processorObj);
+	if (!processor) {
+		return nullptr;
+	}
+	CJNIEntityExpressionMappedObjectSetOfSetVisitingCallback visitCallback(jniInstanceManager->getOntologyRevisionData(),jenv,jvisitCallback,
+			jniHandler->getSetOfObjectSetCallbackListenerJNIData()->getVisitObjectMethodID(),jniHandler->getSetOfObjectSetCallbackListenerJNIData()->getStartVisitObjectSetMethodID(),jniHandler->getSetOfObjectSetCallbackListenerJNIData()->getEndVisitObjectSetMethodID());
+	QVector<qint32> edges;
+	if (!processor->queryOntologyClassHierarchy(&visitCallback,edges)) {
+		return nullptr;
+	}
+	jintArray array = jenv->NewIntArray(edges.size());
+	if (array) {
+		jenv->SetIntArrayRegion(array,0,edges.size(),(const jint*)edges.constData());
+	}
+	return array;
+}
+
+
+
 JNIEXPORT void JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLSubClasses(JNIEnv* jenv, jobject processorObj, jobject bridgeObj, jstring jstr, jobject clsObj, jobject jvisitCallback, jboolean direct) {
 	CJNIInstanceManager* jniInstanceManager = CJNIHandler::getJNIInstanceManager(jenv,bridgeObj);
 	if (jniInstanceManager) {

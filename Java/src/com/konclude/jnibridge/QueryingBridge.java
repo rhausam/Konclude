@@ -24,9 +24,9 @@ package com.konclude.jnibridge;
  * Asks the native reasoner, corresponds to
  * Source/Control/Interface/JNI/com_konclude_jnibridge_QueryingBridge.cpp.
  *
- * All 19 entry points that the native side declares are declared here: 12 queries about a
- * named entity, the builder and 5 queries for a class expression, and the progress of the
- * calculations.
+ * All 20 entry points that the native side declares are declared here: 12 queries about a
+ * named entity, the builder and 5 queries for a class expression, the progress of the
+ * calculations, and the whole class hierarchy at once.
  *
  * An entity is identified by its IRI, the object beside it is only handed over so that the
  * native side can remember it if the entity has not been built before. The results are not
@@ -190,6 +190,16 @@ public class QueryingBridge {
 	 * on another, it only reads counters; that is what it is for.
 	 */
 	public native double[] queryOWLReasoningProgress(KoncludeReasonerBridge bridge);
+
+	/**
+	 * The whole class taxonomy at once, for a caller that reads all of it, which would otherwise ask
+	 * about every class on its own. The callback, a SetOfObjectSetCallbackListener, receives one set
+	 * per hierarchy node, the top node first, with the class objects of the node's classes; a node
+	 * may come as an empty set when the native side has no object for its classes. The result holds
+	 * the edges between the nodes as pairs of their positions in that order, parent first, or is
+	 * null when the classification is not complete, in which case the callback received nothing.
+	 */
+	public native int[] queryOWLClassHierarchy(KoncludeReasonerBridge bridge, Object callback);
 
 
 	/** only of interest for the smoke test, to show that the native side filled the field */

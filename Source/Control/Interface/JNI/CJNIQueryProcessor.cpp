@@ -161,6 +161,43 @@ namespace Konclude {
 				}
 
 
+				bool CJNIQueryProcessor::queryOntologyClassHierarchy(CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback, QVector<qint32>& edgeVector) {
+					// a caller that reads the whole hierarchy, such as a taxonomy walker, would otherwise ask
+					// for the direct sub and super classes of every class, each a call through the bridge
+					CConcreteOntology* ont = mOntRevData->getOntologyRevision()->getOntology();
+					CTaxonomy* taxonomy = getCompletedClassTaxonomy(ont);
+					if (!taxonomy || !taxonomy->getTopHierarchyNode()) {
+						return false;
+					}
+					QHash<CHierarchyNode*,qint32> nodePositionHash;
+					QList<CHierarchyNode*> nodeList;
+					nodePositionHash.insert(taxonomy->getTopHierarchyNode(), 0);
+					nodeList.append(taxonomy->getTopHierarchyNode());
+					for (qint32 position = 0; position < nodeList.size(); ++position) {
+						CHierarchyNode* node = nodeList.at(position);
+						visitingCallback->startEntityExpressionSet(ont);
+						QList<CConcept*>* eqConList = node->getEquivalentConceptList();
+						for (QList<CConcept*>::const_iterator it = eqConList->constBegin(), itEnd = eqConList->constEnd(); it != itEnd; ++it) {
+							visitingCallback->visitConceptAssociatedEntityExpression(*it, ont);
+						}
+						visitingCallback->endEntityExpressionSet(ont);
+						QSet<CHierarchyNode*>* childNodeSet = node->getChildNodeSet();
+						for (QSet<CHierarchyNode*>::const_iterator it = childNodeSet->constBegin(), itEnd = childNodeSet->constEnd(); it != itEnd; ++it) {
+							CHierarchyNode* childNode = *it;
+							qint32 childPosition = nodePositionHash.value(childNode, -1);
+							if (childPosition < 0) {
+								childPosition = nodeList.size();
+								nodePositionHash.insert(childNode, childPosition);
+								nodeList.append(childNode);
+							}
+							edgeVector.append(position);
+							edgeVector.append(childPosition);
+						}
+					}
+					return true;
+				}
+
+
 				bool CJNIQueryProcessor::queryOntologySubClasses(const QString& className, bool direct, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback) {
 					CConcreteOntology* ont = mOntRevData->getOntologyRevision()->getOntology();
 					CConcept* concept = ont->getStringMapping()->getConceptFromName(className);

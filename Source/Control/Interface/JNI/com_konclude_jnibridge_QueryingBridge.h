@@ -185,6 +185,14 @@ JNIEXPORT void JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLClassE
 JNIEXPORT jdoubleArray JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLReasoningProgress
   (JNIEnv *, jobject, jobject);
 
+/*
+ * Class:     com_konclude_jnibridge_QueryingBridge
+ * Method:    queryOWLClassHierarchy
+ * Signature: (Lcom/konclude/jnibridge/KoncludeReasonerBridge;Ljava/lang/Object;)[I
+ */
+JNIEXPORT jintArray JNICALL Java_com_konclude_jnibridge_QueryingBridge_queryOWLClassHierarchy
+  (JNIEnv *, jobject, jobject, jobject);
+
 #ifdef __cplusplus
 }
 #endif

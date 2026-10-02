@@ -118,6 +118,9 @@ namespace Konclude {
 						void calculateNamedClassQuery(CTaxonomyPremisingQuery* query, CConcept* concept);
 						CTaxonomy* getCompletedClassTaxonomy(CConcreteOntology* ontology);
 						bool queryOntologyEquivalentClasses(const QString& className, CEntityExpressionSetResultVisitingCallback* visitingCallback);
+						// the whole class taxonomy at once, if the classification is complete: one entity set per hierarchy
+						// node, the top node first, and the edges as pairs of the nodes' positions in that order, parent first
+						bool queryOntologyClassHierarchy(CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback, QVector<qint32>& edgeVector);
 
 
 						bool queryOntologySubObjectProperties(const QString& propertyName, bool direct, CSetOfEntityExpressionSetResultVisitingCallback* visitingCallback);
