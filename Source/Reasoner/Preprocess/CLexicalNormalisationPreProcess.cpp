@@ -171,7 +171,8 @@ namespace Konclude {
 
 
 					replacementHash = new QHash<CConceptUnambiguousHasher,CConcept*>();
-					processedSet = new QSet<CConcept*>();
+					processedSet = new CConceptTagFlags();
+					replacedConceptFlags = new CConceptTagFlags();
 					conceptReplaceHash = new QHash<CConcept*,QPair<bool,CConcept*> >();
 					processingList = new QList<CConcept*>();
 
@@ -197,7 +198,7 @@ namespace Konclude {
 							bool domainModified = false;
 							while (domainConIt) {
 								CConcept *domainConcept = domainConIt->getData();
-								if (conceptReplaceHash->contains(domainConcept)) {
+								if ((replacedConceptFlags->contains(domainConcept) && conceptReplaceHash->contains(domainConcept))) {
 									QPair<bool,CConcept *> negRepConcept(conceptReplaceHash->value(domainConcept));
 									domainConcept = negRepConcept.second;
 									if (negRepConcept.first) {
@@ -216,7 +217,7 @@ namespace Konclude {
 							bool rangeModified = false;
 							while (rangeConIt) {
 								CConcept *rangeConcept = rangeConIt->getData();
-								if (conceptReplaceHash->contains(rangeConcept)) {
+								if ((replacedConceptFlags->contains(rangeConcept) && conceptReplaceHash->contains(rangeConcept))) {
 									QPair<bool,CConcept *> negRepConcept(conceptReplaceHash->value(rangeConcept));
 									rangeConcept = negRepConcept.second;
 									if (negRepConcept.first) {
@@ -244,7 +245,7 @@ namespace Konclude {
 
 								CConceptAssertionLinker* assertionConLinker = indi->getAssertionConceptLinker();
 								while (assertionConLinker) {
-									if (conceptReplaceHash->contains(assertionConLinker->getData())) {
+									if ((replacedConceptFlags->contains(assertionConLinker->getData()) && conceptReplaceHash->contains(assertionConLinker->getData()))) {
 										QPair<bool,CConcept *> negRepConcept(conceptReplaceHash->value(assertionConLinker->getData()));
 										assertionConLinker->setData(negRepConcept.second);
 										if (negRepConcept.first) {
@@ -260,6 +261,7 @@ namespace Konclude {
 
 					delete replacementHash;
 					delete processedSet;
+					delete replacedConceptFlags;
 					delete conceptReplaceHash;
 					delete processingList;
 				}
@@ -342,7 +344,7 @@ namespace Konclude {
 					while (opList) {
 						CConcept *opConcept = concepts->getData(opList->getData()->getConceptTag());
 
-						if (!nonReplace && conceptReplaceHash->contains(opConcept)) {
+						if (!nonReplace && (replacedConceptFlags->contains(opConcept) && conceptReplaceHash->contains(opConcept))) {
 							QPair<bool,CConcept *> negRepConcept(conceptReplaceHash->value(opConcept));
 							opConcept = negRepConcept.second;
 							if (negRepConcept.first) {
@@ -408,7 +410,7 @@ namespace Konclude {
 					CConcept *opConcept = concepts->getData(opList->getData()->getConceptTag());
 
 					if (isLocal) {
-						if (!nonReplace && conceptReplaceHash->contains(opConcept)) {
+						if (!nonReplace && (replacedConceptFlags->contains(opConcept) && conceptReplaceHash->contains(opConcept))) {
 							QPair<bool,CConcept *> negRepConcept(conceptReplaceHash->value(opConcept));
 							opConcept = negRepConcept.second;
 							if (negRepConcept.first) {
@@ -442,12 +444,14 @@ namespace Konclude {
 
 				if (isClash) {
 					conceptReplaceHash->insert(concept,QPair<bool,CConcept *>(true,topConcept));
+					replacedConceptFlags->insert(concept);
 				} else {
 					CConceptUnambiguousHasher conUnHasher(getConceptHasher(concept));
 					if (!replacementHash->contains(conUnHasher)) {
 						replacementHash->insert(conUnHasher,concept);
 					} else {
 						conceptReplaceHash->insert(concept,QPair<bool,CConcept *>(false,replacementHash->value(conUnHasher)));
+						replacedConceptFlags->insert(concept);
 					}
 				}
 			}
