@@ -896,24 +896,36 @@ that the binary loads at the same address in every run, verified by comparing th
 range, six runs of SNOMED CT still disagree. Randomised addresses therefore do not select which
 concepts lose subsumers, whatever else the allocation layout does.
 
-`-w 1` does not make Konclude single threaded, so the runs that carry that flag do not exclude
-concurrency. The process runs 20 threads, and sampling during such a classification finds two
-of them inside saturation and tableau code at the same moment. The setting is honoured where
-it applies: `CConfigDependedCalculationEnvironmentFactory` gives a processor count of one a
+`-w 1` does not make Konclude single threaded, but it serialises more than an earlier version of
+this paragraph said. The process runs about 20 threads, and sampling during such a classification
+finds two of them inside saturation and tableau code at the same moment. The setting is honoured
+where it applies: `CConfigDependedCalculationEnvironmentFactory` gives a processor count of one a
 single `CSingleThreadTaskProcessorUnit`, which is scheduler, completor and processor in one
-thread, so every tableau and saturation task runs on that one thread. The second thread is the
-precomputation thread itself, `CTotallyPrecomputationThread`, which works on the shared
-saturation items on its own thread while the task unit saturates: right after
-`createSaturationConstructionJob` it runs `addIdentifiedRemainingConsistencyRequiredConcepts`
-and `addRequiredSaturationIndividuals`, later `markSaturationProcessingItems`,
-`analyseConceptSaturationSubsumerExistItems` and `saturateRemainingRequiredItems`. Nothing
-waits for the running saturation before that, `isSaturationComputationRunning` is only
-consulted, so no setting serialises the two. Independently of `-w`, the realizer and the
-Redland parsers dispatch through `QtConcurrent` on Qt's global pool with a thread per core. All
-of that is upstream Konclude, older than this fork; it is tracked as rhausam/Konclude#35. An
-earlier version of this paragraph blamed `CConcurrentTaskScheduler::run` for dispatching
-through `QtConcurrent`; that class is used only by the answerer's variable mapping composition
-and the backend cache, not by the saturation.
+thread, so every tableau and saturation task runs on that one thread, and the reasoner manager
+sizes Qt's global pool from the same count (`Konclude.Calculation.AdaptThreadPoolSizeProcessorCount`,
+on by default), plus the one slot it keeps blocked.
+
+The second thread the sampling caught is the precomputation thread, `CTotallyPrecomputationThread`.
+Right after it hands the saturation construction job to the task unit, it runs
+`addIdentifiedRemainingConsistencyRequiredConcepts` and `addRequiredSaturationIndividuals`, which
+reach `markSaturationProcessingItems`. Those walk the saturation items and set their
+processing-marked flags, which only the precomputation thread reads, while the saturation reads
+other fields of the same items. Its later steps, `saturateRemainingRequiredItems` and
+`extractCommonDisjunctConceptsFromPrecomputedSaturation`, run only once `isSaturationComputationRunning`
+is cleared, i.e. when no saturation job of the ontology is running. So under `-w 1` the
+precomputation thread does not change saturation data that a running saturation task uses.
+
+What does run beside the task thread are the coordinating threads (command handling, preprocessing,
+precomputation, classification) and the cache threads. The caches take their writes as events and
+apply them on their own threads, so which cache entries a tableau task finds depends on timing.
+The saturation reads no such cache while it runs: it uses only the backend association cache,
+written at its end for individuals, and the completion graph cached by the consistency test. All
+of that is upstream Konclude, older than this fork, and is tracked as rhausam/Konclude#35.
+
+An earlier version of this paragraph blamed `CConcurrentTaskScheduler::run` for dispatching
+through `QtConcurrent`; that class is used only by the answerer's variable mapping composition and
+the backend cache, not by the saturation. Independently of `-w`, the realizer and the Redland
+parsers dispatch through `QtConcurrent` on Qt's global pool.
 
 What else was excluded, each on SNOMED CT with the runs still disagreeing afterwards:
 
@@ -929,6 +941,17 @@ parallel classification   : MaximumParallelSubsumptionCalculationCount and both 
 The last one also deadlocks: with the subsumption calculation count at 1, the third run of
 SNOMED CT sat at 0 % CPU for 58 minutes with four threads waiting on locks or semaphores, which
 is the shape of the thread pool starvation fixed in 658c7bb2.
+
+Parallel tasks are not it either. With `-w 1` every tableau and saturation task runs on one
+thread, and the saturation reads nothing that another thread feeds while it runs (see above).
+Yet on `d981a6b3`, 12 of 120 runs of the 95k module (see below) at `-w 1` lost subsumptions,
+on a 12-core Linux machine, in the same family as with `-w AUTO`: defined classes whose
+definitions need triggers back-propagated from a role group, such as 285841000119104 under
+285831000119108. What differs from run to run is the input: preprocessing assigns concept tags in
+a run-dependent order and builds a structurally different, equivalent encoding of the absorbed
+definitions every time. So the saturation misses a subsumer for some encodings, not because of a
+race. The investigation is recorded in rhausam/Konclude#34; making preprocessing deterministic is
+the next step there.
 
 ### A SMALLER REPRODUCER
 
