@@ -931,6 +931,11 @@ namespace Konclude {
 						new CBooleanConfigType(true)),
 						new CBooleanConfigType(true));
 
+				addConfigProperty(new CConfigDescription("Konclude.Calculation.Preprocessing.CompleteDataLiteralAbsorption",
+						"Determines whether definitions (equivalent classes axioms) containing data literals are absorbed completely, with exact value triggers, instead of only into equivalence candidates. Off by default: on SNOMED CT AU the complete absorption fans the waiting implications out over the drug nodes and triples the saturation time (issue #90).",
+						new CBooleanConfigType(false)),
+						new CBooleanConfigType(false));
+
 
 				addConfigProperty(new CConfigDescription("Konclude.Calculation.Preprocessing.CoreConceptCyclesExtraction.SkipForELFragment",
 						"Determines whether the extraction of core concept cycles is skipped for EL ontologies.",

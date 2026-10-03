@@ -54,6 +54,7 @@ namespace Konclude {
 				mConfOftenTriggerUseCountPunishment = 20;
 				mConfPunishOftenSameTriggerUse = true;
 				mConfDatatypeAbsorption = true;
+				mConfCompleteDataLiteralAbsorption = false;
 
 				mConfCardinalityQualificationTriggerAbsorption = true;
 				mConfPartialCardinalityQualificationTriggerAbsorption = true;
@@ -107,6 +108,7 @@ namespace Konclude {
 				mConfNominalSchemaBackPropagation = CConfigDataReader::readConfigBoolean(config,"Konclude.Calculation.Preprocessing.NominalSchemaBackPropagation",true);
 				mConfNominalSchemaPathPreabsorption = CConfigDataReader::readConfigBoolean(config,"Konclude.Calculation.Preprocessing.NominalSchemaPathPreabsorption",true);
 				mConfDatatypeAbsorption = CConfigDataReader::readConfigBoolean(config,"Konclude.Calculation.Preprocessing.DatatypeAbsorption",true);
+				mConfCompleteDataLiteralAbsorption = CConfigDataReader::readConfigBoolean(config,"Konclude.Calculation.Preprocessing.CompleteDataLiteralAbsorption",false);
 				mConfNominalSchemaPathPreabsorption = false;
 
 				mConfCardinalityQualificationTriggerAbsorption = CConfigDataReader::readConfigBoolean(config,"Konclude.Calculation.Preprocessing.CardinalityQualificationTriggerAbsorption",true);
@@ -3191,7 +3193,7 @@ namespace Konclude {
 						// whole ontology rather than scoped by the back propagation concept, since it is a single entry of the
 						// value space's trigger map and fires only on nodes whose value is exactly this literal
 						// (built directly: the assuring builder begins by calling this one, so it cannot be asked)
-						if (isDataLiteralConceptExactlyTriggerable(concept)) {
+						if (mConfCompleteDataLiteralAbsorption && isDataLiteralConceptExactlyTriggerable(concept)) {
 							CConceptTriggerLinker* literalTrigger = createExactDataLiteralTrigger(concept->getDataLiteral(), branchTiggerCreation);
 							if (literalTrigger) {
 								triggers = literalTrigger->append(triggers);
@@ -3831,7 +3833,9 @@ namespace Konclude {
 					// case every definition containing a DataHasValue was only a candidate, which the saturation
 					// cannot resolve (issue #90).
 					// (the assuring test cannot be asked, it begins by asking this one)
-					absorbable = isDataLiteralConceptExactlyTriggerable(concept);
+					// Off by default: on SNOMED CT AU the completely absorbed definitions fan their waiting implications out
+					// over the drug nodes, which triples the saturation's time; see the configuration's description.
+					absorbable = mConfCompleteDataLiteralAbsorption && isDataLiteralConceptExactlyTriggerable(concept);
 				} else if (opCode == CCEQ) {
 					if (negated) {
 						absorbable = false;

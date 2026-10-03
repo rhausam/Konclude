@@ -403,6 +403,7 @@ namespace Konclude {
 					cint64 mConfOftenTriggerUseCountPunishment;
 
 					bool mConfDatatypeAbsorption;
+					bool mConfCompleteDataLiteralAbsorption;
 
 
 					class CTriggCount {
