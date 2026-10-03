@@ -62,7 +62,8 @@ namespace Konclude {
 					//LOG(CATASTROPHIC,"::Konclude::Utilities::NewAllocationMemoryPoolProvider",logTr("Memory allocation failed."),this);
 				}
 				cint64 memoryBlockSize = qMax(mDefaultPoolSize,minPoolSize) + 8;
-				char* memoryBlock = new char[memoryBlockSize];
+				bool memoryBlockMapped = false;
+				char* memoryBlock = CMemoryPool::allocateMemoryBlock(memoryBlockSize, memoryBlockMapped);
 				if (!memoryBlock) {
 					LOG(CATASTROPHIC,"::Konclude::Utilities::NewAllocationMemoryPoolProvider",logTr("Memory allocation failed."),this);
 				}
@@ -70,7 +71,7 @@ namespace Konclude {
 				mStatDiffPoolSize += memoryBlockSize;
 				++mStatAllocatedPoolCount;
 				++mStatDiffPoolCount;
-				memoryPool->setMemoryBlockData(memoryBlock,memoryBlockSize);
+				memoryPool->setMemoryBlockData(memoryBlock,memoryBlockSize,memoryBlockMapped);
 				return memoryPool;
 			}
 
@@ -86,8 +87,7 @@ namespace Konclude {
 					if (CMemoryPoolRecycler::getInstance()->giveMemoryPool(tmpMemoryPool)) {
 						continue;
 					}
-					char* memoryBlock = tmpMemoryPool->getMemoryBlockData();
-					delete [] memoryBlock;
+					CMemoryPool::releaseMemoryBlockData(tmpMemoryPool);
 					delete tmpMemoryPool;
 				}
 				return this;

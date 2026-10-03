@@ -19,6 +19,7 @@
  */
 
 #include "CSystemAllocatorTuning.h"
+#include "CMemoryPoolRecycler.h"
 
 #include <mutex>
 #include <cstdlib>
@@ -78,6 +79,9 @@ namespace Konclude {
 
 
 			bool CSystemAllocatorTuning::releaseFreeMemory() {
+				// the pools the recycler holds are the largest part of what a destroyed reasoner leaves
+				// behind; mapped from the system, they go back to it here (issue #45)
+				CMemoryPoolRecycler::getInstance()->releaseStoredPools();
 #if defined(KONCLUDE_JEMALLOC_IN_LIBRARY)
 				// returns the unused pages of every arena to the system; 4096 is MALLCTL_ARENAS_ALL
 				return mallctl("arena.4096.purge", nullptr, nullptr, nullptr, 0) == 0;

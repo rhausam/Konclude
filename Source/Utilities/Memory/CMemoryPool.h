@@ -66,7 +66,19 @@ namespace Konclude {
 					char* getMemoryBlockPointer();
 					char* getMemoryBlockEnd();
 
-					CMemoryPool* setMemoryBlockData(char* memoryBlock, cint64 memoryBlockSize);
+					CMemoryPool* setMemoryBlockData(char* memoryBlock, cint64 memoryBlockSize, bool memoryBlockMapped = false);
+					//! whether the block consists of pages mapped from the system rather than an array from the allocator
+					bool isMemoryBlockMapped();
+					/*!
+					 *	Obtains a block for a pool: pages mapped from the system where the platform allows
+					 *	it, since pool blocks released to the allocator stay in its retained regions and the
+					 *	process grows with every reasoner it destroys (issue #45); an array otherwise.
+					 */
+					static char* allocateMemoryBlock(cint64 memoryBlockSize, bool& memoryBlockMapped);
+					//! releases a block the way it was obtained
+					static void releaseMemoryBlock(char* memoryBlock, cint64 memoryBlockSize, bool memoryBlockMapped);
+					//! releases the block of the pool, not the pool
+					static void releaseMemoryBlockData(CMemoryPool* memoryPool);
 					CMemoryPool* setMemoryBlockPointer(char* memoryBlockPointer);
 					CMemoryPool* incMemoryBlockPointer(cint64 pointerInc);
 
@@ -84,6 +96,7 @@ namespace Konclude {
 					char* mMemoryBlockEnd;
 					cint64 mMemoryBlockSize;
 					char* mMemoryBlockPointer;
+					bool mMemoryBlockMapped;
 
 				// private methods
 				private:
