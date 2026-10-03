@@ -1133,6 +1133,11 @@ namespace Konclude {
 						new CStringConfigType("Konclude.Calculation.Classification.Classifier.OptimizedKPSetClassClassifier")),
 						new CStringConfigType("Konclude.Calculation.Classification.Classifier.OptimizedKPSetClassClassifier"));
 
+				addConfigProperty(new CConfigDescription("Konclude.Calculation.Classification.TrustSaturationSubsumerCompleteness",
+						"Determines whether the classifier declares the subsumers extracted from the saturation to be the final result of a class when the saturation reports them complete, so that no subsumption test is run for the class. Turning it off keeps the tests as a check.",
+						new CBooleanConfigType(true)),
+						new CBooleanConfigType(true));
+
 				addConfigProperty(new CConfigDescription("Konclude.Calculation.Classification.PruneSubsumptionRelations",
 						"Determines whether unnecessary calculations for ontology classification are pruned.",
 						new CBooleanConfigType(true)),

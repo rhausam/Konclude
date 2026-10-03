@@ -62,6 +62,10 @@ namespace Konclude {
 				// differently from one build to the next; on SNOMED CT one build in two to four then reused some 8 000
 				// implications more, its saturation labels grew by 60 % and the precomputation took half as long
 				// again with half as much memory again; the later concepts first is the pairing of the good builds
+				// KONCLUDE_TRIGGER_TIEBREAK=asc is a testing switch: the ascending order pairs the triggers the way the slow
+				// memory layouts did before #79, which is the pairing the reproducers of issue #34 need
+				static bool ascending = getenv("KONCLUDE_TRIGGER_TIEBREAK") && QByteArray(getenv("KONCLUDE_TRIGGER_TIEBREAK")) == "asc";
+				if (ascending) return mTriggerConcept->getConceptTag() <= conceptTriggerLinker.mTriggerConcept->getConceptTag();
 				return mTriggerConcept->getConceptTag() >= conceptTriggerLinker.mTriggerConcept->getConceptTag();
 			}
 
