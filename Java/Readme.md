@@ -717,6 +717,15 @@ the limit on waiting for that thread.
 
 ## THE CLASSIFICATION THAT LOST SUBSUMPTIONS
 
+**Resolved.** The cause was found on 2026-10-03 and fixed in PR #82 (issue #34): when a
+saturation node's label was copied a second time, the merge of its own entries with the
+shared ones let the older shared entries overwrite the newer own ones, dropping every
+implication that had registered a wait on a trigger in between. The classifier below was
+never where the subsumptions were lost; it only stopped hiding the loss. Since PR #83 it
+trusts the saturation again by default, and `TrustSaturationSubsumerCompleteness=false`
+keeps the subsumption tests as a check. The sections that follow are kept as the record of
+how the defect appeared from the classifier's side.
+
 Classifying SNOMED CT lost inferences. Repeated runs of the same binary over the same file
 lost between 3 and 42 of the 56 subsumptions that were seen to vary, over 46 concepts, and no
 run ever reported one that does not hold. It is a silent defect: a lost subsumption is simply
@@ -742,8 +751,8 @@ shortcut disabled : 0  0  0  0  0  0
 unmodified        : 0 15 27 21 32 12     lost subsumptions per run
 ```
 
-`Konclude.Calculation.Classification.TrustSaturationSubsumerCompleteness` restores the
-previous behaviour. It is off by default.
+`Konclude.Calculation.Classification.TrustSaturationSubsumerCompleteness` selects between the
+two. It was off by default from PR #7 to PR #83 and is on again since the cause was fixed.
 
 
 ### THE DEFECT IS LATENT AND IS BEING MASKED
@@ -823,18 +832,22 @@ that does not hold; the defect only ever loses.
 
 ### WHAT IT COSTS
 
-Nothing measurable. The same binary with the setting on and off, alternating runs so that the
-state of the machine counts for both:
+The table this section first carried said "nothing measurable", 15.6 s against 15.8 s for
+SNOMED CT. That comparison was void: the option had never been registered in the configuration
+group, Konclude rejected it with "Configuration ... not supported", and both arms ran with the
+tests. Measured with the option registered (PR #83), medians of 6 runs over 3 random-UUID copies
+of one build, alternating arms, Mac M3, `-w AUTO`:
 
-| | classification | wall |
+| classification | tests kept | subsumers trusted |
 | --- | --- | --- |
-| tests no longer skipped (the default) | 15.6 s | 40.6 / 43.8 / 41.1 s |
-| previous behaviour | 15.8 s | 40.9 / 42.5 / 42.8 s |
+| SNOMED CT International (374 710 classes) | 17.9 s | 6.7 s |
+| 95k module | 6.0 s | 1.6 s |
+| 95k variant beyond EL | 324 s | 312 s |
 
-The difference is 1 %, it changes sign between rounds, and it is smaller than the spread
-within either arm. Note that in all six of those runs the previous behaviour happened to lose
-no subsumptions, so they compare runs that did equivalent work; a run where the shortcut
-would have fired more often could cost more.
+On the 12-core Linux VM the 95k module classifies in 18.6 s against 3.7 s at `-w AUTO` and in
+107 s against 10–13 s at `-w 1`. Peak memory and the hierarchies are the same in both arms. The
+variant gains little because its classes are decided by tableau tests, which the shortcut does
+not touch.
 
 
 ### WHAT IT WAS CHECKED AGAINST
@@ -958,8 +971,10 @@ definitions need triggers back-propagated from a role group, such as 28584100011
 285831000119108. What differs from run to run is the input: preprocessing assigns concept tags in
 a run-dependent order and builds a structurally different, equivalent encoding of the absorbed
 definitions every time. So the saturation misses a subsumer for some encodings, not because of a
-race. The investigation is recorded in rhausam/Konclude#34; making preprocessing deterministic is
-the next step there.
+race. The investigation is recorded in rhausam/Konclude#34. Making preprocessing deterministic
+(PR #79 for the absorber's trigger pairing, PR #81 for the order in which the builder creates the
+concepts) was what made the deterministic reproducer below possible, and the reproducer led to
+the cause, in the saturation's label copy (PR #82).
 
 ### A SMALLER REPRODUCER
 
@@ -984,6 +999,26 @@ reproducer: ThreadSanitizer multiplies the memory of a run by five to ten, which
 ontology cannot afford on a 48 GB machine and the 95 073 class module still cannot. It becomes
 affordable on a machine with 128 GB, and the module is the input that makes that run worth
 starting.
+
+### THE DETERMINISTIC REPRODUCER
+
+Since PR #81 every run builds the same encoding of an ontology, and two testing switches, read
+from the environment, choose a different one on purpose:
+
+- `KONCLUDE_BUILDORDER_SEED=<n>` permutes the order in which the builder walks the expressions,
+  so every run with the same seed gets the same encoding and runs with different seeds different
+  ones;
+- `KONCLUDE_TRIGGER_TIEBREAK=asc` pairs the absorber's triggers in ascending instead of
+  descending tag order, the pairing the slow memory layouts used to draw before PR #79.
+
+On `d981a6b3` with the code of PR #79 and PR #81 ported, the 95k module at `-w 1` with
+`KONCLUDE_TRIGGER_TIEBREAK=asc` and seed 2 loses 90791000119104 ⊑ 771000119108 on every run,
+seed 8 loses that and 90771000119100 ⊑ 96441000119101, seed 12 loses 128001000119105 ⊑
+71701000119105; the default encoding and 36 seeds in descending order lose nothing. A numbered
+trace of the label copies and of the implication concluding 771000119108 at the node of
+90791000119104 and its parent then showed the loss (rhausam/Konclude#34). With PR #82 the same
+three runs are correct, as are 95 of 95 completed runs of `d981a6b3` with only that fix at
+`-w 1`, and on master every run of this matrix is correct with the subsumption tests on or off.
 
 ### A LIBRARY WITHOUT QT DEPENDENCIES
 

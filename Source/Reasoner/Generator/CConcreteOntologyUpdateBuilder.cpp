@@ -28,16 +28,24 @@ namespace Konclude { namespace Reasoner { namespace Generator {
 	// the addresses, which the allocator chooses differently from one run to the next, and the concepts,
 	// roles and individuals were created and so tagged in that order, with a different encoding of the
 	// ontology by the preprocessing in every run (issue #34)
+	// a seeded permutation of the creation order, a testing switch: KONCLUDE_BUILDORDER_SEED=<n> gives every
+	// run with the same seed the same encoding and runs with different seeds different ones (issue #34)
+	static inline quint64 buildOrderKey(cint64 order) {
+		static quint64 seed = getenv("KONCLUDE_BUILDORDER_SEED") ? strtoull(getenv("KONCLUDE_BUILDORDER_SEED"), nullptr, 10) : 0;
+		if (!seed) return (quint64)order;
+		quint64 z = (quint64)order * 0x9E3779B97F4A7C15ULL + seed * 0xBF58476D1CE4E5B9ULL;
+		z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL; return z ^ (z >> 31);
+	}
 	template<class T>
 	static QList<T*> orderedByBuild(const QSet<T*>& set) {
 		QList<T*> list = set.values();
-		std::sort(list.begin(), list.end(), [](T* a, T* b) { return a->getBuildOrder() < b->getBuildOrder(); });
+		std::sort(list.begin(), list.end(), [](T* a, T* b) { return buildOrderKey(a->getBuildOrder()) < buildOrderKey(b->getBuildOrder()); });
 		return list;
 	}
 	template<class K, class V>
 	static QList<K*> orderedByBuildKeys(const QHash<K*,V>& hash) {
 		QList<K*> list = hash.keys();
-		std::sort(list.begin(), list.end(), [](K* a, K* b) { return a->getBuildOrder() < b->getBuildOrder(); });
+		std::sort(list.begin(), list.end(), [](K* a, K* b) { return buildOrderKey(a->getBuildOrder()) < buildOrderKey(b->getBuildOrder()); });
 		return list;
 	}
 }}}
