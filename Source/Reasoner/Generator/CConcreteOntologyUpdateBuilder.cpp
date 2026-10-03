@@ -19,8 +19,28 @@
  */
 
 #include "CConcreteOntologyUpdateBuilder.h"
+#include <algorithm>
 
 
+
+namespace Konclude { namespace Reasoner { namespace Generator {
+	// the expressions of a set in the order of their creation: a set of pointers is walked in the order of
+	// the addresses, which the allocator chooses differently from one run to the next, and the concepts,
+	// roles and individuals were created and so tagged in that order, with a different encoding of the
+	// ontology by the preprocessing in every run (issue #34)
+	template<class T>
+	static QList<T*> orderedByBuild(const QSet<T*>& set) {
+		QList<T*> list = set.values();
+		std::sort(list.begin(), list.end(), [](T* a, T* b) { return a->getBuildOrder() < b->getBuildOrder(); });
+		return list;
+	}
+	template<class K, class V>
+	static QList<K*> orderedByBuildKeys(const QHash<K*,V>& hash) {
+		QList<K*> list = hash.keys();
+		std::sort(list.begin(), list.end(), [](K* a, K* b) { return a->getBuildOrder() < b->getBuildOrder(); });
+		return list;
+	}
+}}}
 namespace Konclude {
 
 	namespace Reasoner {
@@ -388,7 +408,7 @@ namespace Konclude {
 				//mDeclarationAxiomSet->reserve(mTellAxiomSet->size());
 				//mUpdateAssertionAxiomHash->reserve(mTellAxiomSet->size());
 
-				FOREACHIT (CAxiomExpression* axiomExp, newTellUpdatedAxiomSet) {
+				foreach (CAxiomExpression* axiomExp, orderedByBuild(newTellUpdatedAxiomSet)) {
 					CClassAxiomExpression* classAxiomExp = dynamic_cast<CClassAxiomExpression*>(axiomExp);
 					if (classAxiomExp) {
 						mUpdateClassAxiomHash->insert(classAxiomExp,true);
@@ -410,7 +430,7 @@ namespace Konclude {
 						mUpdateAssertionAxiomHash->insert(assAxiomExp,true);
 					}
 				}
-				FOREACHIT (CAxiomExpression* axiomExp, newRetractUpdatedAxiomSet) {
+				foreach (CAxiomExpression* axiomExp, orderedByBuild(newRetractUpdatedAxiomSet)) {
 					CClassAxiomExpression* classAxiomExp = dynamic_cast<CClassAxiomExpression*>(axiomExp);
 					if (classAxiomExp) {
 						mUpdateClassAxiomHash->insert(classAxiomExp,false);
@@ -439,7 +459,8 @@ namespace Konclude {
 				//mIndiTermAssertionAxiomSet->reserve(mUpdateAssertionAxiomHash->size());
 				//mNewBuildIndividualSet.reserve(mUpdateAssertionAxiomHash->size());
 				//mIndiTermAssertionAxiomHash->reserve(mUpdateAssertionAxiomHash->size());
-				FOREACHHASHIT (CAssertionAxiomExpression* assAxiomExp, bool tellAxiom, *mUpdateAssertionAxiomHash) {
+				foreach (CAssertionAxiomExpression* assAxiomExp, orderedByBuildKeys(*mUpdateAssertionAxiomHash)) {
+					bool tellAxiom = mUpdateAssertionAxiomHash->value(assAxiomExp);
 					CBuildExpression::ExpressionType expType = assAxiomExp->getType();
 					if (expType == CBuildExpression::BETCLASSASSERTION) {
 						CClassAssertionExpression* classAssExp = (CClassAssertionExpression*)assAxiomExp;
@@ -525,7 +546,8 @@ namespace Konclude {
 
 
 
-				FOREACHHASHIT (CClassAxiomExpression* classAxiomExp, bool tellAxiom, *mUpdateClassAxiomHash) {
+				foreach (CClassAxiomExpression* classAxiomExp, orderedByBuildKeys(*mUpdateClassAxiomHash)) {
+					bool tellAxiom = mUpdateClassAxiomHash->value(classAxiomExp);
 					CBuildExpression::ExpressionType expType = classAxiomExp->getType();
 					if (expType == CBuildExpression::BETEQUIVALENTCLASSES) { 
 						// all associated classes has to be updated
@@ -593,7 +615,8 @@ namespace Konclude {
 
 
 
-				FOREACHHASHIT (CObjectPropertyAxiomExpression* objPropAxiomExp, bool tellAxiom, *mUpdateObjectPropertyAxiomHash) {
+				foreach (CObjectPropertyAxiomExpression* objPropAxiomExp, orderedByBuildKeys(*mUpdateObjectPropertyAxiomHash)) {
+					bool tellAxiom = mUpdateObjectPropertyAxiomHash->value(objPropAxiomExp);
 					CBuildExpression::ExpressionType expType = objPropAxiomExp->getType();
 					if (expType == CBuildExpression::BETEQUIVALENTOBJECTPROPERTIES) {
 						// all associated properties has to be updated
@@ -765,7 +788,8 @@ namespace Konclude {
 
 
 
-				FOREACHHASHIT (CDataPropertyAxiomExpression* dataPropAxiomExp, bool tellAxiom, *mUpdateDataPropertyAxiomHash) {
+				foreach (CDataPropertyAxiomExpression* dataPropAxiomExp, orderedByBuildKeys(*mUpdateDataPropertyAxiomHash)) {
+					bool tellAxiom = mUpdateDataPropertyAxiomHash->value(dataPropAxiomExp);
 					CBuildExpression::ExpressionType expType = dataPropAxiomExp->getType();
 					if (expType == CBuildExpression::BETEQUIVALENTDATAPROPERTIES) {
 						// all associated properties has to be updated
@@ -873,7 +897,7 @@ namespace Konclude {
 						mBuildingObjectRoleSet = mNewBuildObjectRoleSet;
 						mNewBuildObjectRoleSet.clear();
 
-						FOREACHIT (CObjectPropertyTermExpression* objTermExp, mBuildingObjectRoleSet) {
+						foreach (CObjectPropertyTermExpression* objTermExp, orderedByBuild(mBuildingObjectRoleSet)) {
 							if (!mNewBuildedObjectRoleSet.contains(objTermExp)) {
 								mNewBuildedObjectRoleSet.insert(objTermExp);
 
@@ -889,7 +913,7 @@ namespace Konclude {
 						mBuildingDataRoleSet = mNewBuildDataRoleSet;
 						mNewBuildDataRoleSet.clear();
 
-						FOREACHIT (CDataPropertyTermExpression* dataTermExp, mBuildingDataRoleSet) {
+						foreach (CDataPropertyTermExpression* dataTermExp, orderedByBuild(mBuildingDataRoleSet)) {
 							if (!mNewBuildedDataRoleSet.contains(dataTermExp)) {
 								mNewBuildedDataRoleSet.insert(dataTermExp);
 
@@ -908,7 +932,7 @@ namespace Konclude {
 						mBuildingIndividualSet = mNewBuildIndividualSet;
 						mNewBuildIndividualSet.clear();
 
-						FOREACHIT (CIndividualTermExpression* indiTermExp, mBuildingIndividualSet) {
+						foreach (CIndividualTermExpression* indiTermExp, orderedByBuild(mBuildingIndividualSet)) {
 							if (!mNewBuildedIndividualSet.contains(indiTermExp)) {
 								mNewBuildedIndividualSet.insert(indiTermExp);
 
@@ -926,7 +950,7 @@ namespace Konclude {
 						mBuildingDatatypeSet = mNewBuildDatatypeSet;
 						mNewBuildDatatypeSet.clear();
 
-						FOREACHIT (CDatatypeExpression* datatypeExp, mBuildingDatatypeSet) {
+						foreach (CDatatypeExpression* datatypeExp, orderedByBuild(mBuildingDatatypeSet)) {
 							if (!mNewBuildedDatatypeSet.contains(datatypeExp)) {
 								mNewBuildedDatatypeSet.insert(datatypeExp);
 
@@ -943,7 +967,7 @@ namespace Konclude {
 						mBuildingDataRangeSet = mNewBuildDataRangeSet;
 						mNewBuildDataRangeSet.clear();
 
-						FOREACHIT (CDataRangeTermExpression* dataRangeExp, mBuildingDataRangeSet) {
+						foreach (CDataRangeTermExpression* dataRangeExp, orderedByBuild(mBuildingDataRangeSet)) {
 							if (!mNewBuildedDataRangeSet.contains(dataRangeExp)) {
 								mNewBuildedDataRangeSet.insert(dataRangeExp);
 
@@ -1046,7 +1070,7 @@ namespace Konclude {
 						mBuildingConceptSet = mNewBuildConceptSet;
 						mNewBuildConceptSet.clear();
 
-						FOREACHIT (CClassTermExpression* classTermExp, mBuildingConceptSet) {
+						foreach (CClassTermExpression* classTermExp, orderedByBuild(mBuildingConceptSet)) {
 							if (!mNewBuildedConceptSet.contains(classTermExp)) {
 								mNewBuildedConceptSet.insert(classTermExp);
 								CBuildExpression::ExpressionType expType = classTermExp->getType();
@@ -1298,16 +1322,16 @@ namespace Konclude {
 						if (mRebuildTopConcept) {
 							CConcept* topConcept = getConceptForClassTerm(mTopClassExpression,true);
 							mRebuildTopConcept = false;
-							FOREACHIT (CClassTermExpression* gciClassTermExp, mClassGCIExpressionSet) {
+							foreach (CClassTermExpression* gciClassTermExp, orderedByBuild(mClassGCIExpressionSet)) {
 								buildConceptSubClassInclusion(mTopClassExpression,gciClassTermExp);
 							}
 							mClassGCIExpressionSet.clear();
-							FOREACHIT (CClassTermExpression* rebuildClassTermExp, *mTopRebuildClassTermExpressionsSet) {
+							foreach (CClassTermExpression* rebuildClassTermExp, orderedByBuild(*mTopRebuildClassTermExpressionsSet)) {
 								if (!mNewBuildedConceptSet.contains(rebuildClassTermExp) && !mBuildingConceptSet.contains(rebuildClassTermExp)) {
 									mNewBuildConceptSet.insert(rebuildClassTermExp);
 								}
 							}
-							FOREACHIT (CObjectPropertyTermExpression* rebuildObjectPropertyTermExp, *mTopRebuildObjectPropertyTermExpressionsSet) {
+							foreach (CObjectPropertyTermExpression* rebuildObjectPropertyTermExp, orderedByBuild(*mTopRebuildObjectPropertyTermExpressionsSet)) {
 								if (!mNewBuildedObjectRoleSet.contains(rebuildObjectPropertyTermExp) && !mBuildingObjectRoleSet.contains(rebuildObjectPropertyTermExp)) {
 									mNewBuildObjectRoleSet.insert(rebuildObjectPropertyTermExp);
 								}
