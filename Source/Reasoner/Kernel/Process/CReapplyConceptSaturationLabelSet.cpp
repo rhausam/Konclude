@@ -76,14 +76,15 @@ namespace Konclude {
 								*tmpAdditionalConDesDepHash = *copyConceptSaturationLabelSet->mConceptDesDepHash;
 								tmpAdditionalConDesDepHash->detach();
 
+								// the entries of the own hash were pulled from the shared hash when first touched and extended since
+								// (implications waiting on the trigger are prepended to the reapply list), so they supersede the shared
+								// entries; the shared hash only supplies the tags the own hash has not touched (issue #34)
 								for (CPROCESSHASH<cint64,CConceptSaturationDescriptorReapplyData>::const_iterator it = copyConceptSaturationLabelSet->mAdditionalConceptDesDepHash->constBegin(), itEnd = copyConceptSaturationLabelSet->mAdditionalConceptDesDepHash->constEnd(); it != itEnd; ++it) {
 									cint64 conTag = it.key();
 									const CConceptSaturationDescriptorReapplyData& conDesReapplyData(it.value());
 									CConceptSaturationDescriptorReapplyData& newConDesReapplyData = (*tmpAdditionalConDesDepHash)[conTag];
-									if (conDesReapplyData.mConSatDes) {
+									if (!newConDesReapplyData.mConSatDes && !newConDesReapplyData.mImpReapplyConSatDes) {
 										newConDesReapplyData.mConSatDes = conDesReapplyData.mConSatDes;
-									}
-									if (conDesReapplyData.mImpReapplyConSatDes) {
 										newConDesReapplyData.mImpReapplyConSatDes = conDesReapplyData.mImpReapplyConSatDes;
 									}
 								}
