@@ -1169,6 +1169,79 @@ the line above, so a reasoner that was not given a configuration explicitly ran 
 processing unit. An empty configuration now means `DEFAULT_LOADING_CONFIGURATION`, see
 `chooseLoadingConfiguration`, so the factory and the plug-in get `AUTO` without saying so.
 
+## THE DRUG MODEL'S DATA VALUES
+
+SNOMED CT models drug strengths and ingredient counts with `DataHasValue` restrictions on
+decimal and integer literals (`999000041000168106 value 10.0`): 72 218 of them in the
+International Edition, 1 026 888 in the Australian Edition with AMT. Until October 2026 the
+classifier could not trust the saturation of any class whose definition reaches such a
+literal, so every one of them went through the tableau at each classification: 16 855
+classes of International (4.6 %) and 169 448 of AU (30 %). Two defects, both in the
+preprocessing rather than in the reasoning (issue #90):
+
+- The saturation refused every datatype value space that carries concept triggers unless it
+  was the string space (`tryHandleDatatypeValueSpaceTriggers`), so a node for a plain,
+  valid literal such as `8.0^^xsd:decimal` was flagged insufficient as soon as the ontology
+  had absorbed any data restriction into triggers. On AU all 3 387 insufficiency flags came
+  from that one line. The saturation now fires, for a node whose literal value is known,
+  exactly the triggers the tableau fires for a node fixed to one value: those of the whole
+  value space, those of the value's types (rational, decimal, integer; strings without a
+  language tag), the complete and partial triggers at the value, the inclusive minimum and
+  maximum triggers at it, the minimum triggers of the entries below it and the maximum
+  triggers of the entries above it. A node whose datatype alone is known is accepted when
+  the value space has no value-dependent triggers. `CDatatypeValueSpaceCompareTriggers`
+  counts its minimum and maximum triggers, so an ontology with value triggers only, like
+  SNOMED CT, costs one map lookup per literal node. Other value spaces (boolean, double,
+  float, date time, ...) are still refused.
+
+- The absorber's test for the *complete* absorption of an `EquivalentClasses` axiom had no
+  case for data literals, only the partial and the assuring tests had one. A definition with
+  a `DataHasValue`, which is every defined medicinal product, was therefore only absorbed
+  into an equivalence *candidate*, which the saturation cannot resolve (a candidate is
+  problematic unless the class itself is derived), and the classifier tested each such
+  class with the tableau. A data literal is now completely absorbable whenever an exact
+  value trigger can be built for it, and the complete absorption builds that trigger, the
+  same complete value trigger the assuring triggers use. It is registered for the whole
+  ontology rather than scoped by the back-propagation concept: it is one entry of the value
+  space's trigger map and fires only on nodes whose value is exactly the literal. The
+  tableau fires complete triggers only for a node fixed to one value and the saturation
+  only for a node carrying that literal, so adding the defined class on it is sound.
+
+### WHAT IT GAINS
+
+Same Mac, same files, command line with `-w AUTO`, one run each:
+
+```
+                              master     after the first     after both
+International, classification  6.3 s        6.0 s             5.1 s
+               untrusted classes 16 976     12 716              255
+Australian,    classification 15.4 s        8.7 s             6.5 s
+               untrusted classes 169 448    16 559                0
+```
+
+On AU not a single node of the saturation is insufficient any more, so the classifier
+factory (`isClassificationBySaturationCalculationSufficient`) selects the
+saturation-extraction classifier, which reads the subsumers off the saturation without any
+tableau test; its first run after a build took 10.1 s, the following ones 6.5 s. The 255
+classes of International that remain untrusted are 134 with a nominal in reach of their
+saturation and 121 equivalence candidates of definitions that are not absorbable for other
+reasons.
+
+### WHAT IT WAS CHECKED AGAINST
+
+The hierarchies of AU, International and the 95k variant module are byte identical to the
+ones master produced before the change. Since the trusted path now answers the datatype
+part of the ontology without the tableau, that part was also checked against reasoners
+that are complete for OWL 2 DL: a STAR locality module of International around 40 randomly
+sampled classes defined with a `DataHasValue` (1 058 classes, 2 108 axioms) classifies
+identically with Konclude, HermiT 1.4.3 and FaCT++ 1.7.0 (8 845 ancestor pairs and
+equivalences, none differing; HermiT 139 s, FaCT++ 5 s, Konclude 2 ms). A module around
+300 sampled classes (5 601 classes) was too much for HermiT, which had not finished after
+14 minutes at its 14 GB heap. The checker, `DhvCheck.java`, extracts the module with the
+OWL API, classifies it with any reasoner factory and writes the hierarchy as sorted
+"sub super" and "equiv a b" lines; Konclude's output is read back in its `asserted` mode.
+HermiT 1.4.3 and the FaCT++ binding need the OWL API 4.5 class path, not 5.1.
+
 ## ENTAILMENT CHECKING, INTERRUPTION AND PROGRESS
 
 The first two were the gaps between the wrapper and ELK 0.6.0 on the methods Protege calls, measured
