@@ -897,6 +897,18 @@ namespace Konclude {
 				}
 				LabelConceptKind kind = getLabelConceptKind(concept, negated);
 				cint64 opCode = concept->getOperatorCode();
+				if (kind == LCK_UNSAFE && ((opCode == CCOR && !negated) || (opCode == CCAND && negated))) {
+					// a disjunction one of whose disjuncts the merged label holds already is satisfied and
+					// adds nothing; only a disjunction that still needs a choice leaves the merge to the
+					// tableau (issue #33)
+					for (CSortedNegLinker<CConcept*>* opIt = concept->getOperandList(); opIt; opIt = opIt->getNext()) {
+						bool disjunctNegated = opIt->isNegated() ^ negated;
+						if (disjunctNegated ? state.hasNegative(opIt->getData()) : state.hasPositive(opIt->getData())) {
+							mUndecidedMergeConceptCodeCounts[-13004] = mUndecidedMergeConceptCodeCounts.value(-13004, 0) + 1;
+							return true;
+						}
+					}
+				}
 				if (kind == LCK_UNSAFE) {
 					cint64 codeKey = opCode * 2 + (negated ? 1 : 0);
 					mUndecidedMergeConceptCodeCounts[codeKey] = mUndecidedMergeConceptCodeCounts.value(codeKey, 0) + 1;
@@ -1695,6 +1707,14 @@ namespace Konclude {
 				CIndividualSaturationProcessNode* previousPartNode = state.mCurrentPartNode;
 				state.mCurrentPartNode = nullptr;
 				for (const CCompletedLabelEntry& entry : label->mEntries) {
+					cint64 entryOpCode = entry.mConcept->getOperatorCode();
+					if ((entryOpCode == CCOR && !entry.mNegated) || (entryOpCode == CCAND && entry.mNegated)) {
+						// a disjunction is an unresolved choice in a saturation label, but a completed label
+						// is the root label of a model, which holds the disjunct it chose as an entry of its
+						// own, so the disjunction is satisfied and adds nothing (issue #33)
+						mUndecidedMergeConceptCodeCounts[-13000] = mUndecidedMergeConceptCodeCounts.value(-13000, 0) + 1;
+						continue;
+					}
 					if (!addMergeLabelConcept(state, entry.mConcept, entry.mNegated, false)) {
 						state.mCurrentPartNode = previousPartNode;
 						return false;
@@ -1728,6 +1748,30 @@ namespace Konclude {
 				CSortedNegLinker<CConcept*>* opLinker = concept->getOperandList();
 				if (opCode == CCNOT && opLinker) {
 					return decideEntailedCompleted(label, opLinker->getData(), !(opLinker->isNegated() ^ negated), depth + 1);
+				}
+				cint64 absCode = opCode < 0 ? -opCode : opCode;
+				bool existential = (absCode == 5 || absCode == 11) && ((opCode < 0) != negated);
+				if (existential) {
+					// the completed label is the root label of a model, whose successors come from the
+					// existential and cardinality restrictions among its entries; a model in which the root
+					// has no successor over the role, nor a self loop on it, refutes the existential
+					// restriction (issue #33)
+					CRole* role = concept->getRole();
+					if (role && !role->isDataRole() && !label->mSuccessorRoleTagSet.contains(role->getRoleTag())) {
+						bool selfLoop = false;
+						for (const CCompletedLabelEntry& entry : label->mEntries) {
+							if (!entry.mNegated && entry.mConcept->getOperatorCode() == CCSELF && isSelfLoopOnRole(entry.mConcept, role)) {
+								selfLoop = true;
+								break;
+							}
+						}
+						if (!selfLoop) {
+							mUndecidedMergeConceptCodeCounts[-13008] = mUndecidedMergeConceptCodeCounts.value(-13008, 0) + 1;
+							return NOT_SUBSUMED;
+						}
+					}
+					mUndecidedMergeConceptCodeCounts[-13010] = mUndecidedMergeConceptCodeCounts.value(-13010, 0) + 1;
+					return UNDECIDED;
 				}
 				if (!negated) {
 					if (opCode == CCTOP) {
@@ -1851,6 +1895,12 @@ namespace Konclude {
 					bool negated = entry.mNegated;
 					if (negated ? base->hasPositive(concept) : base->hasNegative(concept)) {
 						return (nondeterministic || !entry.mDeterministic) ? UNDECIDED : SUBSUMED;
+					}
+					cint64 entryOpCode = concept->getOperatorCode();
+					if ((entryOpCode == CCOR && !negated) || (entryOpCode == CCAND && negated)) {
+						// satisfied by the disjunct the model chose, which is an entry of its own (issue #33)
+						mUndecidedMergeConceptCodeCounts[-13002] = mUndecidedMergeConceptCodeCounts.value(-13002, 0) + 1;
+						continue;
 					}
 					LabelConceptKind kind = getLabelConceptKind(concept, negated);
 					if (kind == LCK_UNSAFE) {
@@ -2140,6 +2190,11 @@ namespace Konclude {
 					}
 					LabelConceptKind kind = getLabelConceptKind(concept, negated);
 					cint64 opCode = concept->getOperatorCode();
+					if ((opCode == CCOR && !negated) || (opCode == CCAND && negated)) {
+						// satisfied by the disjunct the model chose, which is an entry of its own (issue #33)
+						mUndecidedMergeConceptCodeCounts[-13006] = mUndecidedMergeConceptCodeCounts.value(-13006, 0) + 1;
+						continue;
+					}
 					if (kind == LCK_UNSAFE) {
 						cint64 codeKey = opCode * 2 + (negated ? 1 : 0);
 						mUndecidedMergeConceptCodeCounts[codeKey] = mUndecidedMergeConceptCodeCounts.value(codeKey, 0) + 1;
