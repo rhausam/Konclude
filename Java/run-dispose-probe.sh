@@ -10,7 +10,7 @@
 #   2. the jars in Java/owlapi/lib
 #   3. the local Maven repository, resolved with 'mvn dependency:build-classpath'
 #
-# Usage: ./run-owlapi-test.sh [<directory or file of the Konclude shared library>]
+# Usage: ONTOLOGY=<file> [CYCLES=<n>] [HEAP=<Xmx>] ./run-dispose-probe.sh [<directory or file of the Konclude shared library>]
 
 set -u
 
@@ -126,35 +126,25 @@ OWLAPI_CP="$(resolve_owlapi_classpath)" || {
 }
 echo "Using the OWL API from $(echo "$OWLAPI_CP" | tr "$CLASSPATH_SEPARATOR" '\n' | wc -l | tr -d ' ') jar(s)."
 
-echo "Compiling the test into '$BUILD_DIR'."
-rm -rf "$BUILD_DIR"
-mkdir -p "$BUILD_DIR"
-if ! find "$JAVA_DIR/src" "$JAVA_DIR/owlapi/src" -name '*.java' -print0 \
-		| xargs -0 "$JAVAC" -cp "$OWLAPI_CP" -d "$BUILD_DIR"; then
-	echo "Compilation of the test failed." >&2
+ONTOLOGY="${ONTOLOGY:-}"
+CYCLES="${CYCLES:-4}"
+HEAP="${HEAP:-10g}"
+if [ -z "$ONTOLOGY" ] || [ ! -f "$ONTOLOGY" ]; then
+	echo "ONTOLOGY has to name the ontology file to classify." >&2
+	exit 2
+fi
+
+PROBE_BUILD_DIR="$JAVA_DIR/build/dispose-probe"
+echo "Compiling the probe into '$PROBE_BUILD_DIR'."
+rm -rf "$PROBE_BUILD_DIR"
+mkdir -p "$PROBE_BUILD_DIR"
+if ! find "$JAVA_DIR/src" "$JAVA_DIR/owlapi/src" "$JAVA_DIR/tools" -name '*.java' -print0 \
+		| xargs -0 "$JAVAC" -cp "$OWLAPI_CP" -d "$PROBE_BUILD_DIR"; then
+	echo "Compilation of the probe failed." >&2
 	exit 1
 fi
 
-. "$JAVA_DIR/jvm-crash-reports.sh"
-
-FAILED_SCENARIOS=""
-for scenario in hierarchy expressions expressions-tableau expressions-el individuals properties datatypes inconsistency unsupported lifecycle determinism merges timeout entailment interrupt progress; do
-	echo
-	echo "--------------------------------------------------------------------------"
-	"$JAVA" "$CRASH_REPORT_OPTION" -cp "$OWLAPI_CP$CLASSPATH_SEPARATOR$(native_path "$BUILD_DIR")" \
-			-Djava.library.path="$(native_path "$LIBRARY_DIR")" \
-			com.konclude.owlapitest.KoncludeOWLAPITest "$scenario"
-	status=$?
-	# the report is looked for first, so that it is taken care of whatever the status
-	if crash_report_found owlapi "$scenario" || [ $status -ne 0 ]; then
-		FAILED_SCENARIOS="$FAILED_SCENARIOS $scenario"
-	fi
-done
-
-echo
-echo "=========================================================================="
-if [ -n "$FAILED_SCENARIOS" ]; then
-	echo "FAILED scenarios:$FAILED_SCENARIOS"
-	exit 1
-fi
-echo "All scenarios passed, the OWL API wrapper of Konclude works against the library."
+echo "Running $CYCLES create-classify-dispose cycle(s) on '$ONTOLOGY'."
+# the process size after every dispose: a reasoner that leaks shows it as a rise from cycle to cycle, see Java/Readme.md
+exec "$JAVA" -Xmx"$HEAP" -Djava.library.path="$(native_path "$LIBRARY_DIR")" \
+	-cp "$(native_path "$PROBE_BUILD_DIR")$CLASSPATH_SEPARATOR$OWLAPI_CP" DisposeProbe "$ONTOLOGY" "$CYCLES"

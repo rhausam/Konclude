@@ -1020,6 +1020,12 @@ trace of the label copies and of the implication concluding 771000119108 at the 
 three runs are correct, as are 95 of 95 completed runs of `d981a6b3` with only that fix at
 `-w 1`, and on master every run of this matrix is correct with the subsumption tests on or off.
 
+The OWL API test has a scenario for this since 2026-10-03, `determinism`: the same generated
+ontology is classified with one processor, with the automatic count and once more with the
+automatic count, and the three hierarchies, every class with its equivalents and direct sub
+classes, have to be identical. It is the regression check for #28, #34, #79 and #81 that the
+suite can afford; the reproducer above needs the 95k module and about half a minute per run.
+
 ### A LIBRARY WITHOUT QT DEPENDENCIES
 
 Konclude is written in Qt rather than merely using it for input and output: `QString` appears
@@ -1557,6 +1563,26 @@ jemalloc's faster allocation itself; the tunable tcache made no difference.
   library no longer uses it, and `closeKoncludeLibraryInstance` purges jemalloc's arenas
   (`arena.4096.purge`, all arenas) instead of calling `malloc_trim`. Libraries built without the
   option, the macOS and Windows ones and local Linux builds, use the program's malloc as before.
+
+
+### THE DISPOSE PROBE
+
+`Java/tools/DisposeProbe.java`, run by `run-dispose-probe.sh`, is the measurement behind the
+work on #45: it creates a reasoner, classifies the ontology, disposes the reasoner, and prints
+the process size and the thread count after every dispose, as many times as asked.
+
+```
+ONTOLOGY=<ontology file> CYCLES=4 ./run-dispose-probe.sh ~/build/konclude-lib-master/release
+```
+
+On the 95k-class SNOMED CT module (Mac M3) a healthy library prints a footprint after each
+dispose of about 0.5 to 1.1 GB that does not rise from cycle to cycle (master after #85 and
+#89); before #72 the whole knowledge base stayed, about 7 GB per cycle, and between #72 and
+#85 about four small allocations per entity stayed and pinned the freed pages, so the footprint
+rose by 1 to 3 GB per cycle. The probe runs a few minutes on the module and cannot be part of
+the suites, whose ontologies are too small for a leak to show above the noise of the virtual
+machine; it is the check to run after a change to the memory pools, the JNI bridge or the
+ontology's destructors.
 
 
 ## OTHER LIMITATIONS
