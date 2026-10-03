@@ -71,6 +71,7 @@ namespace Konclude {
 				mInheritedBuildIndividualCount = 0;
 				mInheritedBuildDataRoleCount = 0;
 				mInheritedBuildDatatypeCount = 0;
+				mInheritedBuildDataLexicalValueCount = 0;
 				mExpressionBuildListContainer = CObjectParameterizingAllocator< CBUILDLIST<CBuildExpression*>,CContext* >::allocateAndConstructAndParameterize(memAllocMan,mOntoContext);
 
 				mInverseObjectPropertyHash = CObjectParameterizingAllocator< CBUILDHASH<CObjectPropertyTermExpression*,CObjectPropertyTermExpression*>,CContext* >::allocateAndConstructAndParameterize(memAllocMan,mOntoContext);
@@ -91,6 +92,7 @@ namespace Konclude {
 				mBuildIndividualList = CObjectParameterizingAllocator< CBUILDLIST<CIndividualTermExpression*>,CContext* >::allocateAndConstructAndParameterize(memAllocMan,mOntoContext);
 				mBuildDataRoleList = CObjectParameterizingAllocator< CBUILDLIST<CDataPropertyTermExpression*>,CContext* >::allocateAndConstructAndParameterize(memAllocMan,mOntoContext);
 				mBuildDatatypeList = CObjectParameterizingAllocator< CBUILDLIST<CDatatypeExpression*>,CContext* >::allocateAndConstructAndParameterize(memAllocMan,mOntoContext);
+				mBuildDataLexicalValueList = CObjectParameterizingAllocator< CBUILDLIST<CDataLexicalValueExpression*>,CContext* >::allocateAndConstructAndParameterize(memAllocMan,mOntoContext);
 				mBuildDataRangesList = CObjectParameterizingAllocator< CBUILDLIST<CDataRangeTermExpression*>,CContext* >::allocateAndConstructAndParameterize(memAllocMan,mOntoContext);
 
 
@@ -138,6 +140,9 @@ namespace Konclude {
 				}
 				for (cint64 i = mInheritedBuildDatatypeCount; i < mBuildDatatypeList->count(); ++i) {
 					ownExpressionSet.insert(mBuildDatatypeList->at(i));
+				}
+				for (cint64 i = mInheritedBuildDataLexicalValueCount; i < mBuildDataLexicalValueList->count(); ++i) {
+					ownExpressionSet.insert(mBuildDataLexicalValueList->at(i));
 				}
 				ownExpressionSet.remove(nullptr);
 				qDeleteAll(ownExpressionSet);
@@ -187,6 +192,7 @@ namespace Konclude {
 				COPADestroyAndRelease(mBuildDataRoleList,memAllocMan);
 				COPADestroyAndRelease(mBuildIndividualList,memAllocMan);
 				COPADestroyAndRelease(mBuildDatatypeList,memAllocMan);
+				COPADestroyAndRelease(mBuildDataLexicalValueList,memAllocMan);
 				COPADestroyAndRelease(mBuildDataRangesList,memAllocMan);
 
 				COPADestroyAndRelease(mImportDataHash,memAllocMan);
@@ -253,11 +259,13 @@ namespace Konclude {
 				*mBuildObjectRoleList = *buildData->mBuildObjectRoleList;
 				*mBuildDataRoleList = *buildData->mBuildDataRoleList;
 				*mBuildDatatypeList = *buildData->mBuildDatatypeList;
+				*mBuildDataLexicalValueList = *buildData->mBuildDataLexicalValueList;
 				mInheritedBuildIndividualCount = mBuildIndividualList->count();
 				mInheritedBuildConceptCount = mBuildConceptList->count();
 				mInheritedBuildObjectRoleCount = mBuildObjectRoleList->count();
 				mInheritedBuildDataRoleCount = mBuildDataRoleList->count();
 				mInheritedBuildDatatypeCount = mBuildDatatypeList->count();
+				mInheritedBuildDataLexicalValueCount = mBuildDataLexicalValueList->count();
 				*mBuildDataRangesList = *buildData->mBuildDataRangesList;
 
 				*mImportDataHash = *buildData->mImportDataHash;
@@ -547,6 +555,10 @@ namespace Konclude {
 
 			CBUILDLIST<CDatatypeExpression*>* COntologyBuildData::getBuildDatatypeList() {
 				return mBuildDatatypeList;
+			}
+
+			CBUILDLIST<CDataLexicalValueExpression*>* COntologyBuildData::getBuildDataLexicalValueList() {
+				return mBuildDataLexicalValueList;
 			}
 
 			cint64 COntologyBuildData::getNextAxiomNumber(bool moveNext) {

@@ -38,6 +38,12 @@ namespace Konclude {
 
 
 			CConcreteOntologyContextBase::~CConcreteOntologyContextBase() {
+				// the pools are released as blocks, so the objects in them that own memory outside the
+				// pools, the names with their strings, have their destructors run first (issue #45)
+				for (CAllocationObject* object : mDestructiblePoolObjectList) {
+					object->~CAllocationObject();
+				}
+				qDeleteAll(mOwnedConceptReferenceLinkingList);
 				delete mMemMan;
 				delete mPoolProvider;
 
@@ -67,6 +73,20 @@ namespace Konclude {
 				}
 				return mOntMemMan;
 			}
+
+			COntologyContext* CConcreteOntologyContextBase::addDestructiblePoolObject(CAllocationObject* object) {
+				QMutexLocker locker(&mDestructiblePoolObjectMutex);
+				mDestructiblePoolObjectList.append(object);
+				return this;
+			}
+
+
+			COntologyContext* CConcreteOntologyContextBase::addOwnedConceptReferenceLinking(CConceptReferenceLinking* linking) {
+				QMutexLocker locker(&mOwnedConceptReferenceLinkingMutex);
+				mOwnedConceptReferenceLinkingList.append(linking);
+				return this;
+			}
+
 
 			COntologyContext* CConcreteOntologyContextBase::addUsedMemoryPools(CMemoryPool* memoryPools) {
 				mMemMan->addUsedMemoryPools(memoryPools);

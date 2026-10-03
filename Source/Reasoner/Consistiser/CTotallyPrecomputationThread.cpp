@@ -1228,6 +1228,7 @@ namespace Konclude {
 							if (!conRefSatLinking) {
 								conRefSatLinking = new CConceptSaturationReferenceLinkingData();
 								conProcData->setConceptReferenceLinking(conRefSatLinking);
+								totallyPreCompItem->getOntology()->getOntologyContext()->addOwnedConceptReferenceLinking(conRefSatLinking);
 							}
 							if (conRefSatLinking->getConceptSaturationReferenceLinkingData(opCheckingNegation) == nullptr) {
 								CSaturationConceptDataItem* conItem = totallyPreCompItem->getSaturationConceptDataItem(opCheckConcept, opCheckingNegation,true);
@@ -1245,6 +1246,7 @@ namespace Konclude {
 						if (!conRefSatLinking) {
 							conRefSatLinking = new CConceptSaturationReferenceLinkingData();
 							conProcData->setConceptReferenceLinking(conRefSatLinking);
+							totallyPreCompItem->getOntology()->getOntologyContext()->addOwnedConceptReferenceLinking(conRefSatLinking);
 						}
 						if (conRefSatLinking->getConceptSaturationReferenceLinkingData(nextNegation) == nullptr) {
 							CSaturationConceptDataItem* conItem = totallyPreCompItem->getSaturationConceptDataItem(nextConcept,nextNegation,true);
@@ -1266,6 +1268,7 @@ namespace Konclude {
 							if (!conRefSatLinking) {
 								conRefSatLinking = new CConceptSaturationReferenceLinkingData();
 								conProcData->setConceptReferenceLinking(conRefSatLinking);
+								totallyPreCompItem->getOntology()->getOntologyContext()->addOwnedConceptReferenceLinking(conRefSatLinking);
 							}
 							if (conRefSatLinking->getConceptSaturationReferenceLinkingData(saturateNegation) == nullptr) {
 								CSaturationConceptDataItem* conItem = totallyPreCompItem->getSaturationConceptDataItem(nextConcept,saturateNegation,true);
@@ -2079,6 +2082,7 @@ namespace Konclude {
 									if (!conRefSatLinking) {
 										conRefSatLinking = new CConceptSaturationReferenceLinkingData();
 										conProcData->setConceptReferenceLinking(conRefSatLinking);
+										totallyPreCompItem->getOntology()->getOntologyContext()->addOwnedConceptReferenceLinking(conRefSatLinking);
 									}
 									if (conRefSatLinking->getExistentialSuccessorConceptSaturationReferenceLinkingData() == nullptr) {
 										conRefSatLinking->setExistentialSuccessorConceptSaturationReferenceLinkingData(conItem);
@@ -2099,6 +2103,7 @@ namespace Konclude {
 									if (!opConRefSatLinking) {
 										opConRefSatLinking = new CConceptSaturationReferenceLinkingData();
 										opConProcData->setConceptReferenceLinking(opConRefSatLinking);
+										totallyPreCompItem->getOntology()->getOntologyContext()->addOwnedConceptReferenceLinking(opConRefSatLinking);
 									}
 									if (opConRefSatLinking->getConceptSaturationReferenceLinkingData(opNegation) == nullptr) {
 										opConRefSatLinking->setSaturationReferenceLinkingData(conItem,opNegation);
@@ -2114,6 +2119,7 @@ namespace Konclude {
 								if (!conRefSatLinking) {
 									conRefSatLinking = new CConceptSaturationReferenceLinkingData();
 									conProcData->setConceptReferenceLinking(conRefSatLinking);
+									totallyPreCompItem->getOntology()->getOntologyContext()->addOwnedConceptReferenceLinking(conRefSatLinking);
 								}
 								if (conRefSatLinking->getConceptSaturationReferenceLinkingData(false) == nullptr) {
 									CSaturationConceptDataItem* conItem = totallyPreCompItem->getSaturationConceptDataItem(concept,false,true);

@@ -1704,6 +1704,9 @@ namespace Konclude {
 							++itWorkItem;
 						}
 						delete workItem;
+						// the adapters were created for this job alone and the job does not delete them (issue #45)
+						delete satCalcJob->getSatisfiableClassificationRoleMarkedMessageAdapter();
+						delete satCalcJob->getSatisfiableTaskIndividualDependenceTrackingAdapter();
 						delete satCalcJob;
 					}
 					workOntItemHash.remove(workItem);
