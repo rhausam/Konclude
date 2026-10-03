@@ -3186,6 +3186,17 @@ namespace Konclude {
 						triggers = newTrigger->append(triggers);
 
 
+					} else if (!negated && (opCode == CCDATALITERAL)) {
+						// the exact value trigger of the literal (see isConceptImplicationTriggerable); it is registered for the
+						// whole ontology rather than scoped by the back propagation concept, since it is a single entry of the
+						// value space's trigger map and fires only on nodes whose value is exactly this literal
+						// (built directly: the assuring builder begins by calling this one, so it cannot be asked)
+						if (isDataLiteralConceptExactlyTriggerable(concept)) {
+							CConceptTriggerLinker* literalTrigger = createExactDataLiteralTrigger(concept->getDataLiteral(), branchTiggerCreation);
+							if (literalTrigger) {
+								triggers = literalTrigger->append(triggers);
+							}
+						}
 					} else if (!negated && (opCode == CCVALUE)) {
 						CConcept* propagatedTriggerConcept = createTriggerConcept(branchTiggerCreation);
 						CConcept* nextLevelTriggerConcept = createTriggerPropagationConcept(propagatedTriggerConcept,role, branchTiggerCreation);
@@ -3710,6 +3721,27 @@ namespace Konclude {
 			}
 
 
+			bool CTriggeredImplicationBinaryAbsorberPreProcess::isDataLiteralConceptExactlyTriggerable(CConcept* concept) {
+				// whether an exact value trigger can be built for the literal: the value must be parsed and of a value space with triggers
+				if (!mConfDatatypeAbsorption || concept->getOperatorCode() != CCDATALITERAL) {
+					return false;
+				}
+				CDataLiteral* dataLiteral = concept->getDataLiteral();
+				if (!dataLiteral) {
+					return false;
+				}
+				CDataLiteralValue* dataLitValue = dataLiteral->getDataLiteralValue();
+				if (!dataLitValue) {
+					return false;
+				}
+				CDataLiteralValue::DATA_LITERAL_VALUE_TYPE valueType = dataLitValue->getDataValueType();
+				return valueType == CDataLiteralValue::DLVT_REAL || valueType == CDataLiteralValue::DLVT_STRING || valueType == CDataLiteralValue::DLVT_BOOLEAN
+						|| valueType == CDataLiteralValue::DLVT_DOUBLE || valueType == CDataLiteralValue::DLVT_FLOAT || valueType == CDataLiteralValue::DLVT_IRI
+						|| valueType == CDataLiteralValue::DLVT_XML || valueType == CDataLiteralValue::DLVT_HEXBINARY || valueType == CDataLiteralValue::DLVT_BASE64BINARY
+						|| valueType == CDataLiteralValue::DLVT_DATETIME;
+			}
+
+
 			bool CTriggeredImplicationBinaryAbsorberPreProcess::isConceptImplicationTriggerable(CConcept* concept, bool negated, QHash<CConcept*,TOccuredAbsorbablePair>* conceptEqConAbsorbed) {
 				cint64 openMultipleOccurCount = 0;
 				QList<TConceptNegationPair>* dependingCacheList = nullptr;
@@ -3793,6 +3825,13 @@ namespace Konclude {
 						opConLinkerIt = opConLinkerIt->getNext();
 					}
 					absorbable = allOpsTriggerable;
+				} else if (!negated && (opCode == CCDATALITERAL)) {
+					// A data literal can be absorbed completely: its exact value trigger fires on a node if and only if
+					// the node's value is the literal, which is what the equivalence absorption needs. Without this
+					// case every definition containing a DataHasValue was only a candidate, which the saturation
+					// cannot resolve (issue #90).
+					// (the assuring test cannot be asked, it begins by asking this one)
+					absorbable = isDataLiteralConceptExactlyTriggerable(concept);
 				} else if (opCode == CCEQ) {
 					if (negated) {
 						absorbable = false;
@@ -4915,6 +4954,61 @@ namespace Konclude {
 
 
 
+			CConceptTriggerLinker* CTriggeredImplicationBinaryAbsorberPreProcess::createExactDataLiteralTrigger(CDataLiteral* dataLiteral, bool branchTiggerCreation) {
+				// the trigger concept that the value space fires on a node whose value is exactly this literal (a complete value trigger);
+				// used by the assuring triggers and by the complete absorption of definitions with data literals
+				cint64 triggerComplexity = 2;
+				CConcept* valueTriggerConcept = createTriggerConcept(branchTiggerCreation);
+				CConceptTriggerLinker* valueTrigger = createTriggerLinker();
+				valueTrigger->initConceptTriggerLinker(valueTriggerConcept, triggerComplexity);
+				CDatatypeValueSpaceConceptTriggerLinker* valueSpaceConceptTriggerLinker = createValueSpaceConceptTriggerLinker();
+				valueSpaceConceptTriggerLinker->initConceptTrigger(valueTriggerConcept);
+
+
+				CDatatypeValueSpaceTriggers* valueSpaceTrigger = nullptr;
+				CDataLiteralValue* dataLitValue = dataLiteral->getDataLiteralValue();
+				if (dataLitValue) {
+					CDataLiteralCompareValue* compareDataLitValue = dynamic_cast<CDataLiteralCompareValue*>(dataLitValue);
+					if (compareDataLitValue) {
+						CDatatypeValueSpaceType* valueSpaceType = nullptr;
+						CDataLiteralValue::DATA_LITERAL_VALUE_TYPE dataLiteralValueType = compareDataLitValue->getDataValueType();
+						CDatatypeValueSpaceTypes* valueSpaceTypes = CDatatypeValueSpaceTypes::getValueSpaceTypes();
+						if (dataLiteralValueType == CDataLiteralValue::DLVT_REAL) {
+							valueSpaceType = valueSpaceTypes->getValueSpaceRealType();
+						} else if (dataLiteralValueType == CDataLiteralValue::DLVT_STRING) {
+							valueSpaceType = valueSpaceTypes->getValueSpaceStringType();
+						} else if (dataLiteralValueType == CDataLiteralValue::DLVT_BOOLEAN) {
+							valueSpaceType = valueSpaceTypes->getValueSpaceBooleanType();
+						} else if (dataLiteralValueType == CDataLiteralValue::DLVT_DOUBLE) {
+							valueSpaceType = valueSpaceTypes->getValueSpaceDoubleType();
+						} else if (dataLiteralValueType == CDataLiteralValue::DLVT_FLOAT) {
+							valueSpaceType = valueSpaceTypes->getValueSpaceFloatType();
+						} else if (dataLiteralValueType == CDataLiteralValue::DLVT_IRI) {
+							valueSpaceType = valueSpaceTypes->getValueSpaceIRIType();
+						} else if (dataLiteralValueType == CDataLiteralValue::DLVT_XML) {
+							valueSpaceType = valueSpaceTypes->getValueSpaceXMLType();
+						} else if (dataLiteralValueType == CDataLiteralValue::DLVT_HEXBINARY) {
+							valueSpaceType = valueSpaceTypes->getValueSpaceBinaryHexDataType();
+						} else if (dataLiteralValueType == CDataLiteralValue::DLVT_BASE64BINARY) {
+							valueSpaceType = valueSpaceTypes->getValueSpaceBinaryBase64DataType();
+						} else if (dataLiteralValueType == CDataLiteralValue::DLVT_DATETIME) {
+							valueSpaceType = valueSpaceTypes->getValueSpaceDateTimeType();
+						}
+
+						if (valueSpaceType) {
+							CDatatypeValueSpacesTriggers* valueSpacesTriggers = mMBox->getValueSpacesTriggers(true);
+							CDatatypeValueSpaceCompareTriggers* compareValueSpaceConceptTrigger = (CDatatypeValueSpaceCompareTriggers*)valueSpacesTriggers->getValueSpaceTriggers(valueSpaceType);
+							if (compareValueSpaceConceptTrigger) {
+								compareValueSpaceConceptTrigger->addCompleteValueConceptTrigger(compareDataLitValue, valueSpaceConceptTriggerLinker);
+							}
+						}
+					}
+				}
+				
+				return valueTrigger;
+			}
+
+
 			CConceptTriggerLinker* CTriggeredImplicationBinaryAbsorberPreProcess::getAssuringTriggersForConcept(CConcept* concept, bool negated) {
 				CConceptTriggerLinker* triggers = nullptr;
 
@@ -4993,55 +5087,11 @@ namespace Konclude {
 								CDataLiteralValue* dataLitValue = dataLiteral->getDataLiteralValue();
 								if (dataLitValue) {
 
-									cint64 triggerComplexity = 2;
-									CConcept* valueTriggerConcept = createTriggerConcept(branchTiggerCreation);
-									CConceptTriggerLinker* valueTrigger = createTriggerLinker();
-									valueTrigger->initConceptTriggerLinker(valueTriggerConcept, triggerComplexity);
-									CDatatypeValueSpaceConceptTriggerLinker* valueSpaceConceptTriggerLinker = createValueSpaceConceptTriggerLinker();
-									valueSpaceConceptTriggerLinker->initConceptTrigger(valueTriggerConcept);
-
-
-									CDatatypeValueSpaceTriggers* valueSpaceTrigger = nullptr;
-									CDataLiteralValue* dataLitValue = dataLiteral->getDataLiteralValue();
-									if (dataLitValue) {
-										CDataLiteralCompareValue* compareDataLitValue = dynamic_cast<CDataLiteralCompareValue*>(dataLitValue);
-										if (compareDataLitValue) {
-											CDatatypeValueSpaceType* valueSpaceType = nullptr;
-											CDataLiteralValue::DATA_LITERAL_VALUE_TYPE dataLiteralValueType = compareDataLitValue->getDataValueType();
-											CDatatypeValueSpaceTypes* valueSpaceTypes = CDatatypeValueSpaceTypes::getValueSpaceTypes();
-											if (dataLiteralValueType == CDataLiteralValue::DLVT_REAL) {
-												valueSpaceType = valueSpaceTypes->getValueSpaceRealType();
-											} else if (dataLiteralValueType == CDataLiteralValue::DLVT_STRING) {
-												valueSpaceType = valueSpaceTypes->getValueSpaceStringType();
-											} else if (dataLiteralValueType == CDataLiteralValue::DLVT_BOOLEAN) {
-												valueSpaceType = valueSpaceTypes->getValueSpaceBooleanType();
-											} else if (dataLiteralValueType == CDataLiteralValue::DLVT_DOUBLE) {
-												valueSpaceType = valueSpaceTypes->getValueSpaceDoubleType();
-											} else if (dataLiteralValueType == CDataLiteralValue::DLVT_FLOAT) {
-												valueSpaceType = valueSpaceTypes->getValueSpaceFloatType();
-											} else if (dataLiteralValueType == CDataLiteralValue::DLVT_IRI) {
-												valueSpaceType = valueSpaceTypes->getValueSpaceIRIType();
-											} else if (dataLiteralValueType == CDataLiteralValue::DLVT_XML) {
-												valueSpaceType = valueSpaceTypes->getValueSpaceXMLType();
-											} else if (dataLiteralValueType == CDataLiteralValue::DLVT_HEXBINARY) {
-												valueSpaceType = valueSpaceTypes->getValueSpaceBinaryHexDataType();
-											} else if (dataLiteralValueType == CDataLiteralValue::DLVT_BASE64BINARY) {
-												valueSpaceType = valueSpaceTypes->getValueSpaceBinaryBase64DataType();
-											} else if (dataLiteralValueType == CDataLiteralValue::DLVT_DATETIME) {
-												valueSpaceType = valueSpaceTypes->getValueSpaceDateTimeType();
-											}
-
-											if (valueSpaceType) {
-												CDatatypeValueSpacesTriggers* valueSpacesTriggers = mMBox->getValueSpacesTriggers(true);
-												CDatatypeValueSpaceCompareTriggers* compareValueSpaceConceptTrigger = (CDatatypeValueSpaceCompareTriggers*)valueSpacesTriggers->getValueSpaceTriggers(valueSpaceType);
-												if (compareValueSpaceConceptTrigger) {
-													compareValueSpaceConceptTrigger->addCompleteValueConceptTrigger(compareDataLitValue, valueSpaceConceptTriggerLinker);
-												}
-											}
-										}
+									CConceptTriggerLinker* literalTrigger = createExactDataLiteralTrigger(dataLiteral, branchTiggerCreation);
+									if (literalTrigger) {
+										triggers = literalTrigger->append(triggers);
 									}
 									
-									triggers = valueTrigger->append(triggers);
 
 								}
 							}
