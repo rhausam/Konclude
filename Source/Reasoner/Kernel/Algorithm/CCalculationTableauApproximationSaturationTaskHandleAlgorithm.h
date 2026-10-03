@@ -62,6 +62,16 @@
 // Logger includes
 #include "Logger/CLogger.h"
 
+#include "Reasoner/Ontology/CDatatypeValueSpaceCompareTriggers.h"
+#include "Reasoner/Ontology/CDatatypeValueSpaceRealTriggers.h"
+#include "Reasoner/Ontology/CDatatypeValueSpaceStringTriggers.h"
+#include "Reasoner/Ontology/CDatatypeValueSpaceTriggeringMap.h"
+#include "Reasoner/Ontology/CDatatypeValueSpaceTriggeringData.h"
+#include "Reasoner/Ontology/CDatatypeValueSpaceConceptTriggerLinker.h"
+#include "Reasoner/Ontology/CDataLiteralCompareValue.h"
+#include "Reasoner/Ontology/CDataLiteralRealValue.h"
+#include "Reasoner/Ontology/CDataLiteralStringValue.h"
+
 
 
 namespace Konclude {
@@ -181,8 +191,12 @@ namespace Konclude {
 
 						void createSuccessorForDataLiteral(CIndividualSaturationProcessNode*& processIndi, CRole* role, CDataLiteral* dataLiteral, CCalculationAlgorithmContextBase* calcAlgContext);
 						void associateDataLiteralWithNode(CIndividualSaturationProcessNode*& processIndi, CDataLiteral* dataLiteral, CDatatype* datatype, CCalculationAlgorithmContextBase* calcAlgContext);
-						void handleDatatypeValueSpaceTriggers(CIndividualSaturationProcessNode*& processIndi, CDatatype* datatype, bool &dataValueTriviallySat, bool &dataValueTriviallyUnsat, CCalculationAlgorithmContextBase* calcAlgContext);
-						bool tryHandleDatatypeValueSpaceTriggers(CIndividualSaturationProcessNode*& processIndi, CDatatypeValueSpaceTriggers* datatypeValueSpaceTrigger, CDatatypeValueSpacesTriggers* valueSpaceTriggers, CDatatype* datatype, CCalculationAlgorithmContextBase* calcAlgContext);
+						void handleDatatypeValueSpaceTriggers(CIndividualSaturationProcessNode*& processIndi, CDatatype* datatype, CDataLiteralValue* dataLitValue, bool &dataValueTriviallySat, bool &dataValueTriviallyUnsat, CCalculationAlgorithmContextBase* calcAlgContext);
+						bool tryHandleDatatypeValueSpaceTriggers(CIndividualSaturationProcessNode*& processIndi, CDatatypeValueSpaceTriggers* datatypeValueSpaceTrigger, CDatatypeValueSpacesTriggers* valueSpaceTriggers, CDatatype* datatype, CDataLiteralValue* dataLitValue, CCalculationAlgorithmContextBase* calcAlgContext);
+						bool tryHandleCompareValueSpaceTriggersForValue(CIndividualSaturationProcessNode*& processIndi, CDatatypeValueSpaceRealTriggers* realTriggers, CDatatypeValueSpaceStringTriggers* stringTriggers, CDataLiteralCompareValue* compareValue, CCalculationAlgorithmContextBase* calcAlgContext);
+						bool tryHandleCompareValueSpaceTriggersForDatatype(CIndividualSaturationProcessNode*& processIndi, CDatatypeValueSpaceRealTriggers* realTriggers, CDatatype* datatype, CCalculationAlgorithmContextBase* calcAlgContext);
+						void addValueSpaceConceptTriggersToIndividual(CDatatypeValueSpaceConceptTriggeringData* triggeringData, bool completeTriggers, CIndividualSaturationProcessNode*& processIndi, CCalculationAlgorithmContextBase* calcAlgContext);
+						void addValueSpaceTriggersAtValueToIndividual(CDatatypeValueSpaceTriggeringData* triggeringData, CIndividualSaturationProcessNode*& processIndi, CCalculationAlgorithmContextBase* calcAlgContext);
 
 
 						void createSuccessorForConcept(CIndividualSaturationProcessNode*& processIndi, CConceptSaturationProcessLinker* conProLinker, cint64 cardinality, CCalculationAlgorithmContextBase* calcAlgContext);

@@ -5778,7 +5778,7 @@ namespace Konclude {
 							bool dataValueTriviallyUnsat = false;
 
 							if (dataValueTriviallySat && !dataValueTriviallyUnsat) {
-								handleDatatypeValueSpaceTriggers(processIndi, datatype, dataValueTriviallySat, dataValueTriviallyUnsat, mCalcAlgContext);
+								handleDatatypeValueSpaceTriggers(processIndi, datatype, nullptr, dataValueTriviallySat, dataValueTriviallyUnsat, mCalcAlgContext);
 							}
 
 
@@ -5808,14 +5808,14 @@ namespace Konclude {
 				}
 
 
-				void CCalculationTableauApproximationSaturationTaskHandleAlgorithm::handleDatatypeValueSpaceTriggers(CIndividualSaturationProcessNode*& processIndi, CDatatype* datatype, bool &dataValueTriviallySat, bool &dataValueTriviallyUnsat, CCalculationAlgorithmContextBase* calcAlgContext) {
+				void CCalculationTableauApproximationSaturationTaskHandleAlgorithm::handleDatatypeValueSpaceTriggers(CIndividualSaturationProcessNode*& processIndi, CDatatype* datatype, CDataLiteralValue* dataLitValue, bool &dataValueTriviallySat, bool &dataValueTriviallyUnsat, CCalculationAlgorithmContextBase* calcAlgContext) {
 					CDatatypeValueSpacesTriggers* valueSpaceTriggers = mCalcAlgContext->getUsedProcessingDataBox()->getOntology()->getDataBoxes()->getMBox()->getValueSpacesTriggers(false);
 					if (valueSpaceTriggers) {
 						CDatatypeValueSpaceTriggers* datatypeValueSpaceTrigger = valueSpaceTriggers->getValueSpaceTriggers(datatype->getValueSpaceType());
 						if (datatypeValueSpaceTrigger) {
 							if (datatypeValueSpaceTrigger->getConceptTriggerCount() > 0) {
 
-								bool triggersHandled = tryHandleDatatypeValueSpaceTriggers(processIndi, datatypeValueSpaceTrigger, valueSpaceTriggers, datatype, mCalcAlgContext);
+								bool triggersHandled = tryHandleDatatypeValueSpaceTriggers(processIndi, datatypeValueSpaceTrigger, valueSpaceTriggers, datatype, dataLitValue, mCalcAlgContext);
 
 								if (!triggersHandled) {
 									dataValueTriviallySat = false;
@@ -5828,7 +5828,7 @@ namespace Konclude {
 				}
 
 
-				bool CCalculationTableauApproximationSaturationTaskHandleAlgorithm::tryHandleDatatypeValueSpaceTriggers(CIndividualSaturationProcessNode*& processIndi, CDatatypeValueSpaceTriggers* datatypeValueSpaceTrigger, CDatatypeValueSpacesTriggers* valueSpaceTriggers, CDatatype* datatype, CCalculationAlgorithmContextBase* calcAlgContext) {
+				bool CCalculationTableauApproximationSaturationTaskHandleAlgorithm::tryHandleDatatypeValueSpaceTriggers(CIndividualSaturationProcessNode*& processIndi, CDatatypeValueSpaceTriggers* datatypeValueSpaceTrigger, CDatatypeValueSpacesTriggers* valueSpaceTriggers, CDatatype* datatype, CDataLiteralValue* dataLitValue, CCalculationAlgorithmContextBase* calcAlgContext) {
 					bool triggersHandled = false;
 
 					if (datatype->getValueSpaceType()->getValueSpaceType() == CDatatypeValueSpaceType::VALUESPACESTRINGTYPE) {
@@ -5847,7 +5847,163 @@ namespace Konclude {
 
 					}
 
+					if (!triggersHandled) {
+						// Value spaces with an order (real, string, boolean, ...) absorb data restrictions into triggers at, below or above
+						// particular values. For a node whose value is known, or whose datatype alone determines the triggers, they can
+						// be fired here exactly as the tableau fires them, so that data restrictions do not make the node insufficient.
+						// (the trigger classes carry no virtual functions, so the value space type selects the object)
+						CDatatypeValueSpaceRealTriggers* realTriggers = nullptr;
+						CDatatypeValueSpaceStringTriggers* stringTriggers = nullptr;
+						CDatatypeValueSpaceType::VALUESPACETYPE valueSpaceTypeKind = datatype->getValueSpaceType()->getValueSpaceType();
+						if (valueSpaceTypeKind == CDatatypeValueSpaceType::VALUESPACEREALTYPE) {
+							realTriggers = valueSpaceTriggers->getRealValueSpaceTriggers();
+						} else if (valueSpaceTypeKind == CDatatypeValueSpaceType::VALUESPACESTRINGTYPE) {
+							stringTriggers = valueSpaceTriggers->getStringValueSpaceTriggers();
+						}
+						if (realTriggers || stringTriggers) {
+							CDataLiteralCompareValue* compareValue = dynamic_cast<CDataLiteralCompareValue*>(dataLitValue);
+							if (compareValue) {
+								triggersHandled = tryHandleCompareValueSpaceTriggersForValue(processIndi, realTriggers, stringTriggers, compareValue, calcAlgContext);
+							} else if (!dataLitValue) {
+								triggersHandled = tryHandleCompareValueSpaceTriggersForDatatype(processIndi, realTriggers, datatype, calcAlgContext);
+							}
+						}
+					}
 					return triggersHandled;
+				}
+
+
+				void CCalculationTableauApproximationSaturationTaskHandleAlgorithm::addValueSpaceConceptTriggersToIndividual(CDatatypeValueSpaceConceptTriggeringData* triggeringData, bool completeTriggers, CIndividualSaturationProcessNode*& processIndi, CCalculationAlgorithmContextBase* calcAlgContext) {
+					if (triggeringData) {
+						for (CDatatypeValueSpaceConceptTriggerLinker* triggerLinkerIt = triggeringData->getPartialConceptTriggerLinker(); triggerLinkerIt; triggerLinkerIt = triggerLinkerIt->getNext()) {
+							addConceptFilteredToIndividual(triggerLinkerIt->getTriggerConcept(), false, processIndi, calcAlgContext);
+						}
+						if (completeTriggers) {
+							for (CDatatypeValueSpaceConceptTriggerLinker* triggerLinkerIt = triggeringData->getCompleteConceptTriggerLinker(); triggerLinkerIt; triggerLinkerIt = triggerLinkerIt->getNext()) {
+								addConceptFilteredToIndividual(triggerLinkerIt->getTriggerConcept(), false, processIndi, calcAlgContext);
+							}
+						}
+					}
+				}
+
+
+				void CCalculationTableauApproximationSaturationTaskHandleAlgorithm::addValueSpaceTriggersAtValueToIndividual(CDatatypeValueSpaceTriggeringData* triggeringData, CIndividualSaturationProcessNode*& processIndi, CCalculationAlgorithmContextBase* calcAlgContext) {
+					// the node has exactly the value of this entry: the value's own triggers fire, and so do the inclusive minimum and maximum triggers at it
+					if (triggeringData) {
+						addValueSpaceConceptTriggersToIndividual(triggeringData->getDirectValueTriggeringData(), true, processIndi, calcAlgContext);
+						addValueSpaceConceptTriggersToIndividual(triggeringData->getMinInclusiveTriggeringData(), false, processIndi, calcAlgContext);
+						addValueSpaceConceptTriggersToIndividual(triggeringData->getMaxInclusiveTriggeringData(), false, processIndi, calcAlgContext);
+					}
+				}
+
+
+				bool CCalculationTableauApproximationSaturationTaskHandleAlgorithm::tryHandleCompareValueSpaceTriggersForValue(CIndividualSaturationProcessNode*& processIndi, CDatatypeValueSpaceRealTriggers* realTriggers, CDatatypeValueSpaceStringTriggers* stringTriggers, CDataLiteralCompareValue* compareValue, CCalculationAlgorithmContextBase* calcAlgContext) {
+					// The node carries this one value, so the triggers that fire are determined: those of the whole value space, those of the
+					// value's types (rational, decimal, integer; strings without a language tag), those at the value itself, the minimum
+					// triggers of the entries below it and the maximum triggers of the entries above it. This is what the tableau fires
+					// for a node whose value is fixed to a single literal.
+					CDatatypeValueSpaceCompareTriggers* compareTriggers = realTriggers;
+					if (!compareTriggers) {
+						compareTriggers = stringTriggers;
+					}
+					CDataLiteralRealValue* realValue = nullptr;
+					if (realTriggers) {
+						realValue = dynamic_cast<CDataLiteralRealValue*>(compareValue);
+						if (!realValue) {
+							return false;
+						}
+					}
+					CDataLiteralStringValue* stringValue = nullptr;
+					if (stringTriggers) {
+						stringValue = dynamic_cast<CDataLiteralStringValue*>(compareValue);
+						if (!stringValue || stringTriggers->getStringConceptTriggeringData()->hasConceptTriggers()) {
+							return false;
+						}
+					}
+					if (!realTriggers && !stringTriggers) {
+						// the other value spaces (boolean, double, float, date time, ...) are not examined here yet
+						return false;
+					}
+					addValueSpaceConceptTriggersToIndividual(compareTriggers->getValueSpaceConceptTriggeringData(), false, processIndi, calcAlgContext);
+					if (realTriggers) {
+						if (realValue->hasFlag(CDataLiteralRealValue::DLRV_RATIONAL_FLAG)) {
+							addValueSpaceConceptTriggersToIndividual(realTriggers->getRationalConceptTriggeringData(), false, processIndi, calcAlgContext);
+						}
+						if (realValue->hasFlag(CDataLiteralRealValue::DLRV_DECIMAL_FLAG)) {
+							addValueSpaceConceptTriggersToIndividual(realTriggers->getDecimalConceptTriggeringData(), false, processIndi, calcAlgContext);
+						}
+						if (realValue->hasFlag(CDataLiteralRealValue::DLRV_INTEGER_FLAG)) {
+							addValueSpaceConceptTriggersToIndividual(realTriggers->getIntegerConceptTriggeringData(), false, processIndi, calcAlgContext);
+						}
+					}
+					if (stringTriggers && !stringValue->hasLanguageTag()) {
+						addValueSpaceConceptTriggersToIndividual(stringTriggers->getNonLanguageTagConceptTriggeringData(), false, processIndi, calcAlgContext);
+					}
+					CDatatypeValueSpaceTriggeringMap* triggerMap = compareTriggers->getValueSpaceTriggeringMap();
+					if (triggerMap && !triggerMap->isEmpty()) {
+						// read through a constant pointer: the map is shared, and the non constant lookups detach it
+						const CBOXMAP<CDatatypeValueSpaceTriggeringMapArranger,CDatatypeValueSpaceTriggeringMapData>* constTriggerMap = triggerMap;
+						CDatatypeValueSpaceTriggeringMapArranger valueArranger(compareValue);
+						if (compareTriggers->getMinMaxTriggerCount() <= 0) {
+							// only triggers at particular values (e.g. absorbed DataHasValue restrictions): a single lookup
+							CDatatypeValueSpaceTriggeringMapData valueMapData = constTriggerMap->value(valueArranger);
+							addValueSpaceTriggersAtValueToIndividual(valueMapData.mUseValue, processIndi, calcAlgContext);
+						} else {
+							CBOXMAP<CDatatypeValueSpaceTriggeringMapArranger,CDatatypeValueSpaceTriggeringMapData>::const_iterator itLB = constTriggerMap->lowerBound(valueArranger);
+							for (CBOXMAP<CDatatypeValueSpaceTriggeringMapArranger,CDatatypeValueSpaceTriggeringMapData>::const_iterator it = constTriggerMap->constBegin(); it != itLB; ++it) {
+								// entries below the value: the value is above them, so their minimum triggers fire
+								CDatatypeValueSpaceTriggeringData* triggeringData = it.value().mUseValue;
+								if (triggeringData) {
+									addValueSpaceConceptTriggersToIndividual(triggeringData->getMinExclusiveTriggeringData(), false, processIndi, calcAlgContext);
+									addValueSpaceConceptTriggersToIndividual(triggeringData->getMinInclusiveTriggeringData(), false, processIndi, calcAlgContext);
+								}
+							}
+							for (CBOXMAP<CDatatypeValueSpaceTriggeringMapArranger,CDatatypeValueSpaceTriggeringMapData>::const_iterator it = itLB, itEnd = constTriggerMap->constEnd(); it != itEnd; ++it) {
+								CDatatypeValueSpaceTriggeringData* triggeringData = it.value().mUseValue;
+								if (triggeringData) {
+									if (triggeringData->getValue() && triggeringData->getValue()->isEqualTo(compareValue)) {
+										addValueSpaceTriggersAtValueToIndividual(triggeringData, processIndi, calcAlgContext);
+									} else {
+										// entries above the value: their maximum triggers fire
+										addValueSpaceConceptTriggersToIndividual(triggeringData->getMaxExclusiveTriggeringData(), false, processIndi, calcAlgContext);
+										addValueSpaceConceptTriggersToIndividual(triggeringData->getMaxInclusiveTriggeringData(), false, processIndi, calcAlgContext);
+									}
+								}
+							}
+						}
+					}
+					return true;
+				}
+
+
+				bool CCalculationTableauApproximationSaturationTaskHandleAlgorithm::tryHandleCompareValueSpaceTriggersForDatatype(CIndividualSaturationProcessNode*& processIndi, CDatatypeValueSpaceRealTriggers* realTriggers, CDatatype* datatype, CCalculationAlgorithmContextBase* calcAlgContext) {
+					// The node's value is unknown, only its datatype is: the triggers that fire for every value of the datatype are
+					// determined, provided no trigger in the value space depends on the value itself.
+					if (realTriggers) {
+						CDatatypeValueSpaceTriggeringMap* triggerMap = realTriggers->getValueSpaceTriggeringMap();
+						if (triggerMap && !triggerMap->isEmpty()) {
+							return false;
+						}
+						CDatatype::DATATYPE_TYPE datatypeType = datatype->getDatatypeType();
+						bool integerType = datatypeType == CDatatype::DT_INTEGER;
+						bool decimalType = integerType || datatypeType == CDatatype::DT_DECIMAL;
+						bool rationalType = decimalType || datatypeType == CDatatype::DT_RATIONAL;
+						if (!rationalType && datatypeType != CDatatype::DT_REAL) {
+							return false;
+						}
+						addValueSpaceConceptTriggersToIndividual(realTriggers->getValueSpaceConceptTriggeringData(), false, processIndi, calcAlgContext);
+						if (rationalType) {
+							addValueSpaceConceptTriggersToIndividual(realTriggers->getRationalConceptTriggeringData(), false, processIndi, calcAlgContext);
+						}
+						if (decimalType) {
+							addValueSpaceConceptTriggersToIndividual(realTriggers->getDecimalConceptTriggeringData(), false, processIndi, calcAlgContext);
+						}
+						if (integerType) {
+							addValueSpaceConceptTriggersToIndividual(realTriggers->getIntegerConceptTriggeringData(), false, processIndi, calcAlgContext);
+						}
+						return true;
+					}
+					return false;
 				}
 
 
@@ -5885,7 +6041,7 @@ namespace Konclude {
 						}
 
 						if (dataValueTriviallySat && !dataValueTriviallyUnsat && datatype) {
-							handleDatatypeValueSpaceTriggers(processIndi, datatype, dataValueTriviallySat, dataValueTriviallyUnsat, calcAlgContext);
+							handleDatatypeValueSpaceTriggers(processIndi, datatype, dataLitValue, dataValueTriviallySat, dataValueTriviallyUnsat, calcAlgContext);
 						}
 
 
