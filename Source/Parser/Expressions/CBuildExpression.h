@@ -121,9 +121,15 @@ namespace Konclude {
 
 					virtual bool visitSubExpressions(CSubExpressionVisitor* subExpressionVisitor);
 
+					//! the number of the expression in the order of creation: the builder walks sets of expression pointers, whose
+					//! order follows the addresses, and orders them by this number instead, so that the concepts get the same
+					//! tags in every run (issue #34)
+					cint64 getBuildOrder() const;
+
 
 				// protected methods
 				protected:
+					cint64 mBuildOrder;
 
 				// private methods
 				private:
