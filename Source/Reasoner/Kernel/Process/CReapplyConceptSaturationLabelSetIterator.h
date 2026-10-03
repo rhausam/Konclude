@@ -28,6 +28,7 @@
 #include "ProcessSettings.h"
 #include "CConceptDescriptorDependencyReapplyData.h"
 #include "CConceptSaturationDescriptorReapplyData.h"
+#include "CConceptSaturationReapplyDataHash.h"
 #include "CConceptSaturationDescriptor.h"
 
 // Other includes
@@ -58,7 +59,7 @@ namespace Konclude {
 					// public methods
 					public:
 						//! Constructor
-						CReapplyConceptSaturationLabelSetIterator(const CPROCESSHASH<cint64,CConceptSaturationDescriptorReapplyData>::const_iterator& itBegin, const CPROCESSHASH<cint64,CConceptSaturationDescriptorReapplyData>::const_iterator& itEnd, const CPROCESSHASH<cint64,CConceptSaturationDescriptorReapplyData>::const_iterator& itAdditionalBegin, const CPROCESSHASH<cint64,CConceptSaturationDescriptorReapplyData>::const_iterator& itAdditionalEnd, bool iterateConSatDes = true, bool iterateReapplies = true);
+						CReapplyConceptSaturationLabelSetIterator(const CConceptSaturationReapplyDataHash::const_iterator& itBegin, const CConceptSaturationReapplyDataHash::const_iterator& itEnd, const CConceptSaturationReapplyDataHash::const_iterator& itAdditionalBegin, const CConceptSaturationReapplyDataHash::const_iterator& itAdditionalEnd, bool iterateConSatDes = true, bool iterateReapplies = true);
 
 
 						cint64 getDataTag();
@@ -81,10 +82,10 @@ namespace Konclude {
 
 					// protected variables
 					protected:
-						CPROCESSHASH<cint64,CConceptSaturationDescriptorReapplyData>::const_iterator mItBegin;
-						CPROCESSHASH<cint64,CConceptSaturationDescriptorReapplyData>::const_iterator mItEnd;
-						CPROCESSHASH<cint64,CConceptSaturationDescriptorReapplyData>::const_iterator mItAdditionalBegin;
-						CPROCESSHASH<cint64,CConceptSaturationDescriptorReapplyData>::const_iterator mItAdditionalEnd;
+						CConceptSaturationReapplyDataHash::const_iterator mItBegin;
+						CConceptSaturationReapplyDataHash::const_iterator mItEnd;
+						CConceptSaturationReapplyDataHash::const_iterator mItAdditionalBegin;
+						CConceptSaturationReapplyDataHash::const_iterator mItAdditionalEnd;
 
 						bool mIterateConSatDes;
 						bool mIterateReapplies;
