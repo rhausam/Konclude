@@ -42,12 +42,18 @@ namespace Konclude {
 
 
 			CMemoryPoolRecycler::~CMemoryPoolRecycler() {
+				releaseStoredPools();
+			}
+
+			void CMemoryPoolRecycler::releaseStoredPools() {
+				QMutexLocker locker(&mMutex);
 				while (mPoolList) {
 					CMemoryPool* memoryPool = mPoolList;
 					mPoolList = memoryPool->getNextMemoryPool();
-					delete [] memoryPool->getMemoryBlockData();
+					CMemoryPool::releaseMemoryBlockData(memoryPool);
 					delete memoryPool;
 				}
+				mStoredCount = 0;
 			}
 
 

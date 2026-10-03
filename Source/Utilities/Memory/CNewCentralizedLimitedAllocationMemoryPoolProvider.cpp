@@ -55,12 +55,13 @@ namespace Konclude {
 					return recycledPool;
 				}
 				CMemoryPool* memoryPool = new CMemoryPool();
-				char* memoryBlock = new char[memoryBlockSize];
+				bool memoryBlockMapped = false;
+				char* memoryBlock = CMemoryPool::allocateMemoryBlock(memoryBlockSize, memoryBlockMapped);
 				mStatAllocatedPoolSize += memoryBlockSize;
 				mStatDiffPoolSize += memoryBlockSize;
 				++mStatAllocatedPoolCount;
 				++mStatDiffPoolCount;
-				memoryPool->setMemoryBlockData(memoryBlock,memoryBlockSize);
+				memoryPool->setMemoryBlockData(memoryBlock,memoryBlockSize,memoryBlockMapped);
 				return memoryPool;
 			}
 
@@ -77,12 +78,13 @@ namespace Konclude {
 						return recycledPool;
 					}
 					CMemoryPool* memoryPool = new CMemoryPool();
-					char* memoryBlock = new char[memoryBlockSize];
+					bool memoryBlockMapped = false;
+				char* memoryBlock = CMemoryPool::allocateMemoryBlock(memoryBlockSize, memoryBlockMapped);
 					mStatAllocatedPoolSize += memoryBlockSize;
 					mStatDiffPoolSize += memoryBlockSize;
 					++mStatAllocatedPoolCount;
 					++mStatDiffPoolCount;
-					memoryPool->setMemoryBlockData(memoryBlock,memoryBlockSize);
+					memoryPool->setMemoryBlockData(memoryBlock,memoryBlockSize,memoryBlockMapped);
 					return memoryPool;
 				} else {
 					throw CMemoryAllocationException();
@@ -105,8 +107,7 @@ namespace Konclude {
 					if (CMemoryPoolRecycler::getInstance()->giveMemoryPool(tmpMemoryPool)) {
 						continue;
 					}
-					char* memoryBlock = tmpMemoryPool->getMemoryBlockData();
-					delete[] memoryBlock;
+					CMemoryPool::releaseMemoryBlockData(tmpMemoryPool);
 					delete tmpMemoryPool;
 				}
 				return this;

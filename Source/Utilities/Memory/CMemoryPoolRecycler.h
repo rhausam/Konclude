@@ -69,6 +69,8 @@ namespace Konclude {
 					//! stores the pool if it has the default size and the store is not full, false if the caller has to free it
 					bool giveMemoryPool(CMemoryPool* memoryPool);
 
+					//! frees every stored pool, for the moment a reasoner is destroyed and its memory is to go back to the system (issue #45)
+					void releaseStoredPools();
 					cint64 getLimit();
 					void setLimit(cint64 limit);
 					cint64 getStoredCount();
