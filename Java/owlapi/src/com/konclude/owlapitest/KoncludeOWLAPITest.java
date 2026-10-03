@@ -1014,6 +1014,58 @@ public class KoncludeOWLAPITest {
 	}
 
 	/**
+	 * The hierarchy of an ontology must not depend on the number of processing threads, nor on
+	 * the run: issues #28 and #34 were classifications that lost subsumptions in some runs, and
+	 * #79 and #81 made the encoding of an ontology the same in every run. The same ontology is
+	 * classified with one processor, with the automatic count and once more with the automatic
+	 * count, and the three hierarchies are compared class by class.
+	 */
+	private static void runDeterminism() throws Exception {
+		// the test's own loading configuration, or the wrapper's default when it has none
+		String automatic = sLoadingConfiguration.isEmpty() ? KoncludeReasoner.DEFAULT_LOADING_CONFIGURATION : sLoadingConfiguration;
+		// whatever processor count the configuration carries, the other arm has one
+		String single = automatic.replaceAll("\\+=Konclude\\.Calculation\\.ProcessorCount=\\S+", "+=Konclude.Calculation.ProcessorCount=1");
+		if (single.equals(automatic)) {
+			single = automatic + " +=Konclude.Calculation.ProcessorCount=1 ";
+		}
+		check("single processor configuration ", Boolean.valueOf(single.contains("ProcessorCount=1") && !single.equals(automatic)), Boolean.TRUE);
+		String[] labels = { "one processor", "automatic count", "automatic count again" };
+		String[] configurations = { single, automatic, automatic };
+		String[] signatures = new String[3];
+		for (int i = 0; i < 3; i++) {
+			OWLOntology ontology = wideOntology(1200);
+			OWLReasoner reasoner = new KoncludeReasonerFactory(configurations[i]).createReasoner(ontology);
+			try {
+				reasoner.precomputeInferences(InferenceType.CLASS_HIERARCHY);
+				signatures[i] = hierarchySignature(reasoner, ontology);
+			} finally {
+				reasoner.dispose();
+			}
+			report("classified with " + labels[i] + ": " + signatures[i].split("\n").length + " classes in the hierarchy");
+		}
+		check("one processor = automatic count ", Boolean.valueOf(signatures[0].equals(signatures[1])), Boolean.TRUE);
+		check("automatic count = again        ", Boolean.valueOf(signatures[1].equals(signatures[2])), Boolean.TRUE);
+	}
+
+	/** The hierarchy as text: every class of the ontology with its equivalents and its direct sub classes, sorted. */
+	private static String hierarchySignature(OWLReasoner reasoner, OWLOntology ontology) {
+		java.util.TreeSet<String> lines = new java.util.TreeSet<String>();
+		Set<OWLClass> classes = new HashSet<OWLClass>(ontology.getClassesInSignature());
+		classes.add(DF.getOWLThing());
+		classes.add(DF.getOWLNothing());
+		for (OWLClass c : classes) {
+			java.util.TreeSet<String> equivalents = new java.util.TreeSet<String>(names(reasoner.getEquivalentClasses(c)));
+			java.util.TreeSet<String> subs = new java.util.TreeSet<String>(names(reasoner.getSubClasses(c, true)));
+			lines.add(c.getIRI().toString().replaceAll(".*[/#]", "") + " = " + equivalents + " > " + subs);
+		}
+		StringBuilder builder = new StringBuilder();
+		for (String line : lines) {
+			builder.append(line).append('\n');
+		}
+		return builder.toString();
+	}
+
+	/**
 	 * An ABox that forces two named individuals to be merged, here by a functional property
 	 * with two targets. Konclude used to stay in its precomputation for such an ontology and
 	 * answered nothing that needs the classification or the realisation, see Java/Readme.md.
@@ -1190,6 +1242,8 @@ public class KoncludeOWLAPITest {
 			runUnsupported();
 		} else if ("lifecycle".equals(scenario)) {
 			runLifecycle();
+		} else if ("determinism".equals(scenario)) {
+			runDeterminism();
 		} else if ("merges".equals(scenario)) {
 			runMerges();
 		} else if ("timeout".equals(scenario)) {
