@@ -275,6 +275,7 @@ namespace Konclude {
 							if (!conRefSatLinking) {
 								conRefSatLinking = new CConceptSaturationReferenceLinkingData();
 								conProcData->setConceptReferenceLinking(conRefSatLinking);
+								ontClassItem->getOntology()->getOntologyContext()->addOwnedConceptReferenceLinking(conRefSatLinking);
 							}
 
 							conRefLinkDataHash->insert(concept,classItem);
@@ -566,6 +567,7 @@ namespace Konclude {
 							if (!conRefSatLinking) {
 								conRefSatLinking = new CConceptSaturationReferenceLinkingData();
 								conProcData->setConceptReferenceLinking(conRefSatLinking);
+								ontClassItem->getOntology()->getOntologyContext()->addOwnedConceptReferenceLinking(conRefSatLinking);
 							}
 
 							conRefLinkDataHash->insert(concept,subsumerItem);
@@ -2475,6 +2477,9 @@ namespace Konclude {
 							++itWorkItem;
 						}
 						delete workItem;
+						// the adapters were created for this job alone and the job does not delete them (issue #45)
+						delete satCalcJob->getSatisfiableClassificationMessageAdapter();
+						delete satCalcJob->getSatisfiableTaskIndividualDependenceTrackingAdapter();
 						delete satCalcJob;
 					}
 					workOntItemHash.remove(workItem);

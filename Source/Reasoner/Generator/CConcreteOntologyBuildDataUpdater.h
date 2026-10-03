@@ -505,6 +505,7 @@ namespace Konclude {
 					CBUILDLIST<CDataRangeTermExpression*>* mBuildDataRangeList;
 					CBUILDLIST<CDataPropertyTermExpression*>* mBuildDataRoleList;
 					CBUILDLIST<CDatatypeExpression*>* mBuildDatatypeList;
+					CBUILDLIST<CDataLexicalValueExpression*>* mBuildDataLexicalValueList;
 
 
 

@@ -135,8 +135,12 @@ namespace Konclude {
 				}
 
 				QString CJNIHandler::getString(JNIEnv* jenv, jstring string) {
+					// the UTF-8 copy the virtual machine hands out has to be given back, or it stays
+					// allocated for the life of the process (issue #45)
 					const char* stringChrs = jenv->GetStringUTFChars(string,0);
-					return QString::fromUtf8(stringChrs);					
+					QString result = QString::fromUtf8(stringChrs);
+					jenv->ReleaseStringUTFChars(string,stringChrs);
+					return result;
 				}
 
 

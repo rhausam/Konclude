@@ -142,6 +142,7 @@ namespace Konclude {
 									if (!conRefSatLinking) {
 										conRefSatLinking = new CConceptSaturationReferenceLinkingData();
 										conProcData->setConceptReferenceLinking(conRefSatLinking);
+										ontClassItem->getOntology()->getOntologyContext()->addOwnedConceptReferenceLinking(conRefSatLinking);
 									}
 									COptimizedClassExtractedSaturationSatisfiableTestingItem* classItem = ontClassItem->getClassSatisfiableTestItem(concept,true);
 									conRefSatLinking->setClassifierReferenceLinkingData(classItem);

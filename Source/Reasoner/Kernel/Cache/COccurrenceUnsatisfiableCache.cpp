@@ -115,6 +115,19 @@ namespace Konclude {
 					for (qint64 idx = 0; idx < updateSlotCount; ++idx) {
 						delete updatesSlotItemVector[idx];
 					}
+					// the update slots release the entries hashes they replaced; the ones the entries still
+					// refer to in their slots hold a reference each that nothing releases, so they are
+					// deleted here, each once, before the entries (issue #45)
+					QSet<COccurrenceUnsatisfiableCacheEntriesHash*> entriesHashSet;
+					foreach (COccurrenceUnsatisfiableCacheEntry* entry, container) {
+						for (qint64 idx = 0; idx < updateSlotCount; ++idx) {
+							COccurrenceUnsatisfiableCacheEntriesHash* entriesHash = entry->getSlotCacheEntriesHash(idx);
+							if (entriesHash) {
+								entriesHashSet.insert(entriesHash);
+							}
+						}
+					}
+					qDeleteAll(entriesHashSet);
 					primarCacheEntry = 0;
 					qDeleteAll(container);
 					container.clear();
