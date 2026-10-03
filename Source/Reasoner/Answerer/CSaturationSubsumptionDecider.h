@@ -338,6 +338,8 @@ namespace Konclude {
 				// protected variables
 				protected:
 					CConcreteOntology* mOntology;
+					//! per role with chains, whether its automaton's first roles could be determined and which they are (issue #19)
+					QHash<CRole*,QPair<bool,QSet<CRole*> > > mAutomatonFirstRoleHash;
 					CSatisfiableCalculationTask* mSatCalcTask;
 
 					cint64 mSubsumedCount;
