@@ -19,6 +19,7 @@
  */
 
 #include "CConcreteOntologyContextBase.h"
+#include "CConceptReferenceLinking.h"
 
 
 namespace Konclude {

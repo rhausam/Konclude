@@ -30,7 +30,6 @@
 // Other includes
 #include "Context/CContext.h"
 #include "Utilities/CAllocationObject.h"
-#include "CConceptReferenceLinking.h"
 
 // Logger includes
 #include "Logger/CLogger.h"
@@ -54,6 +53,8 @@ namespace Konclude {
 			 *		\brief		TODO
 			 *
 			 */
+			class CConceptReferenceLinking;
+
 			class COntologyContext : public CContext {
 				// public methods
 				public:
