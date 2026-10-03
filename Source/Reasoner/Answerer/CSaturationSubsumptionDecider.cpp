@@ -19,6 +19,7 @@
  */
 
 #include "CSaturationSubsumptionDecider.h"
+#include "Reasoner/Ontology/CRoleChain.h"
 
 #include "Reasoner/Consistiser/CSaturationConceptReferenceLinking.h"
 #include "Reasoner/Kernel/Process/CIndividualSaturationProcessNodeStatusFlags.h"
@@ -1738,6 +1739,7 @@ namespace Konclude {
 			}
 
 
+
 			CSaturationSubsumptionDecider::Verdict CSaturationSubsumptionDecider::decideEntailedCompleted(CCompletedLabel* label, CConcept* concept, bool negated, cint64 depth) {
 				// as decideEntailed, over a completed label: an entry that rests on a choice is present in
 				// one model, so it neither proves the entailment nor the absence of it
@@ -1757,7 +1759,10 @@ namespace Konclude {
 					// has no successor over the role, nor a self loop on it, refutes the existential
 					// restriction (issue #33)
 					CRole* role = concept->getRole();
-					if (role && !role->isDataRole() && !label->mSuccessorRoleTagSet.contains(role->getRoleTag())) {
+					// over a role that chains or transitivity lead to, a successor may exist without a
+					// restriction among the entries, so the model cannot be read this way
+					bool materialised = role && !role->isComplexRole() && !role->isTransitive() && !role->hasRoleChainSuperSharing() && !role->hasRoleChainSubSharing();
+					if (role && materialised && !role->isDataRole() && !label->mSuccessorRoleTagSet.contains(role->getRoleTag())) {
 						bool selfLoop = false;
 						for (const CCompletedLabelEntry& entry : label->mEntries) {
 							if (!entry.mNegated && entry.mConcept->getOperatorCode() == CCSELF && isSelfLoopOnRole(entry.mConcept, role)) {
@@ -1771,6 +1776,88 @@ namespace Konclude {
 						}
 					}
 					mUndecidedMergeConceptCodeCounts[-13010] = mUndecidedMergeConceptCodeCounts.value(-13010, 0) + 1;
+					return UNDECIDED;
+				}
+				if (opCode == CCAQCHOOCE && !negated && concept->getRole()) {
+					// an existential restriction over a role with chains, transformed into the automaton's
+					// choose concept: the model refutes it when its root has no successor over any role a
+					// word of the automaton can start with, the role itself, its sub roles, and the first
+					// roles of the chains leading to it or to its sub roles, each closed under the same
+					// rule; the root of a completion has no predecessors, so no word starts there with an
+					// inverse role (issue #19)
+					CRole* role = concept->getRole();
+					QSet<CRole*> firstRoleSet;
+					bool decidable = !role->isDataRole();
+					QHash<CRole*,QPair<bool,QSet<CRole*> > >::const_iterator cachedIt = mAutomatonFirstRoleHash.constFind(role);
+					bool cached = cachedIt != mAutomatonFirstRoleHash.constEnd();
+					if (cached) {
+						decidable = cachedIt.value().first;
+						firstRoleSet = cachedIt.value().second;
+					}
+					QList<CRole*> workList;
+					if (!cached) {
+						workList.append(role);
+						firstRoleSet.insert(role);
+					}
+					while (!workList.isEmpty() && decidable) {
+						CRole* currentRole = workList.takeFirst();
+						// the role and its sub roles, found over the roles' super role lists, since a role
+						// does not list its sub roles
+						QList<CRole*> producingRoleList;
+						producingRoleList.append(currentRole);
+						CRoleVector* roleVector = mOntology->getRBox()->getRoleVector(false);
+						cint64 roleCount = roleVector ? roleVector->getItemCount() : 0;
+						for (cint64 roleIndex = 0; roleIndex < roleCount; ++roleIndex) {
+							CRole* candidateRole = roleVector->getData(roleIndex);
+							if (candidateRole && candidateRole != currentRole) {
+								for (CSortedNegLinker<CRole*>* superIt = candidateRole->getIndirectSuperRoleList(); superIt; superIt = superIt->getNext()) {
+									if (!superIt->isNegated() && superIt->getData() == currentRole) {
+										producingRoleList.append(candidateRole);
+										break;
+									}
+								}
+							}
+						}
+						for (CRole* producingRole : producingRoleList) {
+							for (CXLinker<CRoleChain*>* chainIt = producingRole->getRoleChainSuperSharingLinker(); chainIt && decidable; chainIt = chainIt->getNext()) {
+								CXLinker<CRole*>* chainRoleLinker = chainIt->getData()->getRoleChainLinker();
+								if (!chainRoleLinker) {
+									continue;
+								}
+								CRole* firstRole = chainRoleLinker->getData();
+								if (decidable && !firstRoleSet.contains(firstRole)) {
+									firstRoleSet.insert(firstRole);
+									workList.append(firstRole);
+								}
+							}
+						}
+					}
+					if (!cached) {
+						mAutomatonFirstRoleHash.insert(role, QPair<bool,QSet<CRole*> >(decidable, firstRoleSet));
+					}
+					if (decidable) {
+						bool reachable = false;
+						for (CRole* firstRole : firstRoleSet) {
+							if (label->mSuccessorRoleTagSet.contains(firstRole->getRoleTag())) {
+								reachable = true;
+								break;
+							}
+							for (const CCompletedLabelEntry& entry : label->mEntries) {
+								if (!entry.mNegated && entry.mConcept->getOperatorCode() == CCSELF && isSelfLoopOnRole(entry.mConcept, firstRole)) {
+									reachable = true;
+									break;
+								}
+							}
+							if (reachable) {
+								break;
+							}
+						}
+						if (!reachable) {
+							mUndecidedMergeConceptCodeCounts[-13040] = mUndecidedMergeConceptCodeCounts.value(-13040, 0) + 1;
+							return NOT_SUBSUMED;
+						}
+					}
+					mUndecidedMergeConceptCodeCounts[-13042] = mUndecidedMergeConceptCodeCounts.value(-13042, 0) + 1;
 					return UNDECIDED;
 				}
 				if (!negated) {
