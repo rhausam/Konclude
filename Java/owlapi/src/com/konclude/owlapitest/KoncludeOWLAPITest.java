@@ -623,6 +623,96 @@ public class KoncludeOWLAPITest {
 		} finally {
 			reasoner.dispose();
 		}
+		runDatatypeLiterals();
+	}
+
+	/**
+	 * Definitions with data literals and datatype restrictions of several value spaces, with the
+	 * answers HermiT gives (issues #90, #100, #101). Every defined class has a primitive sub class
+	 * that satisfies its restriction and, where it matters, one that does not.
+	 */
+	private static void runDatatypeLiterals() throws Exception {
+		OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
+		OWLOntology ontology = manager.createOntology(IRI.create(NS));
+		OWLDataProperty strength = dataProperty("strength");
+		OWLDataProperty flag = dataProperty("flag");
+		OWLDataProperty date = dataProperty("date");
+		OWLDataProperty weight = dataProperty("weight");
+		OWLDataProperty count = dataProperty("count");
+		OWLDataProperty name = dataProperty("name");
+		OWLDatatype decimal = OWL2Datatype.XSD_DECIMAL.getDatatype(DF);
+		OWLDatatype integer = OWL2Datatype.XSD_INTEGER.getDatatype(DF);
+		OWLLiteral ten = DF.getOWLLiteral("10.0", decimal);
+		OWLLiteral three = DF.getOWLLiteral("3.0", decimal);
+		OWLLiteral threeAndAHalf = DF.getOWLLiteral("3.5", decimal);
+		OWLLiteral minusTwoAndAHalf = DF.getOWLLiteral("-2.5", decimal);
+		OWLLiteral seven = DF.getOWLLiteral(7);
+		OWLLiteral threeInteger = DF.getOWLLiteral(3);
+		OWLLiteral yes = DF.getOWLLiteral(true);
+		OWLLiteral newYear = DF.getOWLLiteral("2020-01-01T00:00:00Z", OWL2Datatype.XSD_DATE_TIME.getDatatype(DF));
+		OWLLiteral twoAndAHalf = DF.getOWLLiteral(2.5d);
+		OWLLiteral abc = DF.getOWLLiteral("abc");
+		OWLDataRange atLeast5 = DF.getOWLDatatypeRestriction(decimal, DF.getOWLFacetRestriction(OWLFacet.MIN_INCLUSIVE, DF.getOWLLiteral("5.0", decimal)));
+		OWLDataRange below5 = DF.getOWLDatatypeRestriction(decimal, DF.getOWLFacetRestriction(OWLFacet.MAX_EXCLUSIVE, DF.getOWLLiteral("5.0", decimal)));
+		OWLDataRange below0 = DF.getOWLDatatypeRestriction(decimal, DF.getOWLFacetRestriction(OWLFacet.MAX_EXCLUSIVE, DF.getOWLLiteral("0", decimal)));
+		OWLDataRange atLeast7 = DF.getOWLDatatypeRestriction(decimal, DF.getOWLFacetRestriction(OWLFacet.MIN_INCLUSIVE, DF.getOWLLiteral("7.0", decimal)));
+		OWLDataRange from2to4 = DF.getOWLDatatypeRestriction(decimal, DF.getOWLFacetRestriction(OWLFacet.MIN_INCLUSIVE, DF.getOWLLiteral("2.0", decimal)),
+				DF.getOWLFacetRestriction(OWLFacet.MAX_INCLUSIVE, DF.getOWLLiteral("4.0", decimal)));
+		OWLDataRange atLeast100 = DF.getOWLDatatypeRestriction(decimal, DF.getOWLFacetRestriction(OWLFacet.MIN_INCLUSIVE, DF.getOWLLiteral("100", decimal)));
+		OWLClass product = cls("Product");
+
+		manager.addAxioms(ontology, new HashSet<OWLAxiom>(Arrays.<OWLAxiom>asList(
+			// definitions
+			DF.getOWLEquivalentClassesAxiom(cls("Drug10"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(strength, ten))),
+			DF.getOWLEquivalentClassesAxiom(cls("HighDose"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataSomeValuesFrom(strength, atLeast5))),
+			DF.getOWLEquivalentClassesAxiom(cls("LowDose"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataSomeValuesFrom(strength, below5))),
+			DF.getOWLEquivalentClassesAxiom(cls("NegativeStrength"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataSomeValuesFrom(strength, below0))),
+			DF.getOWLEquivalentClassesAxiom(cls("Flagged"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(flag, yes))),
+			DF.getOWLEquivalentClassesAxiom(cls("Dated"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(date, newYear))),
+			DF.getOWLEquivalentClassesAxiom(cls("Weighted"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(weight, twoAndAHalf))),
+			DF.getOWLEquivalentClassesAxiom(cls("Named"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(name, abc))),
+			DF.getOWLEquivalentClassesAxiom(cls("IntegerCounted"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataSomeValuesFrom(count, integer))),
+			DF.getOWLEquivalentClassesAxiom(cls("AnyCounted"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataSomeValuesFrom(count, decimal))),
+			DF.getOWLEquivalentClassesAxiom(cls("BigCounted"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataSomeValuesFrom(count, atLeast100))),
+			// primitives
+			DF.getOWLSubClassOfAxiom(cls("P10"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(strength, ten))),
+			DF.getOWLSubClassOfAxiom(cls("P3"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(strength, three))),
+			DF.getOWLSubClassOfAxiom(cls("PInt7"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(strength, seven))),
+			DF.getOWLSubClassOfAxiom(cls("PNeg"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(strength, minusTwoAndAHalf))),
+			DF.getOWLSubClassOfAxiom(cls("PRange7"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataSomeValuesFrom(strength, atLeast7))),
+			DF.getOWLSubClassOfAxiom(cls("PRange2to4"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataSomeValuesFrom(strength, from2to4))),
+			DF.getOWLSubClassOfAxiom(cls("PBool"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(flag, yes))),
+			DF.getOWLSubClassOfAxiom(cls("PDate"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(date, newYear))),
+			DF.getOWLSubClassOfAxiom(cls("PDouble"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(weight, twoAndAHalf))),
+			DF.getOWLSubClassOfAxiom(cls("PString"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(name, abc))),
+			DF.getOWLSubClassOfAxiom(cls("PInt"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(count, threeInteger))),
+			DF.getOWLSubClassOfAxiom(cls("PDecimalCount"), DF.getOWLObjectIntersectionOf(product, DF.getOWLDataHasValue(count, threeAndAHalf)))
+		)));
+
+		OWLReasoner reasoner = reasonerFor(ontology);
+		try {
+			check("unsupported axioms             ",
+					Integer.valueOf(((KoncludeReasoner) reasoner).getUnsupportedAxioms().size()), Integer.valueOf(0));
+			// decimal and integer literals against literal and range definitions
+			checkContains("subClasses(Drug10)             ", names(reasoner.getSubClasses(cls("Drug10"), false)), "P10");
+			checkContains("subClasses(HighDose)           ", names(reasoner.getSubClasses(cls("HighDose"), false)), "Drug10", "P10", "PInt7", "PRange7");
+			checkContains("subClasses(LowDose)            ", names(reasoner.getSubClasses(cls("LowDose"), false)), "P3", "PNeg", "PRange2to4", "NegativeStrength");
+			check("P3 not a HighDose              ", Boolean.valueOf(names(reasoner.getSubClasses(cls("HighDose"), false)).contains("P3")), Boolean.FALSE);
+			check("PRange2to4 not a HighDose      ", Boolean.valueOf(names(reasoner.getSubClasses(cls("HighDose"), false)).contains("PRange2to4")), Boolean.FALSE);
+			// literals of the other value spaces (issue #101)
+			checkContains("subClasses(Flagged)            ", names(reasoner.getSubClasses(cls("Flagged"), false)), "PBool");
+			checkContains("subClasses(Dated)              ", names(reasoner.getSubClasses(cls("Dated"), false)), "PDate");
+			checkContains("subClasses(Weighted)           ", names(reasoner.getSubClasses(cls("Weighted"), false)), "PDouble");
+			checkContains("subClasses(Named)              ", names(reasoner.getSubClasses(cls("Named"), false)), "PString");
+			// a derived datatype in a definition (issue #100)
+			checkContains("subClasses(IntegerCounted)     ", names(reasoner.getSubClasses(cls("IntegerCounted"), false)), "PInt");
+			check("3.5 is not an integer          ", Boolean.valueOf(names(reasoner.getSubClasses(cls("IntegerCounted"), false)).contains("PDecimalCount")), Boolean.FALSE);
+			checkContains("subClasses(AnyCounted)         ", names(reasoner.getSubClasses(cls("AnyCounted"), false)), "IntegerCounted", "BigCounted", "PInt", "PDecimalCount");
+			check("integer-counted != any-counted ", Boolean.valueOf(names(reasoner.getEquivalentClasses(cls("AnyCounted"))).contains("IntegerCounted")), Boolean.FALSE);
+			check("big-counted not integer-counted", Boolean.valueOf(names(reasoner.getSubClasses(cls("IntegerCounted"), false)).contains("BigCounted")), Boolean.FALSE);
+		} finally {
+			reasoner.dispose();
+		}
 	}
 
 	private static void runInconsistency() throws Exception {
