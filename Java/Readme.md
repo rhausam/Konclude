@@ -1207,39 +1207,50 @@ preprocessing rather than in the reasoning (issue #90):
   tableau fires complete triggers only for a node fixed to one value and the saturation
   only for a node carrying that literal, so adding the defined class on it is sound.
 
-### WHAT IT GAINS, AND WHAT THE SECOND HALF COSTS
+### WHAT IT GAINS, AND WHAT THE SECOND HALF COST AT FIRST
 
-Same Mac, same files, command line with `-w AUTO`, one run each. The first measurement of
-this reported the classification phase alone, which hid that the second half makes the
-saturation of AU three times slower; both phases matter and are given here:
+Same Mac, same files, command line with `-w AUTO`. The first measurement of the second
+half reported the classification phase alone, which hid that it made the saturation of AU
+three times slower; all phases are given here (one run each, wall clock where measured):
 
 ```
-                                    master     saturation fix     + complete absorption
-International  precomputation       13.5 s       13.7 s               13.5 s
-               classification        6.3 s        6.0 s                5.1 s
-               untrusted classes   16 976       12 716                  255
-Australian     precomputation       18.8 s       20.9 s               64.0 s
-               classification      15.4 s        8.7 s                6.5 s
-               untrusted classes  169 448       16 559                    0
+                                   master    saturation    + complete absorption   + ranked
+                                               fix (#93)         (#94, reverted)   (#98)
+International  preprocessing        6.0 s       6.1 s             6.2 s             6.5 s
+               precomputation      13.5 s      13.7 s            13.5 s            13.8 s
+               classification       6.3 s       6.0 s             5.1 s             5.1 s
+               untrusted classes  16 976      12 716               255               255
+Australian     preprocessing       13.1 s      13.8 s            13.3 s            16.6 s
+               precomputation      18.8 s      20.9 s            64.0 s            20.7 s
+               classification     15.4 s       8.7 s             6.5 s             4.1 s
+               untrusted classes 169 448      16 559                 0                 0
+               wall clock           57 s        54 s              93 s              54 s
 ```
 
-The complete absorption is therefore **off by default**
-(`Konclude.Calculation.Preprocessing.CompleteDataLiteralAbsorption`, false). What it does
-to AU: the absorber orders the triggers of an implication chain with the common ones first,
-so that the chains share their prefixes. Every defined medicinal product starts with the
-same prefix, its primitive parent and `some 411116001 ...`, and continues with the trigger
-of its role group, which is specific to a few definitions; so every drug node that carries
-the prefix collects a waiting implication for each of the thousands of definitions sharing
-it. Counted on AU: the concept insertions into the labels go from 128 to 289 million, the
-reapply (waiting implication) insertions from 64 to 225 million, the largest label from
-3 399 to 12 534 entries. The equivalence candidates never had this fan-out, because their
-trigger chains stop at the absorbable part. On International, whose drug model is a
-fourteenth of AU's, the switch wins 1.4 s. Switch it on for an ontology where it pays, or
-to continue the investigation: the fix is in the ordering of the triggers (the selective
-trigger first for this kind of definition), not in the absorption of the literals.
+The complete absorption of #94 cost 43 s of AU's saturation because of the order of the
+triggers in its implication chains. The absorber orders a chain's triggers with the
+*highest* complexity first (`CConceptTriggerLinker::operator<=`) and lowers the complexity
+of triggers that many implications use, so that chains start with their most selective
+trigger and share their prefixes; the exact value trigger of #94 had complexity 2, above an
+atom's 1, copied from the assuring triggers. Inside a role group the strength value
+therefore came first, and a value such as `10.0` is shared by hundreds of ingredient
+combinations, so every role-group node with that value registered one waiting implication
+per combination: the concept insertions into the labels went from 128 to 289 million, the
+reapply (waiting implication) insertions from 64 to 225 million, spread over some 31 000
+additional trigger tags, the largest label from 3 399 to 12 534 entries. PR #97 made the
+complete absorption a switch, off, and #98 ranks the exact value trigger at complexity 0,
+below the class restrictions, so that the chain starts with the ingredient; the fan-out is
+gone (precomputation 20.7 s) and the switch is on again by default.
 
-With the default, AU's remaining 16 559 untrusted classes are equivalence candidates of
-definitions with a `DataHasValue` and are classified by the tableau, as before.
+What remains of the cost is in the absorber itself: with the value last the chains share
+fewer prefixes, so building the 170 000 complete chains of AU takes about 3 s more
+preprocessing, which on AU is what the classification saves, hence the equal wall clock.
+On International the saving stays (about 1 s). What the complete absorption buys besides
+is a saturation with no insufficient node on AU, so the factory selects the
+saturation-extraction classifier and the classification runs no tableau test at all, and
+answers about data-restricted classes come from the saturation too.
+`Konclude.Calculation.Preprocessing.CompleteDataLiteralAbsorption=false` restores the
+candidates.
 
 ### WHAT IT WAS CHECKED AGAINST
 

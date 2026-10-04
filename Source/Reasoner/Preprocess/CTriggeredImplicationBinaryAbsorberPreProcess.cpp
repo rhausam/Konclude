@@ -54,7 +54,7 @@ namespace Konclude {
 				mConfOftenTriggerUseCountPunishment = 20;
 				mConfPunishOftenSameTriggerUse = true;
 				mConfDatatypeAbsorption = true;
-				mConfCompleteDataLiteralAbsorption = false;
+				mConfCompleteDataLiteralAbsorption = true;
 
 				mConfCardinalityQualificationTriggerAbsorption = true;
 				mConfPartialCardinalityQualificationTriggerAbsorption = true;
@@ -108,7 +108,7 @@ namespace Konclude {
 				mConfNominalSchemaBackPropagation = CConfigDataReader::readConfigBoolean(config,"Konclude.Calculation.Preprocessing.NominalSchemaBackPropagation",true);
 				mConfNominalSchemaPathPreabsorption = CConfigDataReader::readConfigBoolean(config,"Konclude.Calculation.Preprocessing.NominalSchemaPathPreabsorption",true);
 				mConfDatatypeAbsorption = CConfigDataReader::readConfigBoolean(config,"Konclude.Calculation.Preprocessing.DatatypeAbsorption",true);
-				mConfCompleteDataLiteralAbsorption = CConfigDataReader::readConfigBoolean(config,"Konclude.Calculation.Preprocessing.CompleteDataLiteralAbsorption",false);
+				mConfCompleteDataLiteralAbsorption = CConfigDataReader::readConfigBoolean(config,"Konclude.Calculation.Preprocessing.CompleteDataLiteralAbsorption",true);
 				mConfNominalSchemaPathPreabsorption = false;
 
 				mConfCardinalityQualificationTriggerAbsorption = CConfigDataReader::readConfigBoolean(config,"Konclude.Calculation.Preprocessing.CardinalityQualificationTriggerAbsorption",true);
@@ -3194,7 +3194,11 @@ namespace Konclude {
 						// value space's trigger map and fires only on nodes whose value is exactly this literal
 						// (built directly: the assuring builder begins by calling this one, so it cannot be asked)
 						if (mConfCompleteDataLiteralAbsorption && isDataLiteralConceptExactlyTriggerable(concept)) {
-							CConceptTriggerLinker* literalTrigger = createExactDataLiteralTrigger(concept->getDataLiteral(), branchTiggerCreation);
+							// Complexity 0, below an atom's 1: the absorber orders the triggers of a chain with the highest complexity
+							// first, and a data value is shared by far more definitions than the class restrictions beside it (a
+							// strength of 10.0 by hundreds of ingredients). With the value first, every role-group node with that
+							// value collected a waiting implication per ingredient combination, 225 million on SNOMED CT AU.
+							CConceptTriggerLinker* literalTrigger = createExactDataLiteralTrigger(concept->getDataLiteral(), branchTiggerCreation, 0);
 							if (literalTrigger) {
 								triggers = literalTrigger->append(triggers);
 							}
@@ -3833,8 +3837,7 @@ namespace Konclude {
 					// case every definition containing a DataHasValue was only a candidate, which the saturation
 					// cannot resolve (issue #90).
 					// (the assuring test cannot be asked, it begins by asking this one)
-					// Off by default: on SNOMED CT AU the completely absorbed definitions fan their waiting implications out
-					// over the drug nodes, which triples the saturation's time; see the configuration's description.
+					// (the exact value trigger is ranked below the class restrictions, see getTriggersForConcept)
 					absorbable = mConfCompleteDataLiteralAbsorption && isDataLiteralConceptExactlyTriggerable(concept);
 				} else if (opCode == CCEQ) {
 					if (negated) {
@@ -4958,10 +4961,10 @@ namespace Konclude {
 
 
 
-			CConceptTriggerLinker* CTriggeredImplicationBinaryAbsorberPreProcess::createExactDataLiteralTrigger(CDataLiteral* dataLiteral, bool branchTiggerCreation) {
+			CConceptTriggerLinker* CTriggeredImplicationBinaryAbsorberPreProcess::createExactDataLiteralTrigger(CDataLiteral* dataLiteral, bool branchTiggerCreation, cint64 triggerComplexity) {
 				// the trigger concept that the value space fires on a node whose value is exactly this literal (a complete value trigger);
 				// used by the assuring triggers and by the complete absorption of definitions with data literals
-				cint64 triggerComplexity = 2;
+				// (the complexity is the parameter)
 				CConcept* valueTriggerConcept = createTriggerConcept(branchTiggerCreation);
 				CConceptTriggerLinker* valueTrigger = createTriggerLinker();
 				valueTrigger->initConceptTriggerLinker(valueTriggerConcept, triggerComplexity);
@@ -5091,7 +5094,7 @@ namespace Konclude {
 								CDataLiteralValue* dataLitValue = dataLiteral->getDataLiteralValue();
 								if (dataLitValue) {
 
-									CConceptTriggerLinker* literalTrigger = createExactDataLiteralTrigger(dataLiteral, branchTiggerCreation);
+									CConceptTriggerLinker* literalTrigger = createExactDataLiteralTrigger(dataLiteral, branchTiggerCreation, 2);
 									if (literalTrigger) {
 										triggers = literalTrigger->append(triggers);
 									}

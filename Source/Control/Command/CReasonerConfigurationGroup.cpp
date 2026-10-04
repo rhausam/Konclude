@@ -932,9 +932,9 @@ namespace Konclude {
 						new CBooleanConfigType(true));
 
 				addConfigProperty(new CConfigDescription("Konclude.Calculation.Preprocessing.CompleteDataLiteralAbsorption",
-						"Determines whether definitions (equivalent classes axioms) containing data literals are absorbed completely, with exact value triggers, instead of only into equivalence candidates. Off by default: on SNOMED CT AU the complete absorption fans the waiting implications out over the drug nodes and triples the saturation time (issue #90).",
-						new CBooleanConfigType(false)),
-						new CBooleanConfigType(false));
+						"Determines whether definitions (equivalent classes axioms) containing data literals are absorbed completely, with exact value triggers ranked below the class restrictions, instead of only into equivalence candidates. With it the saturation of SNOMED CT has no insufficient node and the classification needs no tableau test; the absorption itself costs a few seconds of preprocessing on the AU Edition (issue #90).",
+						new CBooleanConfigType(true)),
+						new CBooleanConfigType(true));
 
 
 				addConfigProperty(new CConfigDescription("Konclude.Calculation.Preprocessing.CoreConceptCyclesExtraction.SkipForELFragment",
