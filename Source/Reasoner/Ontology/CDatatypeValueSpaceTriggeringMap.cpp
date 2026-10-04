@@ -202,7 +202,10 @@ namespace Konclude {
 				valueTriggerCount = 0;
 				while (iterator.hasNext()) {
 					CDatatypeValueSpaceTriggeringData* triggerData = iterator.next();
-					if (triggerData->getDirectValueTriggeringData()->hasPartialConceptTriggers()) {
+					// a value with complete triggers only (the exact value trigger of a completely absorbed
+					// definition) is a trigger value too; counted as a free value it satisfied the search for
+					// a free value and the exact-value triggering was never reached (issue #101)
+					if (triggerData->getDirectValueTriggeringData()->hasConceptTriggers()) {
 						++valueTriggerCount;
 					}
 					if (triggerData->getMaxExclusiveTriggeringData()->hasPartialConceptTriggers()) {
