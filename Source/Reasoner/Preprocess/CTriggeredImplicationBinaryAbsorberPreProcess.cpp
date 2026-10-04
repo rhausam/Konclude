@@ -3740,12 +3740,12 @@ namespace Konclude {
 				if (!dataLitValue) {
 					return false;
 				}
-				// Only the real and the string value spaces: their tableau handlers fire the complete value trigger for a
-				// node fixed to one value, and the saturation fires it for a node carrying the literal. The handlers of the
-				// other value spaces (boolean, double, float, dateTime, ...) do not, so a definition with such a literal
-				// absorbed completely would lose its sub classes (issue #101); those stay equivalence candidates.
+				// The value spaces whose tableau handlers fire the complete value trigger for a node fixed to one value
+				// (the saturation fires it for real and string literals; the other literals' nodes go to the tableau).
+				// The IRI, XML and binary spaces are not covered by the datatypes test scenario and stay candidates.
 				CDataLiteralValue::DATA_LITERAL_VALUE_TYPE valueType = dataLitValue->getDataValueType();
-				return valueType == CDataLiteralValue::DLVT_REAL || valueType == CDataLiteralValue::DLVT_STRING;
+				return valueType == CDataLiteralValue::DLVT_REAL || valueType == CDataLiteralValue::DLVT_STRING || valueType == CDataLiteralValue::DLVT_BOOLEAN
+						|| valueType == CDataLiteralValue::DLVT_DOUBLE || valueType == CDataLiteralValue::DLVT_FLOAT || valueType == CDataLiteralValue::DLVT_DATETIME;
 			}
 
 
