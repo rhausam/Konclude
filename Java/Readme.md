@@ -1094,6 +1094,30 @@ platforms, and the plug-in test in the OSGi framework of Protege on macOS. On Wi
 scripts run in Git Bash and hand java, javac and Maven the paths in Windows form and class
 paths joined with ';', see `Java/native-paths.sh`.
 
+### A SECOND WAY TO LOSE A TOLD PARENT
+
+Found while measuring #90 with `Konclude.Calculation.Classification.SaturationSubsumerExtraction=false`,
+which makes the classifier read the subsumers from the tableau's labels instead of from the
+saturation (issue #95). Each run of AU then lost 16 to 26 told `SubClassOf` pairs, different ones
+each time, and the taxonomy's equivalence step, which declares two classes equivalent when a
+subsumer has the same number of subsumers as the class, turned the losses into false
+equivalences of sub classes with their parent.
+
+The cause is one character in `tryInitalizingFromSaturatedData`: `if (satIndiNode = baseSatIndiNode)`,
+an assignment where a comparison was meant. A tableau node initialised from the saturation
+copies the label of the node at the end of the saturation's substitute chain (a class whose
+saturation equals its parent's shares the parent's node, so chains of single-parent primitives
+form chains of substitutes). The branch for "no substitution" adds the node's own concept without
+unfolding it, the copied label already holding its consequences; the branch for a substitute
+chain has to unfold it so that the concepts of the intermediate substitutes, the told parent
+among them, enter the label. The assignment made the first branch unconditional, and the
+intermediate concepts arrived only when the saturation expansion cache had been filled by an
+earlier test, hence the variation. The default classification never showed it because the
+saturation subsumer extraction adds the intermediate substitutes' concepts itself when it walks
+the chain. Fixed in PR #99; three forced AU runs then produce the default hierarchy, a detector
+comparing every class's told parents with its final subsumers finds none missing, and the
+default mode is unchanged.
+
 ## CLASSIFYING SNOMED CT THROUGH THE WRAPPER
 
 SNOMED CT with additions, 750 302 axioms over 374 710 classes in 297 MB of OWL 2 XML, on an M3
