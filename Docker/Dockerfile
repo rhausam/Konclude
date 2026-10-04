@@ -16,6 +16,10 @@
 
 # the packages are built on Ubuntu 22.04 and need its glibc 2.35 or a newer one
 FROM ubuntu:24.04
+# Connects an image pushed to ghcr.io with this repository, whatever pushed it (the release workflow's
+# push with the workflow's own token is connected automatically anyway).
+LABEL org.opencontainers.image.source="https://github.com/rhausam/Konclude"
+LABEL org.opencontainers.image.description="Konclude OWL 2 DL reasoner, statically linked package on Ubuntu 24.04"
 
 ARG TARGETARCH
 COPY ${TARGETARCH}/ /opt/konclude/
