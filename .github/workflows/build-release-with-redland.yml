@@ -439,6 +439,9 @@ jobs:
   # with as old a glibc as possible; docker is the platform name of the architecture for the image.
   build_linux:
     name: Linux ${{ matrix.arch }} GCC Static
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -581,6 +584,16 @@ jobs:
           echo "$(grep -c '<ClassSynset' "$response") classes in the hierarchy"
           rm -f "$response"
 
+      # The tested image, pushed to the GitHub Container Registry under its architecture when the run
+      # publishes (the create_release input); the manifest job below joins the two architectures.
+      - name: Push Docker Image for the Architecture
+        if: needs.tags.outputs.publish == 'true'
+        run: |
+          image="ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')/konclude"
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker tag konclude-test "$image:${{ needs.tags.outputs.git_tag }}-${{ matrix.docker }}"
+          docker push "$image:${{ needs.tags.outputs.git_tag }}-${{ matrix.docker }}"
+
       # The shared library for the Protege plug-in, as for macOS. Static archives are linked into a
       # shared object only if they are position independent, which the mkspec of Qt makes them
       # (QMAKE_CFLAGS_STATIC_LIB includes -fPIC). The C++ runtime is linked statically as for the
@@ -651,6 +664,31 @@ jobs:
 
 
 
+
+  # The multi-architecture image: one manifest for the amd64 and the arm64 images the Linux jobs
+  # pushed, tagged with the release tag and as latest, at ghcr.io/<owner>/konclude. The image is
+  # Docker/Dockerfile, i.e. ubuntu:24.04 with the statically linked package; the package's GALEN
+  # classification ran in it on each architecture before the push. Nothing is pushed unless the
+  # run publishes. A new package on the registry is private until its visibility is changed once
+  # in the repository owner's package settings.
+  publish_docker:
+    name: Docker Image Manifest
+    if: needs.tags.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [tags, build_linux]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Create and Push the Manifest
+        run: |
+          image="ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')/konclude"
+          tag="${{ needs.tags.outputs.git_tag }}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker buildx imagetools create -t "$image:$tag" -t "$image:latest" "$image:$tag-amd64" "$image:$tag-arm64"
+          docker buildx imagetools inspect "$image:$tag"
+          echo "::notice::Docker image $image:$tag (amd64, arm64) and $image:latest"
 
   # The Protege plug-in with the libraries of all platforms, see Java/Readme.md. The version of
   # the plug-in is the one of the release, e.g., 0.7.0-1138 for v0.7.0-1138, which the bundle
