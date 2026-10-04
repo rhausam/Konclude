@@ -1647,8 +1647,15 @@ compared. `KEEP_OUTPUT=<file>` keeps the output, and `compare <A.owl> <B.owl>` l
 how the forced-mode losses of issue #95 were isolated (it uses `comm`; `diff` on two 175 MB
 files can run for a very long time). The reference hashes of the three files, all produced
 by master since `d5ddf4fc`, are in the script's header: International `62e1eefa88`, AU
-`21f0920c63`, the 95k variant module `e84a1bbaec`. A hash is a ten-character prefix of the
-MD5 of the sorted output.
+`21f0920c63`, the 95k variant module `e84a1bbaec`, the full OWL 2 DL variant `19da30f3a9`. A
+hash is a ten-character prefix of the MD5 of the output sorted with `LC_ALL=C`; a locale-aware
+sort orders the lines differently and gives another hash (the 3 October comparison of the full
+variant used one, which is why its `acbe9065e4` does not match).
+
+The full pass on master `63910d61` (4 October): OWL API suite 16 scenarios passed against the
+library built from it; International, AU (default and forced), the 95k module and the full
+variant all at their reference hashes, the full variant also compared pair by pair with the
+master of 3 October (676 356 pairs, none differing).
 
 What it does not check: that the hierarchy is right. For that the OWL API test's `datatypes`
 scenario holds HermiT's answers for the datatype cases, and `Java/tools/DhvCheck.java`

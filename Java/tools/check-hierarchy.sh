@@ -21,6 +21,8 @@
 #   SNOMED CT International 2024-11-26 with additions      62e1eefa88
 #   SNOMED CT AU 20260930 baseline (au-baseline.owl)        21f0920c63
 #   95k variant module (m95k-variant.owl)                   e84a1bbaec
+#   full OWL 2 DL variant (variant.owl, 383 204 classes)     19da30f3a9   (classification ~11-13 min, 40 GB)
+#   The hashes compare only if the output was sorted with LC_ALL=C, as this script does; a locale-aware sort gives another hash.
 
 set -u
 
