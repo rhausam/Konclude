@@ -21817,7 +21817,13 @@ namespace Konclude {
 									bool satCachingPossible = true;
 									CConceptDescriptor* lastSatCachPossibleConDes = nullptr;
 
-									if (satIndiNode = baseSatIndiNode) {
+									// This was an assignment (=), so the label was always copied from the end of the substitute chain while
+									// the concept itself was added without its own unfolding: the concepts of the intermediate substitutes, a
+									// told parent whose saturation equals its parent's, never reached the label. The saturation subsumer
+									// extraction adds them when it walks the chain, so the default classification did not notice; without it
+									// (SaturationSubsumerExtraction=false) a class lost its told parent whenever the expansion cache had not
+									// been filled by an earlier test, and the taxonomy turned that into false equivalences (issue #95).
+									if (satIndiNode == baseSatIndiNode) {
 										addConceptToIndividualSkipANDProcessing(concept,conceptNegation,indi,depTrackPoint,allowPreprocess,false, true,calcAlgContext);
 									} else {
 										addConceptToIndividual(concept,conceptNegation,indi,depTrackPoint,allowPreprocess,false,calcAlgContext);
