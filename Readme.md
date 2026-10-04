@@ -148,6 +148,8 @@ The binaries of Konclude (and possibly some shared libraries) are located in the
 
 On GitHub, there is an up-to-date Docker image of Konclude available (`docker pull konclude/konclude`, cf. https://hub.docker.com/r/konclude/konclude), which should run on most platforms with Docker installed.
 
+The releases of this repository (rhausam/Konclude) also publish their own image, built from `Docker/Dockerfile` (ubuntu:24.04 with the statically linked package) for amd64 and arm64, as `ghcr.io/rhausam/konclude:<tag>` and `ghcr.io/rhausam/konclude:latest`; e.g. `docker run --rm -v $(pwd):/data ghcr.io/rhausam/konclude:latest classification -i /data/ontology.owl -o /data/classified.owl`.
+
 In principle, Konclude requires Qt 5.11 libraries or above [6], but they are included (or statically integrated/linked into the binary) for the released versions for most platfroms. If this is not the case, then you should install them manually on your system.
 
 On Mac, you may be required to deactivate the 'Unidentified Developer' warning dialogue for Konclude (cf. [10]).
