@@ -144,6 +144,7 @@ namespace Konclude {
 					void createObviousSubsumptionSatisfiableTestingOrder(COptimizedKPSetClassOntologyClassificationItem* ontClassItem);
 					
 					QSet<CConcept*> getSubsumerSetFromBuildData(CConcept* concept, COptimizedKPSetClassOntologyClassificationItem* ontClassItem);
+					bool hasAllToldSubsumers(COptimizedKPSetClassOntologyClassificationItem* ontClassItem, COptimizedKPSetClassTestingItem* classItem);
 					void createObviousSubsumptionSatisfiableTestingOrderFromBuildData(COptimizedKPSetClassOntologyClassificationItem* ontClassItem);
 					void createObviousSubsumptionSatisfiableTestingOrderFromSaturationData(COptimizedKPSetClassOntologyClassificationItem* ontClassItem);
 
@@ -215,6 +216,8 @@ namespace Konclude {
 					bool mConfTrustSaturationSubsumerCompleteness;
 
 					cint64 mStatProcesedSubsumMessCount;
+					cint64 mStatIncompleteToldMessageCount;
+					cint64 mStatOneSidedEquivalenceCount;
 					cint64 mStatProcesedPossSubsumInitMessCount;
 					cint64 mStatProcesedPossSubsumUpdateMessCount;
 					cint64 mStatProcesedPseudoModelMessCount;

@@ -1118,6 +1118,16 @@ the chain. Fixed in PR #99; three forced AU runs then produce the default hierar
 comparing every class's told parents with its final subsumers finds none missing, and the
 default mode is unchanged.
 
+Two guards in the KPSet classifier now catch this class of defect instead of amplifying it.
+A told message marks a class derived (no test of its own) only if the subsumers it carries
+include the class's told parents; otherwise the class keeps its test and a warning names
+the missing parent. And two classes with the same number of subsumers are declared
+equivalent only if the subsumer also lists the class; otherwise the subsumption stays
+strict and a warning is logged. With the #95 defect reinstated for a check, the forced AU
+classification logs the missing parents, produces no false equivalence any more, and its
+remaining losses are the root labels' own; with the fix in place both guards are silent on
+AU and International and the hierarchies are unchanged.
+
 ## CLASSIFYING SNOMED CT THROUGH THE WRAPPER
 
 SNOMED CT with additions, 750 302 axioms over 374 710 classes in 297 MB of OWL 2 XML, on an M3

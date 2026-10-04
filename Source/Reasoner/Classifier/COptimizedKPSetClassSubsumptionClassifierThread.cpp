@@ -70,6 +70,8 @@ namespace Konclude {
 				mConfWriteDebuggingData = false;
 
 				mStatProcesedSubsumMessCount = 0;
+				mStatIncompleteToldMessageCount = 0;
+				mStatOneSidedEquivalenceCount = 0;
 				mStatProcesedPossSubsumInitMessCount = 0;
 				mStatProcesedPossSubsumUpdateMessCount = 0;
 				mStatProcesedPseudoModelMessCount = 0;
@@ -488,6 +490,26 @@ namespace Konclude {
 				return conSubsumSet;
 			}
 
+
+
+			bool COptimizedKPSetClassSubsumptionClassifierThread::hasAllToldSubsumers(COptimizedKPSetClassOntologyClassificationItem* ontClassItem, COptimizedKPSetClassTestingItem* classItem) {
+				CConcept* concept = classItem->getTestingConcept();
+				QSet<CConcept*> toldSubsumers = getSubsumerSetFromBuildData(concept,ontClassItem);
+				for (QSet<CConcept*>::const_iterator it = toldSubsumers.constBegin(), itEnd = toldSubsumers.constEnd(); it != itEnd; ++it) {
+					CConcept* toldSubsumer = *it;
+					if (toldSubsumer != concept) {
+						COptimizedKPSetClassTestingItem* toldItem = ontClassItem->getConceptSatisfiableTestItem(toldSubsumer);
+						if (toldItem && toldItem != classItem && !classItem->hasSubsumerConceptItem(toldItem)) {
+							++mStatIncompleteToldMessageCount;
+							if (mStatIncompleteToldMessageCount <= 10) {
+								LOG(WARNING,getLogDomain(),logTr("The subsumers reported for '%1' lack its told parent '%2'; the class keeps its own test.").arg(CIRIName::getRecentIRIName(concept->getClassNameLinker())).arg(CIRIName::getRecentIRIName(toldSubsumer->getClassNameLinker())),getLogObject());
+							}
+							return false;
+						}
+					}
+				}
+				return true;
+			}
 
 
 			void COptimizedKPSetClassSubsumptionClassifierThread::createObviousSubsumptionSatisfiableTestingOrderFromBuildData(COptimizedKPSetClassOntologyClassificationItem* ontClassItem) {
@@ -1781,7 +1803,14 @@ namespace Konclude {
 							}
 						}
 						//if (!possSubsumMap || !possSubsumMap->hasRemainingPossibleSubsumptions()) {
-						subsumedItem->setResultSatisfiableDerivated(true);
+						// A told message comes from the label of a tableau node and declares the class's subsumers
+						// complete; the class is then never tested itself. The label can be incomplete without the
+						// analyser knowing (issue #95 was a node initialised from a saturation substitute chain), and
+						// the cheapest witness of that is a told parent of the class that the message did not carry.
+						// In that case the class keeps its own satisfiable test, and the gap is logged.
+						if (hasAllToldSubsumers(optKPSetClassificationItem, subsumedItem)) {
+							subsumedItem->setResultSatisfiableDerivated(true);
+						}
 						//}
 
 					} else if (messageData->getClassificationMessageDataType() == CClassificationMessageData::TELLCLASSINITIALIZEPOSSIBLESUBSUM) {
@@ -2565,10 +2594,21 @@ namespace Konclude {
 									COptimizedKPSetClassTestingItem* subsumedConceptItem = *subsumedIt;
 									cint64 subsumedItemSubsumingCount = subsumedConceptItem->getSubsumingConceptItemCount();
 									if (subsumedItemSubsumingCount == itemSubsumingCount) {
-										// mark as equivalent
-										subsumedConceptItem->setEquivalentItem(true);
-										itemNode->addEquivalentConcept(subsumedConceptItem->getTestingConcept());
-										tax->updateNodeEquivalences(itemNode);
+										// Equal subsumer counts imply an equivalence only if both lists are complete; with
+										// complete lists the subsumer also holds this class in its list, so that is required
+										// too. Without it the subsumption stays strict and the inconsistency is logged: issue
+										// #95 showed how one lost told parent otherwise turns into false equivalences.
+										if (subsumedConceptItem->hasSubsumerConceptItem(item)) {
+											// mark as equivalent
+											subsumedConceptItem->setEquivalentItem(true);
+											itemNode->addEquivalentConcept(subsumedConceptItem->getTestingConcept());
+											tax->updateNodeEquivalences(itemNode);
+										} else {
+											++mStatOneSidedEquivalenceCount;
+											if (mStatOneSidedEquivalenceCount <= 10) {
+												LOG(WARNING,getLogDomain(),logTr("Classes '%1' and '%2' have the same number of subsumers but only one lists the other; the subsumption is kept strict.").arg(CIRIName::getRecentIRIName(item->getTestingConcept()->getClassNameLinker())).arg(CIRIName::getRecentIRIName(subsumedConceptItem->getTestingConcept()->getClassNameLinker())),getLogObject());
+											}
+										}
 									} else {
 										break;
 									}
