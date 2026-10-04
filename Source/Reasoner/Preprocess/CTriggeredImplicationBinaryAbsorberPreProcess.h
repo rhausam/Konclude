@@ -142,7 +142,7 @@ namespace Konclude {
 					bool isGCIConceptTriggeredImplicationAbsorbable(CConcept* orConcept, bool negated, cint64* notAbsorbableOperandsCount = nullptr);
 					bool isConceptImplicationTriggerable(CConcept* concept, bool negated, QHash<CConcept*,TOccuredAbsorbablePair>* conceptEqConAbsorbed);
 					bool isDataLiteralConceptExactlyTriggerable(CConcept* concept);
-					CConceptTriggerLinker* createExactDataLiteralTrigger(CDataLiteral* dataLiteral, bool branchTiggerCreation);
+					CConceptTriggerLinker* createExactDataLiteralTrigger(CDataLiteral* dataLiteral, bool branchTiggerCreation, cint64 triggerComplexity);
 					bool isConceptImplicationTriggerable(CConcept* concept, bool negated, QHash<CConcept*,TOccuredAbsorbablePair>* conceptEqConAbsorbed, cint64* openMultipleOccurCount, QList<TConceptNegationPair>** dependingCacheList);
 					bool isConceptSimpleImplicationTriggerable(CConcept* concept, bool negated);
 					void createEquivalenceAbsorbedTriggeredImplication(CConcept* eqConcept, bool negated, CSortedNegLinker<CConcept*>* absorpOpLinker);
