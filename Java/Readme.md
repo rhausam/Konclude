@@ -1617,6 +1617,33 @@ while their own entailment checks confirm the subsumption. Konclude's answer is 
 with the decider on and off.
 
 
+## CHECKING THAT A BUILD STILL PRODUCES THE SAME HIERARCHY
+
+Most of the changes of October 2026 were checked the same way: classify SNOMED CT with the
+command line, sort the output's lines (Konclude writes them in a layout-dependent order) and
+compare a hash of them with the hash the previous build produced, for the International
+Edition, the AU Edition and the 95k variant module. `Java/tools/check-hierarchy.sh` is that
+procedure as a script:
+
+```
+Java/tools/check-hierarchy.sh hash ~/build/konclude-cli/release/Konclude.app/Contents/MacOS/Konclude snomed-intl.owl 62e1eefa88
+hash 62e1eefa88 preprocessing 6218 precomputation 13973 classification 5219 (saturation extraction)
+```
+
+It classifies with `-w AUTO`, prints the hash and the phase times, and exits 1 if an expected
+hash is given and differs; options after `--` go to Konclude, so two configurations can be
+compared. `KEEP_OUTPUT=<file>` keeps the output, and `compare <A.owl> <B.owl>` lists the
+`SubClassOf` pairs and `EquivalentClasses` groups that only one of two outputs has, which is
+how the forced-mode losses of issue #95 were isolated (it uses `comm`; `diff` on two 175 MB
+files can run for a very long time). The reference hashes of the three files, all produced
+by master since `d5ddf4fc`, are in the script's header: International `62e1eefa88`, AU
+`21f0920c63`, the 95k variant module `e84a1bbaec`. A hash is a ten-character prefix of the
+MD5 of the sorted output.
+
+What it does not check: that the hierarchy is right. For that the OWL API test's `datatypes`
+scenario holds HermiT's answers for the datatype cases, and `Java/tools/DhvCheck.java`
+compares a locality module with HermiT or FaCT++ (see "The drug model's data values").
+
 ## THE MEMORY ALLOCATOR ON LINUX
 
 On Linux the malloc of the GNU C library cost Konclude a third of the classification time of
