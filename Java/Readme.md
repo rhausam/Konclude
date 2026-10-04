@@ -1262,10 +1262,21 @@ sampled classes defined with a `DataHasValue` (1 058 classes, 2 108 axioms) clas
 identically with Konclude, HermiT 1.4.3 and FaCT++ 1.7.0 (8 845 ancestor pairs and
 equivalences, none differing; HermiT 139 s, FaCT++ 5 s, Konclude 2 ms). A module around
 300 sampled classes (5 601 classes) was too much for HermiT, which had not finished after
-14 minutes at its 14 GB heap. The checker, `DhvCheck.java`, extracts the module with the
-OWL API, classifies it with any reasoner factory and writes the hierarchy as sorted
-"sub super" and "equiv a b" lines; Konclude's output is read back in its `asserted` mode.
-HermiT 1.4.3 and the FaCT++ binding need the OWL API 4.5 class path, not 5.1.
+14 minutes at its 14 GB heap. The checker, `Java/tools/DhvCheck.java`, run by
+`run-dhv-check.sh`, extracts the module with the OWL API, classifies it with any reasoner
+factory and writes the hierarchy as sorted "sub super" and "equiv a b" lines; Konclude's
+command line output is read back in its `asserted` mode. HermiT 1.4.3 and the FaCT++
+binding need the OWL API 4.5 class path, not 5.1; the script resolves it from Maven and
+takes FaCT++'s jar and native library from `FACTPP_JAR` and `FACTPP_LIB`:
+
+```
+./run-dhv-check.sh module snomed.owl sampled-classes.txt module.owl hermit.txt
+FACTPP_JAR=.../factplusplus-1.7.0-SNAPSHOT.jar FACTPP_LIB=.../FaCT++.JNI \
+  ./run-dhv-check.sh classify module.owl factpp.txt uk.ac.manchester.cs.factplusplus.owlapiv3.FaCTPlusPlusReasonerFactory
+Konclude classification -i module.owl -o konclude-module.owl
+./run-dhv-check.sh asserted konclude-module.owl konclude.txt
+diff hermit.txt konclude.txt
+```
 
 ## ENTAILMENT CHECKING, INTERRUPTION AND PROGRESS
 
