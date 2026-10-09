@@ -73,9 +73,9 @@ namespace Konclude {
 
 
 			bool CMemoryPoolRecycler::giveMemoryPool(CMemoryPool* memoryPool) {
-				// the providers allocate the default size, one of them with eight bytes on top
+				// the providers allocate the default size, one of them with eight bytes on top, rounded up to whole pages
 				cint64 size = memoryPool->getMemoryBlockSize();
-				if (size < DEFAULTMEMORYPOOLSIZE || size > DEFAULTMEMORYPOOLSIZE + 8) {
+				if (size < DEFAULTMEMORYPOOLSIZE || size > CMemoryPool::mappedBlockSize(DEFAULTMEMORYPOOLSIZE + 8)) {
 					return false;
 				}
 				QMutexLocker locker(&mMutex);

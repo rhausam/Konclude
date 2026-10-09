@@ -44,7 +44,7 @@ namespace Konclude {
 
 
 			CMemoryPool* CNewCentralizedLimitedAllocationMemoryPoolProvider::acquireMemoryPool(cint64 minPoolSize) {
-				cint64 memoryBlockSize = qMax(mDefaultPoolSize,minPoolSize);
+				cint64 memoryBlockSize = CMemoryPool::mappedBlockSize(qMax(mDefaultPoolSize,minPoolSize));
 				mAllocLimitator->addAllocatingMemorySize(memoryBlockSize+sizeof(CMemoryPool));
 				CMemoryPool* recycledPool = CMemoryPoolRecycler::getInstance()->takeMemoryPool(minPoolSize);
 				if (recycledPool) {
@@ -67,7 +67,7 @@ namespace Konclude {
 
 
 			CMemoryPool* CNewCentralizedLimitedAllocationMemoryPoolProvider::acquireMemoryPoolConsiderated(cint64 minPoolSize) {
-				cint64 memoryBlockSize = qMax(mDefaultPoolSize,minPoolSize);
+				cint64 memoryBlockSize = CMemoryPool::mappedBlockSize(qMax(mDefaultPoolSize,minPoolSize));
 				if (mAllocLimitator->addAllocatingMemorySize(memoryBlockSize+sizeof(CMemoryPool))) {
 					CMemoryPool* recycledPool = CMemoryPoolRecycler::getInstance()->takeMemoryPool(minPoolSize);
 					if (recycledPool) {

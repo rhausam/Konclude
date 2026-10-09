@@ -79,6 +79,14 @@ namespace Konclude {
 			}
 #endif
 
+			cint64 CMemoryPool::mappedBlockSize(cint64 memoryBlockSize) {
+#if !defined(_WIN32)
+				return roundedMappingSize(memoryBlockSize);
+#else
+				return memoryBlockSize;
+#endif
+			}
+
 			char* CMemoryPool::allocateMemoryBlock(cint64 memoryBlockSize, bool& memoryBlockMapped) {
 #if !defined(_WIN32)
 				void* mapping = mmap(nullptr, (size_t)roundedMappingSize(memoryBlockSize), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);

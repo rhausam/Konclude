@@ -75,6 +75,13 @@ namespace Konclude {
 					 *	process grows with every reasoner it destroys (issue #45); an array otherwise.
 					 */
 					static char* allocateMemoryBlock(cint64 memoryBlockSize, bool& memoryBlockMapped);
+					/*!
+					 *	The size a mapped block of the given size really occupies: whole pages (16 KiB on
+					 *	Apple silicon, 4 KiB on Linux). A pool sized this way uses the pages it is charged for;
+					 *	the default pool size of 50 000 bytes alone leaves the fourth page of each block
+					 *	three quarters empty on macOS. The size itself where blocks are not mapped.
+					 */
+					static cint64 mappedBlockSize(cint64 memoryBlockSize);
 					//! releases a block the way it was obtained
 					static void releaseMemoryBlock(char* memoryBlock, cint64 memoryBlockSize, bool memoryBlockMapped);
 					//! releases the block of the pool, not the pool
