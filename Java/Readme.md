@@ -1761,6 +1761,18 @@ the suites, whose ontologies are too small for a leak to show above the noise of
 machine; it is the check to run after a change to the memory pools, the JNI bridge or the
 ontology's destructors.
 
+The pool blocks are mapped in whole pages, and since #110 they are also sized in whole pages:
+the providers ask CMemoryPool::mappedBlockSize for the size a mapping of the default 50 000
+bytes really occupies (65 536 on Apple silicon with its 16 KiB pages, 53 248 on Linux) and the
+pool uses all of it. Before, a pool used 50 008 bytes of a block whose fourth page its first
+856 bytes had already dirtied, so 23.7 % of every block on macOS (6 % on Linux) was charged to
+the process and never used. The pool blocks are over 90 % of the footprint while reasoning:
+at the peak of the full OWL 2 DL variant 463 292 blocks held 28.3 GB. With page-sized blocks
+the peak footprint of SNOMED CT AU fell from 24.2 to 19.6 GiB and that of the variant from
+35.1 to 28.2 GiB (Mac M3, command line, five and two alternating runs; hashes unchanged, times
+equal within the noise, AU slightly faster). The measurements are in
+`~/Documents/konclude-benchmarks/2026-10-08-pool-blocks/`.
+
 
 ## OTHER LIMITATIONS
 
