@@ -21,6 +21,15 @@
 #include "CTriggeredImplicationBinaryAbsorberPreProcess.h"
 
 
+#include <cstdio>
+namespace Konclude { namespace Reasoner { namespace Preprocess { class CConceptTriggerLinker; } } }
+namespace Konclude { namespace Reasoner { namespace Preprocess {
+	static FILE* absorbTraceFile() {
+		static FILE* file = nullptr; static bool checked = false;
+		if (!checked) { checked = true; if (getenv("KONCLUDE_ABSORBTRACE")) file = fopen(getenv("KONCLUDE_ABSORBTRACE"), "w"); }
+		return file;
+	}
+}}}
 namespace Konclude {
 
 	namespace Reasoner {
@@ -167,6 +176,42 @@ namespace Konclude {
 				}
 
 
+				mCurrentConjunctFrequency = CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
+				if (getenv("KONCLUDE_TRIGGER_FREQSORT")) {
+					// in how many definitions does each top-level conjunct occur; the chains start with the rarest
+					for (cint64 conIdx = 0; conIdx < conceptCount; conIdx++) {
+						CConcept* concept = mConceptVec->getLocalData(conIdx);
+						if (concept) {
+							// every conjunction counts: definitions (CCEQ), conjunctions (CCAND) and negated disjunctions (CCOR),
+							// nested ones included, so that the triggers of every chain carry a frequency
+							cint64 opCode = concept->getOperatorCode();
+							static const bool eqOnly = getenv("KONCLUDE_FREQ_EQONLY") != nullptr;
+							if (opCode == CCEQ || (!eqOnly && (opCode == CCAND || opCode == CCOR))) {
+								for (CSortedNegLinker<CConcept*>* opIt = concept->getOperandList(); opIt; opIt = opIt->getNext()) {
+									CConcept* op = opIt->getData();
+									bool neg = opIt->isNegated() ^ (opCode == CCOR);
+									if (opCode == CCEQ && !neg && op->getOperatorCode() == CCAND) {
+										if (eqOnly) {
+											for (CSortedNegLinker<CConcept*>* innerIt = op->getOperandList(); innerIt; innerIt = innerIt->getNext()) {
+												++mConjunctFrequency[QPair<CConcept*,bool>(innerIt->getData(), innerIt->isNegated())];
+											}
+										}
+										continue; // counted as the conjunction itself
+									}
+									++mConjunctFrequency[QPair<CConcept*,bool>(op, neg)];
+								}
+							}
+						}
+					}
+				}
+				if (getenv("KONCLUDE_FREQ_COMMON_PERCENT")) {
+					cint64 definitions = 0;
+					for (cint64 conIdx = 0; conIdx < conceptCount; conIdx++) {
+						CConcept* concept = mConceptVec->getLocalData(conIdx);
+						if (concept && concept->getOperatorCode() == CCEQ) ++definitions;
+					}
+					CConceptTriggerLinker::sCommonFrequencyThreshold = qMax((cint64)20, definitions * atoi(getenv("KONCLUDE_FREQ_COMMON_PERCENT")) / 100);
+				}
 				if (mConfAbsorbEqClassDefinitions) {
 
 					QList<CAbsorpEquivalentClassItem> equivConceptAbsorbItemList;
@@ -1030,11 +1075,14 @@ namespace Konclude {
 				for (CSortedNegLinker<CConcept*>* opConLinkerIt = absorpOpLinker; opConLinkerIt; opConLinkerIt = opConLinkerIt->getNext()) {
 					CConcept* concept = opConLinkerIt->getData();
 					bool negated = opConLinkerIt->isNegated();
+					mCurrentConjunctFrequency = mConjunctFrequency.value(QPair<CConcept*,bool>(concept, negated), CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY);
 					CConceptTriggerLinker* tmpTriggers = copyTriggerLinkers(getTriggersForConcept(concept,negated));
+					mCurrentConjunctFrequency = CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					if (tmpTriggers) {
 						triggers = tmpTriggers->append(triggers);
 					}
 				}
+				if (absorbTraceFile()) fprintf(absorbTraceFile(), "EQ %lld\n", (long long)eqConcept->getConceptTag());
 				CConceptTriggerLinker* impliedConceptTrigger = getImplicationTriggeredConceptForTriggers(triggers,nullptr);
 				addUnfoldingConceptForConcept(impliedConceptTrigger->getTriggerConcept(),eqConcept,false);
 
@@ -1062,6 +1110,7 @@ namespace Konclude {
 
 
 			CConcept* CTriggeredImplicationBinaryAbsorberPreProcess::createDisjunctionAbsorbedTriggeredImplication(CConcept* orConcept, bool negated) {
+				if (absorbTraceFile()) fprintf(absorbTraceFile(), "GCI %lld\n", (long long)orConcept->getConceptTag());
 				CConcept* implicationConcept = nullptr;
 
 				cint64 opCode = orConcept->getOperatorCode();
@@ -1847,14 +1896,18 @@ namespace Konclude {
 					TConceptNegationPair conNegPair(*it);
 					CConcept* concept = conNegPair.first;
 					bool negated = conNegPair.second;
+					mCurrentConjunctFrequency = (!getenv("KONCLUDE_FREQ_NOPARTIAL") && isConceptImplicationTriggerable(concept, !negated, &mFrequencyAbsorbabilityScratch)) ? mConjunctFrequency.value(QPair<CConcept*,bool>(concept, !negated), CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					CConceptTriggerLinker* tmpTriggers = copyTriggerLinkers(getPartialTriggersForConcept(concept,!negated));
+					mCurrentConjunctFrequency = CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					triggers = tmpTriggers->append(triggers);
 				}
 				for (QList<TConceptNegationPair>::const_iterator it = partialAbsorbList.constBegin(), itEnd = partialAbsorbList.constEnd(); it != itEnd; ++it) {
 					TConceptNegationPair conNegPair(*it);
 					CConcept* concept = conNegPair.first;
 					bool negated = conNegPair.second;
+					mCurrentConjunctFrequency = (!getenv("KONCLUDE_FREQ_NOPARTIAL") && isConceptImplicationTriggerable(concept, !negated, &mFrequencyAbsorbabilityScratch)) ? mConjunctFrequency.value(QPair<CConcept*,bool>(concept, !negated), CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					CConceptTriggerLinker* tmpTriggers = copyTriggerLinkers(getPartialTriggersForConcept(concept,!negated));
+					mCurrentConjunctFrequency = CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					triggers = tmpTriggers->append(triggers);
 				}
 				CConceptTriggerLinker* impliedConceptTrigger = getImplicationTriggeredConceptForTriggers(triggers,nullptr);
@@ -3063,13 +3116,16 @@ namespace Konclude {
 					} else if (negated && (opCode == CCOR) || !negated && (opCode == CCAND || opCode == CCEQ)) {
 						// AND, collect triggers from operands
 						CConceptTriggerLinker* andTriggers = nullptr;
+						cint64 savedConjunctFrequency = mCurrentConjunctFrequency;
 						for (CSortedNegLinker<CConcept*>* opConLinkerIt = opConLinker; opConLinkerIt; opConLinkerIt = opConLinkerIt->getNext()) {
 							CConcept* opConcept = opConLinkerIt->getData();
 							bool opNegated = opConLinkerIt->isNegated()^negated;
+							mCurrentConjunctFrequency = mConjunctFrequency.value(QPair<CConcept*,bool>(opConcept, opNegated), savedConjunctFrequency);
 
 							CConceptTriggerLinker* newTriggers = copyTriggerLinkers(getTriggersForConcept(opConcept,opNegated, backPropTriggerConcept));
 							andTriggers = newTriggers->append(andTriggers);
 						}
+						mCurrentConjunctFrequency = savedConjunctFrequency;
 						if (backPropConcept) {
 							CConceptTriggerLinker* implTriggeredConcept = getImplicationTriggeredConceptForTriggers(andTriggers, &backPropImpConcept);
 							addUnfoldingConceptForConcept(backPropTriggerConcept, backPropImpConcept, false);
@@ -3316,7 +3372,9 @@ namespace Konclude {
 							CConceptTriggerLinker* relTrigger = triggerIt;
 							triggerIt = triggerIt->getNext();
 							relTrigger->clearNext();
+							cint64 reusedTriggerFrequency = qMin(trigger->getTriggerFrequency(), relTrigger->getTriggerFrequency());
 							*trigger = *impliedConceptTrigger;
+							trigger->setTriggerFrequency(reusedTriggerFrequency);
 							if (lastTriggerIt) {
 								lastTriggerIt->setNext(triggerIt);
 							} else {
@@ -3353,6 +3411,7 @@ namespace Konclude {
 			CConceptTriggerLinker* CTriggeredImplicationBinaryAbsorberPreProcess::getImplicationTriggeredConceptForTriggers(CConceptTriggerLinker* triggers, CConcept** firstImplicationConcept) {
 				CConceptTriggerLinker* implicationTriggeredConcept = nullptr;
 				CConceptTriggerLinker* sortedTriggers = nullptr;
+				if (absorbTraceFile()) { fprintf(absorbTraceFile(), "IN"); for (CConceptTriggerLinker* it = triggers; it; it = it->getNext()) fprintf(absorbTraceFile(), " %lld:%lld:%lld", (long long)it->getTriggerConcept()->getConceptTag(), (long long)it->getTriggerComplexity(), (long long)it->getTriggerFrequency()); fprintf(absorbTraceFile(), "\n"); }
 				CConceptTriggerLinker* triggerIt = getUpdatedTriggerComplexities(triggers);
 				while (triggerIt) {
 					CConceptTriggerLinker* trigger = triggerIt;
@@ -3362,7 +3421,8 @@ namespace Konclude {
 					if ((triggerIt || sortedTriggers) && trigger->getTriggerConcept() == mTopConcept) {
 						// ignore trigger
 					} else {
-						bool replaced = true;
+						static const bool sortedReuse = getenv("KONCLUDE_FREQ_SORTEDREUSE") != nullptr;
+						bool replaced = !sortedReuse;
 						bool checkSorted = false;
 						while (replaced) {
 							replaced = false;
@@ -3388,6 +3448,7 @@ namespace Konclude {
 					}
 
 				}
+				if (absorbTraceFile()) { fprintf(absorbTraceFile(), "SORTED"); for (CConceptTriggerLinker* it = sortedTriggers; it; it = it->getNext()) fprintf(absorbTraceFile(), " %lld:%lld:%lld", (long long)it->getTriggerConcept()->getConceptTag(), (long long)it->getTriggerComplexity(), (long long)it->getTriggerFrequency()); fprintf(absorbTraceFile(), "\n"); }
 				if (firstImplicationConcept) {
 					*firstImplicationConcept = nullptr;
 					if (sortedTriggers) {
@@ -3417,11 +3478,23 @@ namespace Konclude {
 							triggerIt = triggerIt->getNext();
 							trigger2->clearNext();
 
+							if (getenv("KONCLUDE_FREQ_SORTEDREUSE")) {
+								TConceptPair existingPair(qMin(trigger1->getTriggerConcept(),trigger2->getTriggerConcept()),qMax(trigger1->getTriggerConcept(),trigger2->getTriggerConcept()));
+								CConceptTriggerLinker* existingImplied = mConceptImplicationImpliedHash.value(existingPair);
+								if (existingImplied) {
+									cint64 reusedFrequency = qMin(trigger1->getTriggerFrequency(), trigger2->getTriggerFrequency());
+									trigger1->initConceptTriggerLinker(existingImplied->getTriggerConcept(), existingImplied->getTriggerComplexity())->setTriggerFrequency(reusedFrequency);
+									releaseTriggerLinkers(trigger2);
+									++mStatReusedImplications;
+									continue;
+								}
+							}
 							CConcept* newImpliedTriggerConcept = createTriggerConcept(firstImplicationConcept != nullptr);
 							CConcept* newImplicationConcept = createImplicationConcept(newImpliedTriggerConcept,false);
 
 							CConcept* concept1 = trigger1->getTriggerConcept();
 							CConcept* concept2 = trigger2->getTriggerConcept();
+							if (absorbTraceFile()) fprintf(absorbTraceFile(), "IMPL %lld unfoldFrom %lld:%lld trigger %lld:%lld\n", (long long)newImplicationConcept->getConceptTag(), (long long)concept1->getConceptTag(), (long long)trigger1->getTriggerFrequency(), (long long)concept2->getConceptTag(), (long long)trigger2->getTriggerFrequency());
 
 							addImplicationTrigger(newImplicationConcept,concept2,true);
 							addUnfoldingConceptForConcept(concept1,newImplicationConcept,false);
@@ -3430,10 +3503,11 @@ namespace Konclude {
 							CConcept* minConcept1 = qMin(concept1,concept2);
 							CConcept* maxConcept1 = qMax(concept1,concept2);
 							TConceptPair conceptPair(minConcept1,maxConcept1);
-							trigger2->initConceptTriggerLinker(newImpliedTriggerConcept,newTriggerComplexity);
+							cint64 newTriggerFrequency = qMin(trigger1->getTriggerFrequency(), trigger2->getTriggerFrequency());
+							trigger2->initConceptTriggerLinker(newImpliedTriggerConcept,newTriggerComplexity)->setTriggerFrequency(newTriggerFrequency);
 							mConceptImplicationImpliedHash.insert(conceptPair,trigger2);
 
-							trigger1->initConceptTriggerLinker(newImpliedTriggerConcept,newTriggerComplexity);
+							trigger1->initConceptTriggerLinker(newImpliedTriggerConcept,newTriggerComplexity)->setTriggerFrequency(newTriggerFrequency);
 						}
 						implicationTriggeredConcept = trigger1;
 					}
@@ -3482,6 +3556,7 @@ namespace Konclude {
 					mTriggerContainer.append(newTrigger);
 				}
 				newTrigger->clearNext();
+				newTrigger->setTriggerFrequency(mCurrentConjunctFrequency);
 				return newTrigger;
 			}
 
@@ -3496,6 +3571,10 @@ namespace Konclude {
 				CConceptTriggerLinker* newTriggers = nullptr;
 				for (CConceptTriggerLinker* triggerIt = triggers; triggerIt; triggerIt = triggerIt->getNext()) {
 					CConceptTriggerLinker* newTrigger = createTriggerLinker()->initConceptTriggerLinker(triggerIt->getTriggerConcept(),triggerIt->getTriggerComplexity());
+					if (mCurrentConjunctFrequency == CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) {
+						// a conjunction's own triggers keep the frequencies of its conjuncts
+						newTrigger->setTriggerFrequency(triggerIt->getTriggerFrequency());
+					}
 					newTriggers = newTrigger->append(newTriggers);
 				}
 				return newTriggers;
@@ -4167,14 +4246,19 @@ namespace Konclude {
 
 			CConceptTriggerLinker* CTriggeredImplicationBinaryAbsorberPreProcess::createPartialExtendedAbsorbedImpliedTrigger(const QList<TConceptNegationPair>& absorbList) {
 				CConceptTriggerLinker* triggers = nullptr;
+				if (absorbTraceFile()) fprintf(absorbTraceFile(), "CAND %d\n", (int)absorbList.size());
 				for (QList<TConceptNegationPair>::const_iterator it = absorbList.constBegin(), itEnd = absorbList.constEnd(); it != itEnd; ++it) {
 					TConceptNegationPair conNegPair(*it);
 					CConcept* concept = conNegPair.first;
 					bool negated = conNegPair.second;
+					mCurrentConjunctFrequency = (!getenv("KONCLUDE_FREQ_NOPARTIAL") && isConceptImplicationTriggerable(concept, !negated, &mFrequencyAbsorbabilityScratch)) ? mConjunctFrequency.value(QPair<CConcept*,bool>(concept, !negated), CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					CConceptTriggerLinker* tmpTriggers = copyTriggerLinkers(getPartialTriggersForConcept(concept,!negated));
+					mCurrentConjunctFrequency = CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					triggers = tmpTriggers->append(triggers);
 				}
+				CConceptTriggerLinker::sFrequencyDescending = getenv("KONCLUDE_FREQ_CANDDESC") != nullptr;
 				CConceptTriggerLinker* impliedConceptTrigger = getImplicationTriggeredConceptForTriggers(triggers,nullptr);
+				CConceptTriggerLinker::sFrequencyDescending = false;
 				return impliedConceptTrigger;
 			}
 
@@ -4186,7 +4270,9 @@ namespace Konclude {
 					TConceptNegationPair conNegPair(*it);
 					CConcept* concept = conNegPair.first;
 					bool negated = conNegPair.second;
+					mCurrentConjunctFrequency = (!getenv("KONCLUDE_FREQ_NOPARTIAL") && isConceptImplicationTriggerable(concept, !negated, &mFrequencyAbsorbabilityScratch)) ? mConjunctFrequency.value(QPair<CConcept*,bool>(concept, !negated), CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					CConceptTriggerLinker* tmpTriggers = copyTriggerLinkers(getPartialTriggersForConcept(concept,!negated));
+					mCurrentConjunctFrequency = CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					triggers = tmpTriggers->append(triggers);
 				}
 				CConceptTriggerLinker* impliedConceptTrigger = getImplicationTriggeredConceptForTriggers(triggers,&implicationConcept);
@@ -4349,9 +4435,11 @@ namespace Konclude {
 						if (opCode != CCEQ || !mEQNotConceptPartialAbsorbableSet.contains(concept)) {
 
 							CConceptTriggerLinker* andTriggers = nullptr;
+							cint64 savedPartialConjunctFrequency = mCurrentConjunctFrequency;
 							for (CSortedNegLinker<CConcept*>* opConLinkerIt = opConLinker; opConLinkerIt; opConLinkerIt = opConLinkerIt->getNext()) {
 								CConcept* opConcept = opConLinkerIt->getData();
 								bool opNegated = opConLinkerIt->isNegated()^negated;
+								mCurrentConjunctFrequency = (!getenv("KONCLUDE_FREQ_NOPARTIAL") && isConceptImplicationTriggerable(opConcept, opNegated, &mFrequencyAbsorbabilityScratch)) ? mConjunctFrequency.value(QPair<CConcept*,bool>(opConcept, opNegated), savedPartialConjunctFrequency) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 
 								if (mConceptPartialAbsorbableHash.value(TConceptNegationPair(opConcept,opNegated),false) || mConceptTotalAbsorbableHash.value(TConceptNegationPair(opConcept,opNegated),false)) {
 									CConceptTriggerLinker* newTriggers = copyTriggerLinkers(getPartialTriggersForConcept(opConcept,opNegated, backPropTriggerConcept));
@@ -4360,6 +4448,7 @@ namespace Konclude {
 									}
 								}
 							}
+							mCurrentConjunctFrequency = savedPartialConjunctFrequency;
 							if (opCode == CCEQ || backPropConcept) {
 								CConceptTriggerLinker* implTriggers = getImplicationTriggeredConceptForTriggers(andTriggers,backPropImpConceptPointer);
 								if (backPropConcept) {

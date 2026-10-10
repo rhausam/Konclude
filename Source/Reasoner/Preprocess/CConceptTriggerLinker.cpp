@@ -29,6 +29,7 @@ namespace Konclude {
 
 
 			CConceptTriggerLinker::CConceptTriggerLinker() : CSortedLinkerBase<CConceptTriggerLinker*,CConceptTriggerLinker>(this) {
+				mTriggerFrequency = UNKNOWN_TRIGGER_FREQUENCY;
 			}
 
 			CConceptTriggerLinker* CConceptTriggerLinker::initConceptTriggerLinker(CConcept* triggerConcept, cint64 triggerComplexity) {
@@ -50,7 +51,34 @@ namespace Konclude {
 				return this;
 			}
 
+			const cint64 CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
+			bool CConceptTriggerLinker::sFrequencyDescending = false;
+			cint64 CConceptTriggerLinker::sCommonFrequencyThreshold = (cint64)1 << 60;
+
+			cint64 CConceptTriggerLinker::getTriggerFrequency() {
+				return mTriggerFrequency;
+			}
+
+			CConceptTriggerLinker* CConceptTriggerLinker::setTriggerFrequency(cint64 frequency) {
+				mTriggerFrequency = frequency;
+				return this;
+			}
+
 			bool CConceptTriggerLinker::operator<=(const CConceptTriggerLinker& conceptTriggerLinker) {
+				static const bool frequencyOrder = getenv("KONCLUDE_TRIGGER_FREQSORT") != nullptr;
+				// only triggers whose conjunct frequency is known are ordered by it: a chain mixing counted and
+				// uncounted triggers (GCIs, candidates, propagated triggers) keeps the complexity order, otherwise
+				// the counted common parents would come first in it (95k variant module: precomputation 7 -> 47 s)
+				static const bool broadRule = getenv("KONCLUDE_FREQ_BROAD") != nullptr;
+				cint64 f1 = mTriggerFrequency >= sCommonFrequencyThreshold ? UNKNOWN_TRIGGER_FREQUENCY : mTriggerFrequency;
+				cint64 f2 = conceptTriggerLinker.mTriggerFrequency >= sCommonFrequencyThreshold ? UNKNOWN_TRIGGER_FREQUENCY : conceptTriggerLinker.mTriggerFrequency;
+				if (frequencyOrder && (broadRule || (f1 != UNKNOWN_TRIGGER_FREQUENCY && f2 != UNKNOWN_TRIGGER_FREQUENCY))) {
+					if (f1 < f2) {
+						return !sFrequencyDescending;
+					} else if (f1 > f2) {
+						return sFrequencyDescending;
+					}
+				}
 				if (mTriggerComplexity > conceptTriggerLinker.mTriggerComplexity) {
 					return true;
 				} else if (mTriggerComplexity < conceptTriggerLinker.mTriggerComplexity) {

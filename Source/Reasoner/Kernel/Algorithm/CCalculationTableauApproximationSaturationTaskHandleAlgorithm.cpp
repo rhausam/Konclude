@@ -19,6 +19,8 @@
  */
 
 #include "CCalculationTableauApproximationSaturationTaskHandleAlgorithm.h"
+#include <cstdio>
+#include <cstdlib>
 
 
 namespace Konclude {
@@ -767,6 +769,58 @@ namespace Konclude {
 								processingDataBox->addIndividualSaturationCompletedNodeLinker(indiProcessNodeLinker);
 								completedIndividualCount++;
 								indiProcessNode->setCompleted(true);
+							}
+							if (getenv("KONCLUDE_STATS")) {
+								static long long statNodes = 0, statLabels = 0, statSubst = 0;
+								++statNodes; if (indiProcessNode->hasSubstituteIndividualNode()) ++statSubst;
+								if (indiProcessNode->getReapplyConceptSaturationLabelSet(false)) statLabels += indiProcessNode->getReapplyConceptSaturationLabelSet(false)->getConceptCount();
+								static const char* dumpEnv = getenv("KONCLUDE_LABELDUMP");
+								bool dumpThis = false;
+								if (dumpEnv) {
+									CSaturationConceptDataItem* satItem = (CSaturationConceptDataItem*)indiProcessNode->getSaturationConceptReferenceLinking();
+									CConcept* nodeCon = satItem ? satItem->getSaturationConcept() : nullptr;
+									if (nodeCon && nodeCon->hasClassName()) {
+										QString iri = CIRIName::getRecentIRIName(nodeCon->getClassNameLinker());
+										if (QString(dumpEnv).split(',').contains(iri)) {
+											dumpThis = true;
+											// the waiting implications: length of the reapply list behind every label entry
+											CReapplyConceptSaturationLabelSet* ls2 = indiProcessNode->getReapplyConceptSaturationLabelSet(false);
+											long long waiting = 0, entriesWithWaiting = 0;
+											if (ls2) {
+												for (CConceptSaturationDescriptor* d = ls2->getConceptSaturationDescriptionLinker(); d; d = d->getNextConceptDesciptor()) {
+													CConceptSaturationDescriptor* cd = nullptr; CImplicationReapplyConceptSaturationDescriptor* rd = nullptr;
+													ls2->getConceptSaturationDescriptor(d->getConcept(), cd, rd);
+													long long n = 0; for (; rd; rd = rd->getNext()) ++n;
+													waiting += n; if (n) ++entriesWithWaiting;
+												}
+											}
+											fprintf(stderr, "STATS watched %s substituted %d waitingImplications %lld onEntries %lld\n", iri.toUtf8().constData(), (int)indiProcessNode->hasSubstituteIndividualNode(), waiting, entriesWithWaiting);
+											if (ls2) {
+												fprintf(stderr, "LABELIMPL %s", iri.toUtf8().constData());
+												for (CConceptSaturationDescriptor* d = ls2->getConceptSaturationDescriptionLinker(); d; d = d->getNextConceptDesciptor()) {
+													if (d->getConcept()->getOperatorCode() == CCIMPL) fprintf(stderr, " %lld", (long long)d->getConcept()->getConceptTag());
+												}
+												fprintf(stderr, "\n");
+											}
+										}
+									}
+								}
+								if (dumpThis || (statNodes & 0x3FFF) == 0) {
+									fprintf(stderr, "STATS saturation nodes %lld labels %lld substituted %lld\n", statNodes, statLabels, statSubst);
+									// histogram of this node's label by operator code (named classes counted under 'cls')
+									CReapplyConceptSaturationLabelSet* ls = indiProcessNode->getReapplyConceptSaturationLabelSet(false);
+									if (ls) {
+										long long cnt[64] = {0}; long long named = 0, total = 0;
+										for (CConceptSaturationDescriptor* d = ls->getConceptSaturationDescriptionLinker(); d; d = d->getNextConceptDesciptor()) {
+											CConcept* c = d->getConcept(); ++total;
+											if (c->hasClassName()) ++named;
+											cint64 op = c->getOperatorCode() + 32; if (op >= 0 && op < 64) ++cnt[op];
+										}
+										fprintf(stderr, "STATS label node %lld total %lld cls %lld", statNodes, total, named);
+										for (int i = 0; i < 64; ++i) if (cnt[i]) fprintf(stderr, " op%d:%lld", i - 32, cnt[i]);
+										fprintf(stderr, "\n");
+									}
+								}
 							}
 						}
 					}

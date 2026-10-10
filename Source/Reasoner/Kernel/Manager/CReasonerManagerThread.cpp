@@ -19,6 +19,8 @@
  */
 
 #include "CReasonerManagerThread.h"
+#include <cstdio>
+#include <cstdlib>
 
 
 namespace Konclude {
@@ -530,6 +532,7 @@ namespace Konclude {
 						if (ontReqPrepData->mCheckingProcessorType == COntologyProcessingStep::OPPREPROCESSOR) {
 							if (!mProcessingEndMessageSet.contains(QPair<CConcreteOntology*,COntologyProcessingStep::PROCESSORTYPE>(ontology,COntologyProcessingStep::OPPREPROCESSOR))) {
 								mProcessingEndMessageSet.insert(QPair<CConcreteOntology*,COntologyProcessingStep::PROCESSORTYPE>(ontology,COntologyProcessingStep::OPPREPROCESSOR));
+								if (getenv("KONCLUDE_TAGDUMP")) { CConceptVector* conVec = ontology->getTBox()->getConceptVector(); FILE* tagFile = fopen(getenv("KONCLUDE_TAGDUMP"), "w"); if (tagFile) { for (cint64 i = 0; i < conVec->getItemCount(); ++i) { CConcept* c = conVec->getData(i); if (c) { fprintf(tagFile, "%lld\t%lld\t%lld", (long long)c->getConceptTag(), (long long)c->getOperatorCode(), (long long)c->getOperandCount()); if (c->hasClassName()) fprintf(tagFile, "\t%s", CIRIName::getRecentIRIName(c->getClassNameLinker()).toUtf8().constData()); for (CSortedNegLinker<CConcept*>* op = c->getOperandList(); op; op = op->getNext()) fprintf(tagFile, "\t%s%lld", op->isNegated() ? "-" : "", (long long)op->getData()->getConceptTag()); if (c->getRole()) fprintf(tagFile, "\trole=%s", CIRIName::getRecentIRIName(c->getRole()->getPropertyNameLinker()).toUtf8().constData()); fprintf(tagFile, "\n"); } } fclose(tagFile); } }
 								LOG(INFO,"::Konclude::Reasoner::Kernel::ReasonerManager",logTr("Finished preprocessing in %2 ms for ontology '%1'.").arg(ontology->getOntologyName()).arg(checkingTime),this);
 							}
 						} else if (ontReqPrepData->mCheckingProcessorType == COntologyProcessingStep::OPPRECOMPUTER) {

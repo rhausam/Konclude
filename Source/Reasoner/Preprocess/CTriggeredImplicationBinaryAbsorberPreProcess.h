@@ -328,6 +328,10 @@ namespace Konclude {
 					QHash<TConceptNegationPair, CConceptTriggerLinker*> mConceptTriggerLinkerHash;
 					QHash<TConceptNegationPair, CConceptTriggerLinker*> mAssuringConceptTriggerLinkerHash;
 					CConceptTriggerLinker* mTmpTriggerLinker;
+					//! in how many definitions each top-level conjunct occurs, and the conjunct whose triggers are being built
+					QHash<QPair<CConcept*,bool>,cint64> mConjunctFrequency;
+					cint64 mCurrentConjunctFrequency;
+					QHash<CConcept*,TOccuredAbsorbablePair> mFrequencyAbsorbabilityScratch;
 
 					QHash<TConceptNegationPair, CConcept*> mBackPropActivationConHash;
 

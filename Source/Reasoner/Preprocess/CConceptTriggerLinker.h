@@ -66,6 +66,19 @@ namespace Konclude {
 					CConceptTriggerLinker* setTriggerComplexity(cint64 complexity);
 
 					bool operator<=(const CConceptTriggerLinker& conceptTriggerLinker);
+					/*!
+					 *	In how many definitions the trigger's conjunct occurs (a merged pair: the rarer of the two).
+					 *	Chains are ordered by it, rarest first, so that a node is unfolded only into the chains of
+					 *	the few definitions sharing its rare conjuncts, not into one implication per definition
+					 *	sharing a common one (SDD: labels of thousands of implications, quadratic saturation memory).
+					 */
+					cint64 getTriggerFrequency();
+					CConceptTriggerLinker* setTriggerFrequency(cint64 frequency);
+					static const cint64 UNKNOWN_TRIGGER_FREQUENCY = (cint64)1 << 60;
+					//! experiment: order the chain being built by frequency descending instead
+					static bool sFrequencyDescending;
+					//! experiment: a trigger at least this frequent counts as common, i.e. is ordered like one of unknown frequency
+					static cint64 sCommonFrequencyThreshold;
 
 				// protected methods
 				protected:
@@ -74,6 +87,7 @@ namespace Konclude {
 				private:
 					CConcept* mTriggerConcept;
 					cint64 mTriggerComplexity;
+					cint64 mTriggerFrequency;
 
 				// private variables
 				private:
