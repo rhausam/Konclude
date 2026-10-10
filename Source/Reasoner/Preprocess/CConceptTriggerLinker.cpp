@@ -29,6 +29,7 @@ namespace Konclude {
 
 
 			CConceptTriggerLinker::CConceptTriggerLinker() : CSortedLinkerBase<CConceptTriggerLinker*,CConceptTriggerLinker>(this) {
+				mTriggerFrequency = UNKNOWN_TRIGGER_FREQUENCY;
 			}
 
 			CConceptTriggerLinker* CConceptTriggerLinker::initConceptTriggerLinker(CConcept* triggerConcept, cint64 triggerComplexity) {
@@ -50,7 +51,26 @@ namespace Konclude {
 				return this;
 			}
 
+			const cint64 CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
+			bool CConceptTriggerLinker::sFrequencyOrdered = true;
+
+			cint64 CConceptTriggerLinker::getTriggerFrequency() {
+				return mTriggerFrequency;
+			}
+
+			CConceptTriggerLinker* CConceptTriggerLinker::setTriggerFrequency(cint64 frequency) {
+				mTriggerFrequency = frequency;
+				return this;
+			}
+
 			bool CConceptTriggerLinker::operator<=(const CConceptTriggerLinker& conceptTriggerLinker) {
+				if (sFrequencyOrdered) {
+					if (mTriggerFrequency < conceptTriggerLinker.mTriggerFrequency) {
+						return true;
+					} else if (mTriggerFrequency > conceptTriggerLinker.mTriggerFrequency) {
+						return false;
+					}
+				}
 				if (mTriggerComplexity > conceptTriggerLinker.mTriggerComplexity) {
 					return true;
 				} else if (mTriggerComplexity < conceptTriggerLinker.mTriggerComplexity) {

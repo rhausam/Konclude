@@ -1312,6 +1312,63 @@ Konclude classification -i module.owl -o konclude-module.owl
 diff hermit.txt konclude.txt
 ```
 
+## THE ORDER OF A DEFINITION'S TRIGGERS
+
+The absorber turns a definition `C = A and B and some r.X and ...` into a chain of binary
+implications over triggers, one per conjunct, so that the saturation and the tableau derive
+`C` once a node carries all of them. The chain has an order, and the order decides how much
+work every node does: a node that carries the chain's first trigger is unfolded into the
+implication waiting for the second, whether or not it will ever carry the rest. Until #111
+the chain started with the most complex trigger, which for a nested role group is also the
+most specific one, and that served SNOMED CT well. It does not serve an ontology whose
+definitions share a few conjuncts. The SDD drug ontology (582 633 classes, 93 % of them
+defined, each with about twelve existential conjuncts) has four boolean flags such as
+`is inert = false` in over 70 % of its definitions; the absorber merged them into one
+trigger, and every node carrying the flags was unfolded into one implication per definition
+sharing them. The label of a class then holds one implication for every twelve definitions
+in the ontology, the saturation's memory grows with the square of the ontology, and three
+nested modules of 5, 10 and 20 % of SDD needed 4.4, 21 and 70 GiB, the full ontology 240 GB
+on the VM. The SNOMED drug model's data values (above) are the same mechanism on a smaller
+scale.
+
+Since #111 a chain starts with the rarest conjunct of its definition. A pass over the
+ontology counts in how many conjunctions each conjunct occurs (definitions, conjunctions and
+negated disjunctions, nested ones included); every trigger linker carries that count, a
+merged pair the smaller of its two, a partial trigger of a partially absorbable definition
+the count of its conjunct (it matches at least as many nodes), and the triggers of a filler
+the count of the conjunct they belong to. The chain is sorted by that count ascending, then
+by complexity as before; triggers without a count come last. A node is then unfolded into
+the chains of the few definitions sharing its rare conjuncts, and the common ones are checked
+last, where the chain has already narrowed to those definitions. The option
+`Konclude.Calculation.Preprocessing.FrequencyOrderedTriggerChains` (default true) switches
+back to the complexity order.
+
+Two defects surfaced on the way and are fixed with it. The absorber reuses a pair of
+triggers whose implication exists by assigning the stored linker over the current one, and
+the assignment copied the linker's data pointer, which the sorted insertion dereferences: a
+reused trigger was ordered by the stored linker's fields, not its own. And the merges change
+triggers after their insertion into the sorted list, so the list is sorted once more before
+the chain is built. Both held with the complexity order too, where they moved a few chains;
+with the frequency in the order they moved thousands.
+
+Measured on the Mac M3 with the command line (precomputation + classification, peak
+footprint), the hierarchies identical to master's in every run:
+
+| | master (#110) | rarest first |
+|---|---|---|
+| SDD 10 % module (60 427 classes) | 13.1 + 31.8 s, 21.0 GiB | 1.4 + 4.6 s, 3.7 GiB |
+| SDD 20 % module (118 353 classes) | 63.6 + 170.8 s, 69.7 GiB | 3.3 + 18.6 s, 7.0 GiB |
+| SNOMED CT AU | 16.9 + 3.4 s, 19.5 GiB | 13.9 + 3.2 s, 16.0 GiB |
+| SNOMED CT International | 3.7 + 3.5 s, 6.3 GiB | 3.6 + 3.6 s, 6.1 GiB |
+| 95k variant module | 6.7 + 273-285 s, 14.5 GiB | 8.6 + 269 s, 14.7 GiB |
+| full OWL 2 DL variant | 18.3 + 684-713 s, 35.1 GiB | 20.4 + 638 s, 27.0 GiB |
+
+An estimate of the number of nodes satisfying a conjunct from the told hierarchy (descendant
+counts, occurrences weighted by the defining class's descendants and summed over the filler's
+descendants) was built and measured against the plain count; it gave the same figures within
+noise and costs a pass of its own, so the count stayed. The measurements, the modules and the
+traces are in `~/Documents/konclude-benchmarks/2026-10-09-sdd-modules/`.
+
 ## ENTAILMENT CHECKING, INTERRUPTION AND PROGRESS
 
 The first two were the gaps between the wrapper and ELK 0.6.0 on the methods Protege calls, measured

@@ -935,6 +935,10 @@ namespace Konclude {
 						"Determines whether definitions (equivalent classes axioms) containing data literals are absorbed completely, with exact value triggers ranked below the class restrictions, instead of only into equivalence candidates. With it the saturation of SNOMED CT has no insufficient node and the classification needs no tableau test; the absorption itself costs a few seconds of preprocessing on the AU Edition (issue #90).",
 						new CBooleanConfigType(true)),
 						new CBooleanConfigType(true));
+				addConfigProperty(new CConfigDescription("Konclude.Calculation.Preprocessing.FrequencyOrderedTriggerChains",
+						"Determines whether the implication chain absorbed from a definition starts with the conjunct that occurs in the fewest conjunctions of the ontology, instead of with the most complex trigger. Keeps the saturation's memory linear for ontologies whose definitions share a few common conjuncts.",
+						new CBooleanConfigType(true)),
+						new CBooleanConfigType(true));
 
 
 				addConfigProperty(new CConfigDescription("Konclude.Calculation.Preprocessing.CoreConceptCyclesExtraction.SkipForELFragment",
