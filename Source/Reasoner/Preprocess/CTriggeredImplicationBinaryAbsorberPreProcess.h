@@ -332,6 +332,16 @@ namespace Konclude {
 					QHash<QPair<CConcept*,bool>,cint64> mConjunctFrequency;
 					cint64 mCurrentConjunctFrequency;
 					QHash<CConcept*,TOccuredAbsorbablePair> mFrequencyAbsorbabilityScratch;
+					//! experiment: node-frequency estimate from the told hierarchy (KONCLUDE_FREQ_NODE)
+					void estimateNodeFrequencies(cint64 conceptCount);
+					cint64 estimateConjunctNodeFrequency(CConcept* concept, bool negated, int depth);
+					cint64 toldDescendantCount(CConcept* classConcept);
+					cint64 existentialNodeFrequency(CRole* role, CConcept* filler);
+					QHash<CConcept*,QList<CConcept*> > mToldChildren;
+					QHash<CConcept*,cint64> mToldDescendantCount;
+					QHash<CRole*,QHash<CConcept*,cint64> > mExistentialWeight;
+					QHash<QPair<CRole*,CConcept*>,cint64> mExistentialEstimate;
+					cint64 mNodeFrequencyCap;
 
 					QHash<TConceptNegationPair, CConcept*> mBackPropActivationConHash;
 

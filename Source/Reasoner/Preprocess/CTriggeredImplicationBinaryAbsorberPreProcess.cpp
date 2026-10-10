@@ -22,6 +22,7 @@
 
 
 #include <cstdio>
+#include <cmath>
 namespace Konclude { namespace Reasoner { namespace Preprocess { class CConceptTriggerLinker; } } }
 namespace Konclude { namespace Reasoner { namespace Preprocess {
 	static FILE* absorbTraceFile() {
@@ -177,7 +178,9 @@ namespace Konclude {
 
 
 				mCurrentConjunctFrequency = CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
-				if (getenv("KONCLUDE_TRIGGER_FREQSORT")) {
+				if (getenv("KONCLUDE_TRIGGER_FREQSORT") && getenv("KONCLUDE_FREQ_NODE")) {
+					estimateNodeFrequencies(conceptCount);
+				} else if (getenv("KONCLUDE_TRIGGER_FREQSORT")) {
 					// in how many definitions does each top-level conjunct occur; the chains start with the rarest
 					for (cint64 conIdx = 0; conIdx < conceptCount; conIdx++) {
 						CConcept* concept = mConceptVec->getLocalData(conIdx);
@@ -1896,7 +1899,7 @@ namespace Konclude {
 					TConceptNegationPair conNegPair(*it);
 					CConcept* concept = conNegPair.first;
 					bool negated = conNegPair.second;
-					mCurrentConjunctFrequency = (!getenv("KONCLUDE_FREQ_NOPARTIAL") && isConceptImplicationTriggerable(concept, !negated, &mFrequencyAbsorbabilityScratch)) ? mConjunctFrequency.value(QPair<CConcept*,bool>(concept, !negated), CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
+					mCurrentConjunctFrequency = !getenv("KONCLUDE_FREQ_NOPARTIAL") ? mConjunctFrequency.value(QPair<CConcept*,bool>(concept, !negated), CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					CConceptTriggerLinker* tmpTriggers = copyTriggerLinkers(getPartialTriggersForConcept(concept,!negated));
 					mCurrentConjunctFrequency = CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					triggers = tmpTriggers->append(triggers);
@@ -1905,7 +1908,7 @@ namespace Konclude {
 					TConceptNegationPair conNegPair(*it);
 					CConcept* concept = conNegPair.first;
 					bool negated = conNegPair.second;
-					mCurrentConjunctFrequency = (!getenv("KONCLUDE_FREQ_NOPARTIAL") && isConceptImplicationTriggerable(concept, !negated, &mFrequencyAbsorbabilityScratch)) ? mConjunctFrequency.value(QPair<CConcept*,bool>(concept, !negated), CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
+					mCurrentConjunctFrequency = !getenv("KONCLUDE_FREQ_NOPARTIAL") ? mConjunctFrequency.value(QPair<CConcept*,bool>(concept, !negated), CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					CConceptTriggerLinker* tmpTriggers = copyTriggerLinkers(getPartialTriggersForConcept(concept,!negated));
 					mCurrentConjunctFrequency = CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					triggers = tmpTriggers->append(triggers);
@@ -3374,6 +3377,9 @@ namespace Konclude {
 							relTrigger->clearNext();
 							cint64 reusedTriggerFrequency = qMin(trigger->getTriggerFrequency(), relTrigger->getTriggerFrequency());
 							*trigger = *impliedConceptTrigger;
+							// the assignment copied the stored linker's data pointer: the sorted insert dereferences it,
+							// so the linker must point at itself again, or it is compared by the stored linker's fields
+							trigger->setData(trigger);
 							trigger->setTriggerFrequency(reusedTriggerFrequency);
 							if (lastTriggerIt) {
 								lastTriggerIt->setNext(triggerIt);
@@ -3447,6 +3453,28 @@ namespace Konclude {
 						}
 					}
 
+				}
+				// the merges above change triggers after their insertion, so the list is sorted once more
+				{
+					CConceptTriggerLinker* resorted = nullptr;
+					CConceptTriggerLinker* it = sortedTriggers;
+					while (it) {
+						CConceptTriggerLinker* next = it->getNext();
+						it->clearNext();
+						resorted = resorted ? resorted->insertNextSorted(it) : it;
+						it = next;
+					}
+					sortedTriggers = resorted;
+				}
+				if (absorbTraceFile()) {
+					static int reported = 0;
+					for (CConceptTriggerLinker* a = sortedTriggers; a && a->getNext() && reported < 5; a = a->getNext()) {
+						CConceptTriggerLinker* b = a->getNext();
+						if (!(*a <= *b) && (*b <= *a)) {
+							++reported;
+							fprintf(absorbTraceFile(), "VIOLATION a=%lld:%lld:%lld b=%lld:%lld:%lld a<=b=%d b<=a=%d threshold=%lld desc=%d\n", (long long)a->getTriggerConcept()->getConceptTag(), (long long)a->getTriggerComplexity(), (long long)a->getTriggerFrequency(), (long long)b->getTriggerConcept()->getConceptTag(), (long long)b->getTriggerComplexity(), (long long)b->getTriggerFrequency(), (int)(*a <= *b), (int)(*b <= *a), (long long)CConceptTriggerLinker::sCommonFrequencyThreshold, (int)CConceptTriggerLinker::sFrequencyDescending);
+						}
+					}
 				}
 				if (absorbTraceFile()) { fprintf(absorbTraceFile(), "SORTED"); for (CConceptTriggerLinker* it = sortedTriggers; it; it = it->getNext()) fprintf(absorbTraceFile(), " %lld:%lld:%lld", (long long)it->getTriggerConcept()->getConceptTag(), (long long)it->getTriggerComplexity(), (long long)it->getTriggerFrequency()); fprintf(absorbTraceFile(), "\n"); }
 				if (firstImplicationConcept) {
@@ -4251,7 +4279,7 @@ namespace Konclude {
 					TConceptNegationPair conNegPair(*it);
 					CConcept* concept = conNegPair.first;
 					bool negated = conNegPair.second;
-					mCurrentConjunctFrequency = (!getenv("KONCLUDE_FREQ_NOPARTIAL") && isConceptImplicationTriggerable(concept, !negated, &mFrequencyAbsorbabilityScratch)) ? mConjunctFrequency.value(QPair<CConcept*,bool>(concept, !negated), CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
+					mCurrentConjunctFrequency = !getenv("KONCLUDE_FREQ_NOPARTIAL") ? mConjunctFrequency.value(QPair<CConcept*,bool>(concept, !negated), CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					CConceptTriggerLinker* tmpTriggers = copyTriggerLinkers(getPartialTriggersForConcept(concept,!negated));
 					mCurrentConjunctFrequency = CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					triggers = tmpTriggers->append(triggers);
@@ -4270,7 +4298,7 @@ namespace Konclude {
 					TConceptNegationPair conNegPair(*it);
 					CConcept* concept = conNegPair.first;
 					bool negated = conNegPair.second;
-					mCurrentConjunctFrequency = (!getenv("KONCLUDE_FREQ_NOPARTIAL") && isConceptImplicationTriggerable(concept, !negated, &mFrequencyAbsorbabilityScratch)) ? mConjunctFrequency.value(QPair<CConcept*,bool>(concept, !negated), CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
+					mCurrentConjunctFrequency = !getenv("KONCLUDE_FREQ_NOPARTIAL") ? mConjunctFrequency.value(QPair<CConcept*,bool>(concept, !negated), CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					CConceptTriggerLinker* tmpTriggers = copyTriggerLinkers(getPartialTriggersForConcept(concept,!negated));
 					mCurrentConjunctFrequency = CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 					triggers = tmpTriggers->append(triggers);
@@ -4439,7 +4467,7 @@ namespace Konclude {
 							for (CSortedNegLinker<CConcept*>* opConLinkerIt = opConLinker; opConLinkerIt; opConLinkerIt = opConLinkerIt->getNext()) {
 								CConcept* opConcept = opConLinkerIt->getData();
 								bool opNegated = opConLinkerIt->isNegated()^negated;
-								mCurrentConjunctFrequency = (!getenv("KONCLUDE_FREQ_NOPARTIAL") && isConceptImplicationTriggerable(opConcept, opNegated, &mFrequencyAbsorbabilityScratch)) ? mConjunctFrequency.value(QPair<CConcept*,bool>(opConcept, opNegated), savedPartialConjunctFrequency) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
+								mCurrentConjunctFrequency = !getenv("KONCLUDE_FREQ_NOPARTIAL") ? mConjunctFrequency.value(QPair<CConcept*,bool>(opConcept, opNegated), savedPartialConjunctFrequency) : CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
 
 								if (mConceptPartialAbsorbableHash.value(TConceptNegationPair(opConcept,opNegated),false) || mConceptTotalAbsorbableHash.value(TConceptNegationPair(opConcept,opNegated),false)) {
 									CConceptTriggerLinker* newTriggers = copyTriggerLinkers(getPartialTriggersForConcept(opConcept,opNegated, backPropTriggerConcept));
@@ -5201,6 +5229,187 @@ namespace Konclude {
 			}
 
 
+
+
+			// ---- node-frequency estimate from the told hierarchy (experiment) ----
+			//
+			// A conjunct's textual count underestimates how many nodes satisfy its trigger: a definition is
+			// inherited by every told descendant of its class, and an existential with a general filler is
+			// satisfied through every more specific filler. The estimate of a named conjunct A is the number
+			// of told descendants of A plus one; that of an existential some r.F sums, over F and its told
+			// descendants F', the inheritance weight of every definition containing some r.F'; a conjunction
+			// filler takes the minimum of its existentials. Counts are with multiplicity (an upper bound on
+			// multiply inherited classes) and capped.
+
+			cint64 CTriggeredImplicationBinaryAbsorberPreProcess::toldDescendantCount(CConcept* classConcept) {
+				QHash<CConcept*,cint64>::const_iterator it = mToldDescendantCount.constFind(classConcept);
+				if (it != mToldDescendantCount.constEnd()) {
+					return it.value();
+				}
+				mToldDescendantCount.insert(classConcept, 0); // guards told cycles (equivalent classes)
+				cint64 count = 0;
+				const QList<CConcept*>& children = mToldChildren[classConcept];
+				for (QList<CConcept*>::const_iterator childIt = children.constBegin(); childIt != children.constEnd(); ++childIt) {
+					count += 1 + toldDescendantCount(*childIt);
+					if (count >= mNodeFrequencyCap) {
+						count = mNodeFrequencyCap;
+						break;
+					}
+				}
+				mToldDescendantCount.insert(classConcept, count);
+				return count;
+			}
+
+			cint64 CTriggeredImplicationBinaryAbsorberPreProcess::existentialNodeFrequency(CRole* role, CConcept* filler) {
+				QPair<CRole*,CConcept*> key(role, filler);
+				QHash<QPair<CRole*,CConcept*>,cint64>::const_iterator it = mExistentialEstimate.constFind(key);
+				if (it != mExistentialEstimate.constEnd()) {
+					return it.value();
+				}
+				const QHash<CConcept*,cint64>& weights = mExistentialWeight[role];
+				cint64 estimate = 0;
+				QList<CConcept*> stack; stack.append(filler);
+				QSet<CConcept*> visited; visited.insert(filler);
+				cint64 visits = 0;
+				while (!stack.isEmpty() && estimate < mNodeFrequencyCap && visits < 50 * mNodeFrequencyCap) {
+					CConcept* current = stack.takeLast();
+					++visits;
+					estimate += weights.value(current, 0);
+					const QList<CConcept*>& children = mToldChildren[current];
+					for (QList<CConcept*>::const_iterator childIt = children.constBegin(); childIt != children.constEnd(); ++childIt) {
+						if (!visited.contains(*childIt)) {
+							visited.insert(*childIt);
+							stack.append(*childIt);
+						}
+					}
+				}
+				if (!stack.isEmpty()) {
+					estimate = mNodeFrequencyCap;
+				}
+				estimate = qMin(estimate, mNodeFrequencyCap);
+				mExistentialEstimate.insert(key, estimate);
+				return estimate;
+			}
+
+			cint64 CTriggeredImplicationBinaryAbsorberPreProcess::estimateConjunctNodeFrequency(CConcept* concept, bool negated, int depth) {
+				cint64 opCode = concept->getOperatorCode();
+				if (negated) {
+					return CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
+				}
+				if (concept->hasClassName() && (opCode == CCATOM || opCode == CCSUB || opCode == CCEQ)) {
+					return 1 + toldDescendantCount(concept);
+				}
+				if (opCode == CCSOME && concept->getRole() && concept->getOperandList()) {
+					CConcept* filler = concept->getOperandList()->getData();
+					bool fillerNegated = concept->getOperandList()->isNegated();
+					if (fillerNegated) {
+						return CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
+					}
+					cint64 fillerOpCode = filler->getOperatorCode();
+					if (filler->hasClassName()) {
+						return existentialNodeFrequency(concept->getRole(), filler);
+					} else if ((fillerOpCode == CCAND || fillerOpCode == CCSOME) && depth < 3) {
+						// nodes with exactly this pattern (inherited weight) are a lower bound, nodes satisfying the
+						// rarest inner existential an upper bound; the geometric mean ranks between them
+						cint64 exact = mExistentialWeight[concept->getRole()].value(filler, 1);
+						cint64 minimum = CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
+						if (fillerOpCode == CCAND) {
+							for (CSortedNegLinker<CConcept*>* innerIt = filler->getOperandList(); innerIt; innerIt = innerIt->getNext()) {
+								minimum = qMin(minimum, estimateConjunctNodeFrequency(innerIt->getData(), innerIt->isNegated(), depth + 1));
+							}
+						} else {
+							minimum = estimateConjunctNodeFrequency(filler, false, depth + 1);
+						}
+						if (minimum == CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) {
+							return exact;
+						}
+						double mean = sqrt((double)qMax(exact, (cint64)1) * (double)qMax(minimum, (cint64)1));
+						return qMin((cint64)mean, mNodeFrequencyCap);
+					}
+				}
+				if (opCode == CCDATARESTRICTION || opCode == CCDATALITERAL || opCode == CCDATATYPE) {
+					// no hierarchy over values: the inheritance-weighted textual count collected for the concept itself
+					return mExistentialWeight[nullptr].value(concept, CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY);
+				}
+				return CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY;
+			}
+
+			void CTriggeredImplicationBinaryAbsorberPreProcess::estimateNodeFrequencies(cint64 conceptCount) {
+				mNodeFrequencyCap = 1 << 20;
+				mToldChildren.clear(); mToldDescendantCount.clear(); mExistentialWeight.clear(); mExistentialEstimate.clear();
+				// 1. told hierarchy: every named top-level conjunct of a class's definition or subclass axiom is a told parent
+				QList< QPair<CConcept*, QList< QPair<CConcept*,bool> > > > definitionConjuncts; // class -> its (nested) conjuncts
+				for (cint64 conIdx = 0; conIdx < conceptCount; conIdx++) {
+					CConcept* concept = mConceptVec->getLocalData(conIdx);
+					if (!concept || !concept->hasClassName()) {
+						continue;
+					}
+					cint64 opCode = concept->getOperatorCode();
+					if (opCode != CCSUB && opCode != CCEQ) {
+						continue;
+					}
+					QList< QPair<CConcept*,bool> > conjuncts;
+					QList< QPair<CConcept*,bool> > stack;
+					for (CSortedNegLinker<CConcept*>* opIt = concept->getOperandList(); opIt; opIt = opIt->getNext()) {
+						stack.append(QPair<CConcept*,bool>(opIt->getData(), opIt->isNegated()));
+					}
+					int expanded = 0;
+					while (!stack.isEmpty() && expanded < 10000) {
+						QPair<CConcept*,bool> item = stack.takeLast();
+						++expanded;
+						CConcept* op = item.first;
+						bool neg = item.second;
+						cint64 oc = op->getOperatorCode();
+						if (!neg && oc == CCAND) {
+							for (CSortedNegLinker<CConcept*>* innerIt = op->getOperandList(); innerIt; innerIt = innerIt->getNext()) {
+								stack.append(QPair<CConcept*,bool>(innerIt->getData(), innerIt->isNegated()));
+							}
+							continue;
+						}
+						conjuncts.append(item);
+						if (!neg && op->hasClassName() && op != concept) {
+							mToldChildren[op].append(concept);
+						}
+						if (!neg && oc == CCSOME && op->getOperandList()) {
+							// the existentials nested in a role group filler count as occurrences too
+							CConcept* filler = op->getOperandList()->getData();
+							if (!op->getOperandList()->isNegated() && (filler->getOperatorCode() == CCAND || filler->getOperatorCode() == CCSOME)) {
+								stack.append(QPair<CConcept*,bool>(filler, false));
+							}
+						}
+					}
+					definitionConjuncts.append(QPair<CConcept*, QList< QPair<CConcept*,bool> > >(concept, conjuncts));
+				}
+				// 2. inheritance weights of the existentials: every occurrence in the definition of D counts 1 + descendants(D)
+				for (QList< QPair<CConcept*, QList< QPair<CConcept*,bool> > > >::const_iterator defIt = definitionConjuncts.constBegin(); defIt != definitionConjuncts.constEnd(); ++defIt) {
+					cint64 weight = 1 + toldDescendantCount(defIt->first);
+					for (QList< QPair<CConcept*,bool> >::const_iterator conjIt = defIt->second.constBegin(); conjIt != defIt->second.constEnd(); ++conjIt) {
+						CConcept* op = conjIt->first;
+						if (conjIt->second) {
+							continue;
+						}
+						cint64 oc = op->getOperatorCode();
+						if (oc == CCSOME && op->getRole() && op->getOperandList() && !op->getOperandList()->isNegated()) {
+							mExistentialWeight[op->getRole()][op->getOperandList()->getData()] += weight;
+						} else if (oc == CCDATARESTRICTION || oc == CCDATALITERAL || oc == CCDATATYPE) {
+							mExistentialWeight[nullptr][op] += weight;
+						}
+					}
+				}
+				// 3. the estimate of every conjunct, keyed as the trigger builders look it up
+				for (QList< QPair<CConcept*, QList< QPair<CConcept*,bool> > > >::const_iterator defIt = definitionConjuncts.constBegin(); defIt != definitionConjuncts.constEnd(); ++defIt) {
+					for (QList< QPair<CConcept*,bool> >::const_iterator conjIt = defIt->second.constBegin(); conjIt != defIt->second.constEnd(); ++conjIt) {
+						QPair<CConcept*,bool> key(conjIt->first, conjIt->second);
+						if (!mConjunctFrequency.contains(key)) {
+							mConjunctFrequency.insert(key, estimateConjunctNodeFrequency(conjIt->first, conjIt->second, 0));
+						}
+					}
+				}
+				if (getenv("KONCLUDE_STATS")) {
+					cint64 known = 0; for (QHash<QPair<CConcept*,bool>,cint64>::const_iterator it = mConjunctFrequency.constBegin(); it != mConjunctFrequency.constEnd(); ++it) if (it.value() != CConceptTriggerLinker::UNKNOWN_TRIGGER_FREQUENCY) ++known;
+					fprintf(stderr, "NODEFREQ classes %d conjuncts %d estimated %lld existential keys %d\n", (int)definitionConjuncts.size(), (int)mConjunctFrequency.size(), (long long)known, (int)mExistentialEstimate.size());
+				}
+			}
 		}; // end namespace Preprocess
 
 	}; // end namespace Reasoner
