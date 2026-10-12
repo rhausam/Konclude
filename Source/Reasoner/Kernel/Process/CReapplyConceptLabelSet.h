@@ -35,6 +35,7 @@
 #include "CConceptLabelSetModificationTag.h"
 #include "CCoreConceptDescriptor.h"
 #include "CConceptSetStructure.h"
+#include "CReapplyConceptLabelHash.h"
 
 // Other includes
 
@@ -118,11 +119,23 @@ namespace Konclude {
 
 					// protected methods
 					protected:
+						//! The own hash, copied from the shared one on the first modification (copy on write, as the map did).
+						inline CReapplyConceptLabelHash* getWritableConceptDesDepHash() {
+							if (mConceptDesDepHashShared) {
+								detachConceptDesDepHash();
+							}
+							return mConceptDesDepHash;
+						}
+						void detachConceptDesDepHash();
 
 					// protected variables
 					protected:
-						CPROCESSMAP<cint64,CConceptDescriptorDependencyReapplyData> mConceptDesDepMap;
-						CPROCESSMAP<cint64,CConceptDescriptorDependencyReapplyData>* mAdditionalConceptDesDepMap;
+						CReapplyConceptLabelHash mOwnConceptDesDepHash;
+						//! &mOwnConceptDesDepHash, or the hash of the label set this one was initialised from while nothing was written
+						CReapplyConceptLabelHash* mConceptDesDepHash;
+						bool mConceptDesDepHashShared;
+						//! The larger, read-only part of the label when it was initialised from a big one; the own hash overrides it.
+						CReapplyConceptLabelHash* mAdditionalConceptDesDepHash;
 						CCoreConceptDescriptor* mCoreConDesLinker;
 						CConceptDescriptor* mConceptDesLinker;
 						CConceptDescriptor* mPrevConceptDesLinker;

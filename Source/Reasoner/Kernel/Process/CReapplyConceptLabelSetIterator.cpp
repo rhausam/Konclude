@@ -31,16 +31,69 @@ namespace Konclude {
 
 
 
-				CReapplyConceptLabelSetIterator::CReapplyConceptLabelSetIterator(cint64 conceptCount, CConceptDescriptor* conceptDesLinker, const CPROCESSMAP<cint64,CConceptDescriptorDependencyReapplyData>::const_iterator& beginIt, const CPROCESSMAP<cint64,CConceptDescriptorDependencyReapplyData>::const_iterator& endIt, const CPROCESSMAP<cint64,CConceptDescriptorDependencyReapplyData>::const_iterator& addBeginIt, const CPROCESSMAP<cint64,CConceptDescriptorDependencyReapplyData>::const_iterator& addEndIt, bool skipEmptyConceptDescriptors) 
-						: mConceptCount(conceptCount),mConceptDesLinkerIt(conceptDesLinker),mConDesDepBeginIt(beginIt),mConDesDepEndIt(endIt),mSkipEmptyConceptDescriptors(skipEmptyConceptDescriptors),mAdditionalConDesDepBeginIt(addBeginIt),mAdditionalConDesDepEndIt(addEndIt) {
+				CReapplyConceptLabelSetIterator::CReapplyConceptLabelSetIterator(cint64 conceptCount, CConceptDescriptor* conceptDesLinker, const CReapplyConceptLabelHash* conDesDepHash, const CReapplyConceptLabelHash* additionalConDesDepHash, bool skipEmptyConceptDescriptors) 
+						: mConceptCount(conceptCount),mConceptDesLinkerIt(conceptDesLinker),mConDesDepHash(conDesDepHash),mAdditionalConDesDepHash(additionalConDesDepHash),mSkipEmptyConceptDescriptors(skipEmptyConceptDescriptors) {
 
-					if (mSkipEmptyConceptDescriptors) {
-						while (mConDesDepBeginIt != mConDesDepEndIt && mConDesDepBeginIt.value().mConceptDescriptor == nullptr) {
-							++mConDesDepBeginIt;
+					mKeyIt = mKeyItEnd = nullptr;
+					mAddKeyIt = mAddKeyItEnd = nullptr;
+					mCurrentKey = -1;
+					mCurrentData = nullptr;
+					if (mConDesDepHash && mConDesDepHash->count() > 0) {
+						mKeyIt = mConDesDepHash->sortedKeys();
+						mKeyItEnd = mKeyIt + mConDesDepHash->count();
+					}
+					if (mAdditionalConDesDepHash && mAdditionalConDesDepHash->count() > 0) {
+						mAddKeyIt = mAdditionalConDesDepHash->sortedKeys();
+						mAddKeyItEnd = mAddKeyIt + mAdditionalConDesDepHash->count();
+					}
+					if (!mConceptDesLinkerIt) {
+						resolveCurrent();
+					}
+				}
+
+
+				void CReapplyConceptLabelSetIterator::advance() {
+					if (mKeyIt != mKeyItEnd && mAddKeyIt != mAddKeyItEnd) {
+						if (*mKeyIt == *mAddKeyIt) {
+							++mKeyIt;
+							++mAddKeyIt;
+						} else if (*mAddKeyIt < *mKeyIt) {
+							++mAddKeyIt;
+						} else {
+							++mKeyIt;
 						}
-						while (mAdditionalConDesDepBeginIt != mAdditionalConDesDepEndIt && mAdditionalConDesDepBeginIt.value().mConceptDescriptor == nullptr) {							
-							++mAdditionalConDesDepBeginIt;
+					} else if (mKeyIt != mKeyItEnd) {
+						++mKeyIt;
+					} else if (mAddKeyIt != mAddKeyItEnd) {
+						++mAddKeyIt;
+					}
+				}
+
+
+				void CReapplyConceptLabelSetIterator::resolveCurrent() {
+					for (;;) {
+						mCurrentData = nullptr;
+						if (mKeyIt != mKeyItEnd && (mAddKeyIt == mAddKeyItEnd || *mKeyIt <= *mAddKeyIt)) {
+							mCurrentKey = *mKeyIt;
+							mConDesDepHash->tryGetValuePointer(mCurrentKey,mCurrentData);
+							if (mSkipEmptyConceptDescriptors && mCurrentData && !mCurrentData->mConceptDescriptor && mAddKeyIt != mAddKeyItEnd && *mAddKeyIt == mCurrentKey) {
+								// the own entry only carries a reapplication queue, the shared one may carry the descriptor
+								CConceptDescriptorDependencyReapplyData* addData = nullptr;
+								if (mAdditionalConDesDepHash->tryGetValuePointer(mCurrentKey,addData) && addData->mConceptDescriptor) {
+									mCurrentData = addData;
+								}
+							}
+						} else if (mAddKeyIt != mAddKeyItEnd) {
+							mCurrentKey = *mAddKeyIt;
+							mAdditionalConDesDepHash->tryGetValuePointer(mCurrentKey,mCurrentData);
+						} else {
+							mCurrentKey = -1;
+							return;
 						}
+						if (mCurrentData && (!mSkipEmptyConceptDescriptors || mCurrentData->mConceptDescriptor)) {
+							return;
+						}
+						advance();
 					}
 				}
 
@@ -64,32 +117,10 @@ namespace Konclude {
 					if (mConceptDesLinkerIt) {
 						mConceptDesLinkerIt = mConceptDesLinkerIt->getNext();
 						--mConceptCount;
-					} else {
-						if (mConDesDepBeginIt != mConDesDepEndIt || mAdditionalConDesDepBeginIt != mAdditionalConDesDepEndIt) {
-							if (mConDesDepBeginIt != mConDesDepEndIt && mAdditionalConDesDepBeginIt != mAdditionalConDesDepEndIt) {
-								if (mAdditionalConDesDepBeginIt.key() == mConDesDepBeginIt.key()) {
-									++mAdditionalConDesDepBeginIt;
-									++mConDesDepBeginIt;
-								} else if (mAdditionalConDesDepBeginIt.key() < mConDesDepBeginIt.key()) { 
-									++mAdditionalConDesDepBeginIt;
-								} else {
-									++mConDesDepBeginIt;
-								}
-							} else if (mConDesDepBeginIt == mConDesDepEndIt) {
-								++mAdditionalConDesDepBeginIt;
-							} else {
-								++mConDesDepBeginIt;
-							}
-							if (mSkipEmptyConceptDescriptors) {
-								while (mConDesDepBeginIt != mConDesDepEndIt && mConDesDepBeginIt.value().mConceptDescriptor == nullptr) {
-									++mConDesDepBeginIt;
-								}
-								while (mAdditionalConDesDepBeginIt != mAdditionalConDesDepEndIt && mAdditionalConDesDepBeginIt.value().mConceptDescriptor == nullptr) {							
-									++mAdditionalConDesDepBeginIt;
-								}
-							}
-							--mConceptCount;
-						}
+					} else if (mCurrentData) {
+						advance();
+						resolveCurrent();
+						--mConceptCount;
 					}
 					return this;
 				}
@@ -98,17 +129,7 @@ namespace Konclude {
 					if (mConceptDesLinkerIt) {
 						return mConceptDesLinkerIt->getConceptTag();
 					} else {
-						if (mConDesDepBeginIt != mConDesDepEndIt && mAdditionalConDesDepBeginIt != mAdditionalConDesDepEndIt) {
-							if (mAdditionalConDesDepBeginIt.key() < mConDesDepBeginIt.key()) {
-								return mAdditionalConDesDepBeginIt.key();
-							} else {
-								return mConDesDepBeginIt.key();
-							}
-						} else if (mConDesDepBeginIt == mConDesDepEndIt) {
-							return mAdditionalConDesDepBeginIt.key();
-						} else {
-							return mConDesDepBeginIt.key();
-						}
+						return mCurrentKey;
 					}
 				}
 
@@ -116,19 +137,10 @@ namespace Konclude {
 				CConceptDescriptor* CReapplyConceptLabelSetIterator::getConceptDescriptor() {
 					if (mConceptDesLinkerIt) {
 						return mConceptDesLinkerIt;
-					} else {
-						if (mConDesDepBeginIt != mConDesDepEndIt && mAdditionalConDesDepBeginIt != mAdditionalConDesDepEndIt) {
-							if (mAdditionalConDesDepBeginIt.key() < mConDesDepBeginIt.key()) {
-								return mAdditionalConDesDepBeginIt.value().mConceptDescriptor;
-							} else {
-								return mConDesDepBeginIt.value().mConceptDescriptor;
-							}
-						} else if (mConDesDepBeginIt == mConDesDepEndIt) {
-							return mAdditionalConDesDepBeginIt.value().mConceptDescriptor;
-						} else {
-							return mConDesDepBeginIt.value().mConceptDescriptor;
-						}
+					} else if (mCurrentData) {
+						return mCurrentData->mConceptDescriptor;
 					}
+					return nullptr;
 				}
 
 				CDependencyTrackPoint* CReapplyConceptLabelSetIterator::getDependencyTrackPoint() {
@@ -147,19 +159,10 @@ namespace Konclude {
 				const CCondensedReapplyQueue *CReapplyConceptLabelSetIterator::getPosNegReapplyQueue() {
 					if (mConceptDesLinkerIt) {
 						return nullptr;
-					} else {
-						if (mConDesDepBeginIt != mConDesDepEndIt && mAdditionalConDesDepBeginIt != mAdditionalConDesDepEndIt) {
-							if (mAdditionalConDesDepBeginIt.key() < mConDesDepBeginIt.key()) {
-								return &mAdditionalConDesDepBeginIt.value().mPosNegReapplyQueue;
-							} else {
-								return &mConDesDepBeginIt.value().mPosNegReapplyQueue;
-							}
-						} else if (mConDesDepBeginIt == mConDesDepEndIt) {
-							return &mAdditionalConDesDepBeginIt.value().mPosNegReapplyQueue;
-						} else {
-							return &mConDesDepBeginIt.value().mPosNegReapplyQueue;
-						}
+					} else if (mCurrentData) {
+						return &mCurrentData->mPosNegReapplyQueue;
 					}
+					return nullptr;
 				}
 
 
@@ -172,19 +175,19 @@ namespace Konclude {
 				}
 
 				bool CReapplyConceptLabelSetIterator::hasValue() {
-					return mConceptDesLinkerIt || mConDesDepBeginIt != mConDesDepEndIt || mAdditionalConDesDepBeginIt != mAdditionalConDesDepEndIt;
+					return mConceptDesLinkerIt || mCurrentData;
 				}
 
 				bool CReapplyConceptLabelSetIterator::hasNext() {
-					return mConceptDesLinkerIt || mConDesDepBeginIt != mConDesDepEndIt || mAdditionalConDesDepBeginIt != mAdditionalConDesDepEndIt;
+					return mConceptDesLinkerIt || mCurrentData;
 				}
 
 				bool CReapplyConceptLabelSetIterator::operator!=(CReapplyConceptLabelSetIterator& iterator) {
-					return mConceptDesLinkerIt != iterator.mConceptDesLinkerIt || mConDesDepBeginIt != iterator.mConDesDepBeginIt || mAdditionalConDesDepBeginIt != iterator.mAdditionalConDesDepEndIt;
+					return !(*this == iterator);
 				}
 
 				bool CReapplyConceptLabelSetIterator::operator==(CReapplyConceptLabelSetIterator& iterator) {
-					return mConceptDesLinkerIt == iterator.mConceptDesLinkerIt && mConDesDepBeginIt == iterator.mConDesDepBeginIt && mAdditionalConDesDepBeginIt != iterator.mAdditionalConDesDepEndIt;
+					return mConceptDesLinkerIt == iterator.mConceptDesLinkerIt && mKeyIt == iterator.mKeyIt && mAddKeyIt == iterator.mAddKeyIt && mCurrentData == iterator.mCurrentData;
 				}
 
 			}; // end namespace Process

@@ -82,6 +82,12 @@ namespace Konclude {
 						inline void** getSaturationLabelHashFreeArrays();
 						const static int SATURATIONLABELHASHFREEARRAYCOUNT = 40;
 
+						//! The same for the tableau label hashes (CReapplyConceptLabelHash): one set of free lists for the
+						//! entry arrays and one for the sorted tag arrays, allocated on first use.
+						const static int TABLEAULABELHASHENTRYARRAYS = 0;
+						const static int TABLEAULABELHASHKEYARRAYS = 1;
+						inline void** getTableauLabelHashFreeArrays(int kind);
+
 
 
 					// protected methods
@@ -93,6 +99,7 @@ namespace Konclude {
 						CProcessTagger* mUsedProcessTagger;
 						CProcessingStatisticGathering* mUsedProcessStatGath;
 						void** mSaturationLabelHashFreeArrays;
+						void** mTableauLabelHashFreeArrays[2];
 
 
 					// private methods
@@ -124,6 +131,16 @@ namespace Konclude {
 						}
 					}
 					return mSaturationLabelHashFreeArrays;
+				}
+
+				void** CProcessContext::getTableauLabelHashFreeArrays(int kind) {
+					if (!mTableauLabelHashFreeArrays[kind]) {
+						mTableauLabelHashFreeArrays[kind] = CObjectAllocator<void*>::allocateArray(mUsedMemMan,SATURATIONLABELHASHFREEARRAYCOUNT);
+						for (int i = 0; i < SATURATIONLABELHASHFREEARRAYCOUNT; ++i) {
+							mTableauLabelHashFreeArrays[kind][i] = nullptr;
+						}
+					}
+					return mTableauLabelHashFreeArrays[kind];
 				}
 
 

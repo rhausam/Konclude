@@ -34,6 +34,8 @@ namespace Konclude {
 					mUsedProcessTagger = nullptr;
 					mUsedMemMan = nullptr;
 					mSaturationLabelHashFreeArrays = nullptr;
+					mTableauLabelHashFreeArrays[0] = nullptr;
+					mTableauLabelHashFreeArrays[1] = nullptr;
 				}
 
 

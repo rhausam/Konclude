@@ -27,6 +27,7 @@
 // Namespace includes
 #include "ProcessSettings.h"
 #include "CConceptDescriptorDependencyReapplyData.h"
+#include "CReapplyConceptLabelHash.h"
 
 // Other includes
 
@@ -55,8 +56,10 @@ namespace Konclude {
 				class CReapplyConceptLabelSetIterator {
 					// public methods
 					public:
-						//! Constructor
-						CReapplyConceptLabelSetIterator(cint64 conceptCount, CConceptDescriptor* conceptDesLinker, const CPROCESSMAP<cint64,CConceptDescriptorDependencyReapplyData>::const_iterator& beginIt, const CPROCESSMAP<cint64,CConceptDescriptorDependencyReapplyData>::const_iterator& endIt, const CPROCESSMAP<cint64,CConceptDescriptorDependencyReapplyData>::const_iterator& addBeginIt, const CPROCESSMAP<cint64,CConceptDescriptorDependencyReapplyData>::const_iterator& addEndIt, bool skipEmptyConceptDescriptors = true);
+						//! Constructor; without hashes it walks the concept descriptor linker (newest first), with the hashes it
+						//! walks the union of their tags in ascending order, the own hash's entry taking precedence over the
+						//! additional hash's one, skipping entries without concept descriptor unless skipEmptyConceptDescriptors is false.
+						CReapplyConceptLabelSetIterator(cint64 conceptCount, CConceptDescriptor* conceptDesLinker, const CReapplyConceptLabelHash* conDesDepHash, const CReapplyConceptLabelHash* additionalConDesDepHash, bool skipEmptyConceptDescriptors = true);
 
 						cint64 getRemainingConceptCount();
 
@@ -79,13 +82,21 @@ namespace Konclude {
 
 					// protected methods
 					protected:
+						//! Positions on the smallest remaining tag with an acceptable entry (skips the empty ones if required).
+						void resolveCurrent();
+						//! Advances past the current tag in the tag arrays.
+						void advance();
 
 					// protected variables
 					protected:
-						CPROCESSMAP<cint64,CConceptDescriptorDependencyReapplyData>::const_iterator mConDesDepBeginIt;
-						CPROCESSMAP<cint64,CConceptDescriptorDependencyReapplyData>::const_iterator mConDesDepEndIt;
-						CPROCESSMAP<cint64,CConceptDescriptorDependencyReapplyData>::const_iterator mAdditionalConDesDepBeginIt;
-						CPROCESSMAP<cint64,CConceptDescriptorDependencyReapplyData>::const_iterator mAdditionalConDesDepEndIt;
+						const cint64* mKeyIt;
+						const cint64* mKeyItEnd;
+						const cint64* mAddKeyIt;
+						const cint64* mAddKeyItEnd;
+						const CReapplyConceptLabelHash* mConDesDepHash;
+						const CReapplyConceptLabelHash* mAdditionalConDesDepHash;
+						cint64 mCurrentKey;
+						CConceptDescriptorDependencyReapplyData* mCurrentData;
 						CConceptDescriptor* mConceptDesLinkerIt;
 						cint64 mConceptCount;
 						bool mSkipEmptyConceptDescriptors;

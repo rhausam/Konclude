@@ -5200,6 +5200,7 @@
     <ClInclude Include="Source\Reasoner\Kernel\Process\CReapplyConceptLabelSetIterator.h" />
     <ClInclude Include="Source\Reasoner\Kernel\Process\CReapplyConceptSaturationLabelSet.h" />
     <ClInclude Include="Source\Reasoner\Kernel\Process\CReapplyConceptSaturationLabelHash.h" />
+    <ClInclude Include="Source\Reasoner\Kernel\Process\CReapplyConceptLabelHash.h" />
     <ClInclude Include="Source\Reasoner\Kernel\Process\CReapplyConceptSaturationLabelSetIterator.h" />
     <ClInclude Include="Source\Reasoner\Kernel\Process\CReapplyQueue.h" />
     <ClInclude Include="Source\Reasoner\Kernel\Process\CReapplyQueueIterator.h" />
