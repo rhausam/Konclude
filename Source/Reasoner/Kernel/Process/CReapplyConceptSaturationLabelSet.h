@@ -58,6 +58,13 @@ namespace Konclude {
 				 *		\brief		TODO
 				 *
 				 */
+				struct CSatinvLabelHashStats {
+					cint64 init; cint64 copyFlat; cint64 copyShared; cint64 mergeAdditionalBigger; cint64 mergeOwnBigger; cint64 mergeGrow;
+					cint64 growOwn[64]; cint64 growOwnMoved; cint64 growShared[64]; cint64 growSharedMoved;
+				};
+				extern CSatinvLabelHashStats satinvLabelHashStats;
+				extern bool satinvLabelHashOn;
+
 				class CReapplyConceptSaturationLabelSet {
 					// public methods
 					public:
@@ -114,6 +121,8 @@ namespace Konclude {
 						CConceptSetFlags* getConceptFlags();
 
 						bool areAllConceptsInAdditionalHash();
+						CReapplyConceptSaturationLabelHash* getSatinvOwnHash() { return mConceptDesDepHash; }
+						CReapplyConceptSaturationLabelHash* getSatinvAdditionalHash() { return mAdditionalConceptDesDepHash; }
 
 						CConceptSaturationDescriptor* getLastNominalIndependentConceptSaturationDescriptorLinker();
 						CReapplyConceptSaturationLabelSet* setLastNominalIndependentConceptSaturationDescriptorLinker(CConceptSaturationDescriptor* conSatDes);

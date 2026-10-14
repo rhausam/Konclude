@@ -19,6 +19,8 @@
  */
 
 #include "CReapplyConceptSaturationLabelSet.h"
+#include <cstdlib>
+#include <QHash>
 
 
 namespace Konclude {
@@ -28,6 +30,13 @@ namespace Konclude {
 		namespace Kernel {
 
 			namespace Process {
+
+				CSatinvLabelHashStats satinvLabelHashStats = {};
+				bool satinvLabelHashOn = getenv("KONCLUDE_SATINV") != nullptr;
+				struct CSatinvCopyRecord { cint64 parentCount; cint64 parentCapacity; bool parentShared; CReapplyConceptSaturationLabelSet* parent; cint64 seq; };
+				static cint64 satinvCopySeq = 0;
+				QHash<CReapplyConceptSaturationLabelSet*,CSatinvCopyRecord> satinvCopyRecords;
+				static inline int satinvBits(cint64 c) { int b = 0; for (; c > 1; c >>= 1) ++b; return b; }
 
 
 
@@ -39,6 +48,7 @@ namespace Konclude {
 					mConceptDesDepHash = nullptr;
 					mAdditionalConceptDesDepHash = nullptr;
 					mConceptSatDesLinker = nullptr;
+					++satinvLabelHashStats.init;
 					mConceptDesDepHash = CObjectParameterizingAllocator< CReapplyConceptSaturationLabelHash,CProcessContext* >::allocateAndConstructAndParameterize(mProcessContext->getUsedMemoryAllocationManager(),mProcessContext);
 					mConceptCount = 0;
 					mTotelCount = 0;
@@ -49,16 +59,21 @@ namespace Konclude {
 				}
 
 				CReapplyConceptSaturationLabelSet* CReapplyConceptSaturationLabelSet::copyReapplyConceptSaturationLabelSet(CReapplyConceptSaturationLabelSet* copyConceptSaturationLabelSet, bool tryFlatLabelCopy) {
+					if (satinvLabelHashOn) { CSatinvCopyRecord r; r.parentCount = copyConceptSaturationLabelSet->mConceptDesDepHash->count() + (copyConceptSaturationLabelSet->mAdditionalConceptDesDepHash ? copyConceptSaturationLabelSet->mAdditionalConceptDesDepHash->count() : 0); r.parentCapacity = copyConceptSaturationLabelSet->mConceptDesDepHash->capacity(); r.parentShared = copyConceptSaturationLabelSet->mAdditionalConceptDesDepHash != nullptr; r.parent = copyConceptSaturationLabelSet; r.seq = ++satinvCopySeq; satinvCopyRecords.insert(this,r); }
 					mConceptCount = copyConceptSaturationLabelSet->mConceptCount;
 					mTotelCount = copyConceptSaturationLabelSet->mTotelCount;
 					mConceptDesDepHash = CObjectParameterizingAllocator< CReapplyConceptSaturationLabelHash,CProcessContext* >::allocateAndConstructAndParameterize(mProcessContext->getUsedMemoryAllocationManager(),mProcessContext);
 					mConceptFlags = copyConceptSaturationLabelSet->mConceptFlags;
 					if (copyConceptSaturationLabelSet->mConceptDesDepHash->count() >= ADDITIONALCOPYSIZE || tryFlatLabelCopy && copyConceptSaturationLabelSet->mConceptDesDepHash->count() > 0) {
 
+						++satinvLabelHashStats.copyShared;
+						cint64 satinvCapB = 0;
 						CReapplyConceptSaturationLabelHash* tmpAdditionalConDesDepHash = CObjectParameterizingAllocator< CReapplyConceptSaturationLabelHash,CProcessContext* >::allocateAndConstructAndParameterize(mProcessContext->getUsedMemoryAllocationManager(),mProcessContext);
 						if (copyConceptSaturationLabelSet->mAdditionalConceptDesDepHash) {
 							if (copyConceptSaturationLabelSet->mAdditionalConceptDesDepHash->count() > copyConceptSaturationLabelSet->mConceptDesDepHash->count()) {
+								++satinvLabelHashStats.mergeAdditionalBigger;
 								tmpAdditionalConDesDepHash->copyFrom(*copyConceptSaturationLabelSet->mAdditionalConceptDesDepHash);
+								satinvCapB = tmpAdditionalConDesDepHash->capacity();
 
 								for (CReapplyConceptSaturationLabelHash::const_iterator it = copyConceptSaturationLabelSet->mConceptDesDepHash->constBegin(), itEnd = copyConceptSaturationLabelSet->mConceptDesDepHash->constEnd(); it != itEnd; ++it) {
 									cint64 conTag = it.key();
@@ -72,7 +87,9 @@ namespace Konclude {
 									}
 								}
 							} else {
+								++satinvLabelHashStats.mergeOwnBigger;
 								tmpAdditionalConDesDepHash->copyFrom(*copyConceptSaturationLabelSet->mConceptDesDepHash);
+								satinvCapB = tmpAdditionalConDesDepHash->capacity();
 
 								// the entries of the own hash were pulled from the shared hash when first touched and extended since
 								// (implications waiting on the trigger are prepended to the reapply list), so they supersede the shared
@@ -87,6 +104,7 @@ namespace Konclude {
 									}
 								}
 							}
+							satinvLabelHashStats.mergeGrow += satinvBits(tmpAdditionalConDesDepHash->capacity()) - satinvBits(satinvCapB);
 							copyConceptSaturationLabelSet->mAdditionalConceptDesDepHash = tmpAdditionalConDesDepHash;
 						} else {
 							copyConceptSaturationLabelSet->mAdditionalConceptDesDepHash = copyConceptSaturationLabelSet->mConceptDesDepHash;
@@ -95,6 +113,7 @@ namespace Konclude {
 						copyConceptSaturationLabelSet->mConceptDesDepHash = tmpNewConDesDepHash;
 					}
 
+					if (!copyConceptSaturationLabelSet->mAdditionalConceptDesDepHash) ++satinvLabelHashStats.copyFlat;
 					mConceptDesDepHash->copyFrom(*copyConceptSaturationLabelSet->mConceptDesDepHash);
 					mAdditionalConceptDesDepHash = copyConceptSaturationLabelSet->mAdditionalConceptDesDepHash;
 					mConceptSatDesLinker = copyConceptSaturationLabelSet->mConceptSatDesLinker;
@@ -243,7 +262,12 @@ namespace Konclude {
 
 				bool CReapplyConceptSaturationLabelSet::insertConceptReturnClashed(CConceptSaturationDescriptor* conSatDes, bool* newInsertion, CImplicationReapplyConceptSaturationDescriptor*** impReapplyConSatDesPtr) {
 					cint64 conTag = conSatDes->getConceptTag();
+					cint64 satinvCap = mConceptDesDepHash->capacity();
 					CConceptSaturationDescriptorReapplyData& conDesDepData = (*mConceptDesDepHash)[conTag];
+					if (satinvLabelHashOn && mConceptDesDepHash->capacity() != satinvCap) {
+						if (mAdditionalConceptDesDepHash) { ++satinvLabelHashStats.growShared[satinvBits(mConceptDesDepHash->capacity())]; satinvLabelHashStats.growSharedMoved += mConceptDesDepHash->count() - 1; }
+						else { ++satinvLabelHashStats.growOwn[satinvBits(mConceptDesDepHash->capacity())]; satinvLabelHashStats.growOwnMoved += mConceptDesDepHash->count() - 1; }
+					}
 					if (!conDesDepData.mConSatDes && !conDesDepData.mImpReapplyConSatDes && mAdditionalConceptDesDepHash) {
 						CConceptSaturationDescriptorReapplyData* prevConDesDepData = nullptr;
 						bool contained = mAdditionalConceptDesDepHash->tryGetValuePointer(conTag,prevConDesDepData);
@@ -281,7 +305,12 @@ namespace Konclude {
 
 
 				bool CReapplyConceptSaturationLabelSet::insertConceptReapplicationReturnTriggered(cint64 conTag, CImplicationReapplyConceptSaturationDescriptor* reapplyImpReapplyConSatDes, CConceptSaturationDescriptor** conSatDes) {
+					cint64 satinvCap = mConceptDesDepHash->capacity();
 					CConceptSaturationDescriptorReapplyData& conDesDepData = (*mConceptDesDepHash)[conTag];
+					if (satinvLabelHashOn && mConceptDesDepHash->capacity() != satinvCap) {
+						if (mAdditionalConceptDesDepHash) { ++satinvLabelHashStats.growShared[satinvBits(mConceptDesDepHash->capacity())]; satinvLabelHashStats.growSharedMoved += mConceptDesDepHash->count() - 1; }
+						else { ++satinvLabelHashStats.growOwn[satinvBits(mConceptDesDepHash->capacity())]; satinvLabelHashStats.growOwnMoved += mConceptDesDepHash->count() - 1; }
+					}
 					if (!conDesDepData.mConSatDes && !conDesDepData.mImpReapplyConSatDes && mAdditionalConceptDesDepHash) {
 						CConceptSaturationDescriptorReapplyData* prevConDesDepData = nullptr;
 						bool contained = mAdditionalConceptDesDepHash->tryGetValuePointer(conTag,prevConDesDepData);

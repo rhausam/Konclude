@@ -19,6 +19,10 @@
  */
 
 #include "CTotallyPrecomputationThread.h"
+#include <QHash>
+#include <QElapsedTimer>
+#include <cstdlib>
+#include <cstdio>
 
 
 
@@ -2222,6 +2226,41 @@ namespace Konclude {
 					}
 				}
 
+				if (getenv("KONCLUDE_SATINV")) {
+					// SATINV: dependency levels of the ordered saturation items (level = 1 + max level of the subsumer reference and the existential references)
+					QHash<CSaturationConceptDataItem*,cint64> levelHash;
+					QHash<cint64,cint64> levelCountHash;
+					cint64 itemCount = 0, existRefItemCount = 0, substituteCount = 0, copyCount = 0, multiPredCount = 0, backRefCount = 0, existRefCount = 0, maxLevel = 0, roleRangeItemCount = 0;
+					for (QList<CSaturationConceptDataItem*>::const_iterator it = orderedItemList->constBegin(), itEnd = orderedItemList->constEnd(); it != itEnd; ++it) {
+						CSaturationConceptDataItem* item = *it;
+						++itemCount;
+						cint64 level = 0;
+						CSaturationConceptDataItem* ref = item->getSpecialItemReference();
+						if (ref) {
+							if (levelHash.contains(ref)) level = qMax(level, levelHash.value(ref)); else ++backRefCount;
+							if (item->getSpecialReferenceMode() == CSaturationConceptDataItem::SATURATIONSUBSTITUTEMODE) ++substituteCount;
+							else if (item->getSpecialReferenceMode() == CSaturationConceptDataItem::SATURATIONCOPYMODE) ++copyCount;
+						}
+						QList<CSaturationConceptDataItem*>* existRefs = item->getExistReferenceConceptItemList();
+						if (existRefs && !existRefs->isEmpty()) {
+							++existRefItemCount;
+							for (QList<CSaturationConceptDataItem*>::const_iterator it2 = existRefs->constBegin(), it2End = existRefs->constEnd(); it2 != it2End; ++it2) {
+								++existRefCount;
+								if (levelHash.contains(*it2)) level = qMax(level, levelHash.value(*it2)); else ++backRefCount;
+							}
+						}
+						if (item->hasMultipleDirectPredecessorsItems()) ++multiPredCount;
+						if (item->getSaturationRoleRanges()) ++roleRangeItemCount;
+						level += 1;
+						levelHash.insert(item, level);
+						levelCountHash[level] += 1;
+						maxLevel = qMax(maxLevel, level);
+					}
+					QString hist;
+					for (cint64 l = 1; l <= maxLevel; ++l) hist += QString("%1:%2 ").arg(l).arg(levelCountHash.value(l, 0));
+					fprintf(stderr, "%s\n", qPrintable(QString("SATINV items %1, with existential refs %2 (refs %3), role-range items %4, substitute %5, copy %6, multiple direct predecessors %7, back references (cycles) %8, levels %9").arg(itemCount).arg(existRefItemCount).arg(existRefCount).arg(roleRangeItemCount).arg(substituteCount).arg(copyCount).arg(multiPredCount).arg(backRefCount).arg(maxLevel))); fflush(stderr);
+					fprintf(stderr, "%s\n", qPrintable(QString("SATINV items per level: %1").arg(hist))); fflush(stderr);
+				}
 				satCalculationJob = satCalculationJobGenerator.getApproximatedSaturationCalculationJob(0);
 
 

@@ -19,9 +19,19 @@
  */
 
 #include "CCalculationTableauApproximationSaturationTaskHandleAlgorithm.h"
+#include <QElapsedTimer>
+#include <QSet>
+#include <QMap>
+#include <QHash>
+#include <cstdlib>
+#include <cstdio>
 
 
 namespace Konclude {
+	namespace Reasoner { namespace Kernel { namespace Process {
+		struct CSatinvCopyRecord { cint64 parentCount; cint64 parentCapacity; bool parentShared; CReapplyConceptSaturationLabelSet* parent; cint64 seq; };
+		extern QHash<CReapplyConceptSaturationLabelSet*,CSatinvCopyRecord> satinvCopyRecords;
+	} } }
 
 	namespace Reasoner {
 
@@ -316,12 +326,17 @@ namespace Konclude {
 
 							bool wroteExtensionProcDebugString = false;
 
+							const bool satinv = getenv("KONCLUDE_SATINV") != nullptr;
+							QElapsedTimer satinvTimer; satinvTimer.start();
+							qint64 satinvNodeMs = 0, satinvExtMs = 0, satinvCritMs = 0, satinvLast = 0, satinvNodeProc = 0, satinvDisjProc = 0, satinvRounds = 0, satinvExtRounds = 0;
+							QSet<CIndividualSaturationProcessNode*> satinvNodes;
 							while (hasRemainingMergingCriticalExtensionProcessingNodes(mProcessingDataBox,calcAlgContext)) {
 
 								while (hasRemainingExtensionProcessingNodes(mProcessingDataBox,calcAlgContext)) {
 
 									while (hasRemainingProcessingNodes(mProcessingDataBox,calcAlgContext)) {
 
+										if (satinv) { ++satinvRounds; satinvLast = satinvTimer.elapsed(); }
 										while (mProcessingDataBox->hasIndividualSaturationProcessNodeLinker()) {
 											CIndividualSaturationProcessNodeLinker* indiProcessSaturationNodeLinker = mProcessingDataBox->takeIndividualSaturationProcessNodeLinker();
 											CIndividualSaturationProcessNode* indiProcSatNode = indiProcessSaturationNodeLinker->getData();
@@ -336,6 +351,7 @@ namespace Konclude {
 											lastindiProcSatNode = indiProcSatNode;
 											STATINC(INDIVIDUALNODESWITCHCOUNT,calcAlgContext);
 											++indiProcessedCount;
+											if (satinv) { ++satinvNodeProc; satinvNodes.insert(indiProcSatNode); }
 											KONCLUCE_TASK_ALGORITHM_SATURATION_SATURATION_MODEL_STRING_INSTRUCTION(mRuleBeginDebugIndiModelString = generateExtendedDebugIndiModelStringList(calcAlgContext));
 											if (individualNodeInitializing(indiProcSatNode,calcAlgContext)) {
 												CConceptSaturationProcessLinker* conceptSaturationProcessLinker = indiProcSatNode->takeConceptSaturationProcessLinker();
@@ -364,6 +380,7 @@ namespace Konclude {
 											lastindiProcSatNode = indiProcSatNode;
 											STATINC(INDIVIDUALNODESWITCHCOUNT,calcAlgContext);
 											++indiProcessedCount;
+											if (satinv) ++satinvDisjProc;
 											if (individualNodeInitializing(indiProcSatNode,calcAlgContext)) {
 												updateExtractDisjunctCommonConcept(indiProcSatNode,calcAlgContext);
 											}
@@ -382,7 +399,9 @@ namespace Konclude {
 									//	}
 									//}
 
+									if (satinv) { satinvNodeMs += satinvTimer.elapsed() - satinvLast; satinvLast = satinvTimer.elapsed(); ++satinvExtRounds; }
 									processNextSuccessorExtensions(calcAlgContext);
+									if (satinv) { satinvExtMs += satinvTimer.elapsed() - satinvLast; satinvLast = satinvTimer.elapsed(); }
 
 								}
 
@@ -398,6 +417,7 @@ namespace Konclude {
 								//	}
 								//}
 
+								if (satinv) satinvLast = satinvTimer.elapsed();
 								if (mConfCheckCriticalConcepts && hasNextCriticalConcepts(mCalcAlgContext)) {
 									while (hasNextCriticalConcepts(mCalcAlgContext)) {
 										checkNextCriticalConcepts(mCalcAlgContext);
@@ -417,6 +437,7 @@ namespace Konclude {
 								//	}
 								//}
 
+								if (satinv) { satinvCritMs += satinvTimer.elapsed() - satinvLast; satinvLast = satinvTimer.elapsed(); }
 								if (mProcessingDataBox->hasSaturationATMOSTMergingProcessLinker()) {
 									tryATMOSTConceptSuccessorMerging(calcAlgContext);
 								}
@@ -424,6 +445,65 @@ namespace Konclude {
 							}
 
 
+							if (satinv) {
+								fprintf(stderr, "%s\n", qPrintable(QString("SATINV saturation task: %1 ms total, node processing %2 ms in %3 rounds (%4 node processings of %5 distinct nodes, %6 disjunct extractions), successor extensions %7 ms in %8 rounds, critical concepts %9 ms").arg(satinvTimer.elapsed()).arg(satinvNodeMs).arg(satinvRounds).arg(satinvNodeProc).arg(satinvNodes.count()).arg(satinvDisjProc).arg(satinvExtMs).arg(satinvExtRounds).arg(satinvCritMs))); fflush(stderr);
+							}
+							if (satinv) {
+								QMap<cint64,cint64> ownCapCount, ownCapFill, sharedCapCount, sharedCapFill;
+								QSet<CReapplyConceptSaturationLabelHash*> sharedSeen;
+								cint64 nodesWithLabel = 0, ownBytes = 0, sharedBytes = 0, ownEmpty = 0, ownCount = 0, sharedCount = 0;
+								for (CIndividualSaturationProcessNode* n : satinvNodes) {
+									CReapplyConceptSaturationLabelSet* ls = n->getReapplyConceptSaturationLabelSet(false);
+									if (!ls) continue;
+									++nodesWithLabel;
+									CReapplyConceptSaturationLabelHash* own = ls->getSatinvOwnHash();
+									if (own) { ownCapCount[own->capacity()]++; ownCapFill[own->capacity()] += own->count(); ownBytes += own->capacity()*sizeof(CReapplyConceptSaturationLabelHash::Entry); ownCount += own->count(); if (own->count() == 0) ++ownEmpty; }
+									CReapplyConceptSaturationLabelHash* add = ls->getSatinvAdditionalHash();
+									if (add && !sharedSeen.contains(add)) { sharedSeen.insert(add); sharedCapCount[add->capacity()]++; sharedCapFill[add->capacity()] += add->count(); sharedBytes += add->capacity()*sizeof(CReapplyConceptSaturationLabelHash::Entry); sharedCount += add->count(); }
+								}
+								QString ownStr, sharedStr;
+								for (QMap<cint64,cint64>::const_iterator it = ownCapCount.constBegin(); it != ownCapCount.constEnd(); ++it) ownStr += QString(" %1:%2:%3").arg(it.key()).arg(it.value()).arg(ownCapFill[it.key()]/qMax<cint64>(1,it.value()));
+								for (QMap<cint64,cint64>::const_iterator it = sharedCapCount.constBegin(); it != sharedCapCount.constEnd(); ++it) sharedStr += QString(" %1:%2:%3").arg(it.key()).arg(it.value()).arg(sharedCapFill[it.key()]/qMax<cint64>(1,it.value()));
+								fprintf(stderr, "%s\n", qPrintable(QString("SATINV label hashes: %1 nodes with label; own hashes (capacity:count:meanfill)%2, %3 entries, %4 empty, %5 MB; shared hashes %6 distinct (capacity:count:meanfill)%7, %8 entries, %9 MB").arg(nodesWithLabel).arg(ownStr).arg(ownCount).arg(ownEmpty).arg(ownBytes/1048576).arg(sharedSeen.count()).arg(sharedStr).arg(sharedCount).arg(sharedBytes/1048576))); fflush(stderr);
+								{
+									auto bucket = [](cint64 v) -> int { if (v <= 0) return 0; if (v <= 8) return 1; if (v <= 32) return 2; if (v <= 128) return 3; if (v <= 512) return 4; return 5; };
+									const char* bnames[6] = { "<=0", "1-8", "9-32", "33-128", "129-512", ">512" };
+									cint64 flat = 0, flatGrowth[6] = {0,0,0,0,0,0}, flatParent[6] = {0,0,0,0,0,0}, flatDoublings[4] = {0,0,0,0}, flatGrowthSum = 0, flatParentSum = 0;
+									cint64 shared = 0, sharedOwn[6] = {0,0,0,0,0,0}, scratch = 0, scratchFinal[6] = {0,0,0,0,0,0}, scratchSum = 0;
+									for (CIndividualSaturationProcessNode* n : satinvNodes) {
+										CReapplyConceptSaturationLabelSet* ls = n->getReapplyConceptSaturationLabelSet(false);
+										if (!ls || !ls->getSatinvOwnHash()) continue;
+										cint64 ownC = ls->getSatinvOwnHash()->count(), ownCap = ls->getSatinvOwnHash()->capacity();
+										QHash<CReapplyConceptSaturationLabelSet*,CSatinvCopyRecord>::const_iterator it = satinvCopyRecords.constFind(ls);
+										if (it == satinvCopyRecords.constEnd()) { ++scratch; ++scratchFinal[bucket(ownC)]; scratchSum += ownC; continue; }
+										const CSatinvCopyRecord& r = it.value();
+										if (ls->getSatinvAdditionalHash()) { ++shared; ++sharedOwn[bucket(ownC)]; continue; }
+										++flat; ++flatGrowth[bucket(ownC - r.parentCount)]; ++flatParent[bucket(r.parentCount)]; flatGrowthSum += ownC - r.parentCount; flatParentSum += r.parentCount;
+										int d = 0; for (cint64 c = r.parentCapacity; c < ownCap && c > 0; c *= 2) ++d; if (r.parentCapacity == 0) d = 3; ++flatDoublings[qMin(d,3)];
+									}
+									QString s1, s2, s3, s4, s5;
+									for (int b = 0; b < 6; ++b) { s1 += QString(" %1:%2").arg(bnames[b]).arg(flatParent[b]); s2 += QString(" %1:%2").arg(bnames[b]).arg(flatGrowth[b]); s3 += QString(" %1:%2").arg(bnames[b]).arg(sharedOwn[b]); s4 += QString(" %1:%2").arg(bnames[b]).arg(scratchFinal[b]); }
+									for (int b = 0; b < 4; ++b) s5 += QString(" %1:%2").arg(b).arg(flatDoublings[b]);
+									fprintf(stderr, "%s\n", qPrintable(QString("SATINV copies: flat copies %1 (parent count at copy%2, mean %3; growth child-parent%4, mean %5; doublings after copy%6); shared copies %7 (own hash final count%8); scratch nodes %9 (final count%10, mean %11)").arg(flat).arg(s1).arg(flatParentSum/qMax<cint64>(1,flat)).arg(s2).arg(flatGrowthSum/qMax<cint64>(1,flat)).arg(s5).arg(shared).arg(s3).arg(scratch).arg(s4).arg(scratchSum/qMax<cint64>(1,scratch)))); fflush(stderr);
+								}
+								if (getenv("KONCLUDE_SATINV_DUMP")) {
+									FILE* df = fopen(getenv("KONCLUDE_SATINV_DUMP"), "w");
+									if (df) {
+										for (CIndividualSaturationProcessNode* n : satinvNodes) {
+											CReapplyConceptSaturationLabelSet* ls = n->getReapplyConceptSaturationLabelSet(false);
+											if (!ls || !ls->getSatinvOwnHash()) continue;
+											QHash<CReapplyConceptSaturationLabelSet*,CSatinvCopyRecord>::const_iterator it = satinvCopyRecords.constFind(ls);
+											if (it == satinvCopyRecords.constEnd()) { fprintf(df, "scratch\t%p\t0\t0\t0\t0\t%lld\t%lld\t%lld\n", (void*)ls, (long long)ls->getSatinvOwnHash()->count(), (long long)ls->getSatinvOwnHash()->capacity(), (long long)ls->getConceptCount()); continue; }
+											const CSatinvCopyRecord& r = it.value();
+											fprintf(df, "%s\t%p\t%p\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\n", ls->getSatinvAdditionalHash() ? "shared" : "flat", (void*)ls, (void*)r.parent, (long long)r.seq, (long long)r.parentCount, (long long)r.parentCapacity, (long long)ls->getSatinvOwnHash()->count(), (long long)ls->getSatinvOwnHash()->capacity(), (long long)ls->getConceptCount());
+										}
+										fclose(df);
+									}
+								}
+								QString gOwn, gShared;
+								for (int b = 0; b < 64; ++b) { if (satinvLabelHashStats.growOwn[b]) gOwn += QString(" %1:%2").arg((cint64)1 << b).arg(satinvLabelHashStats.growOwn[b]); if (satinvLabelHashStats.growShared[b]) gShared += QString(" %1:%2").arg((cint64)1 << b).arg(satinvLabelHashStats.growShared[b]); }
+								fprintf(stderr, "%s\n", qPrintable(QString("SATINV label hash growth: label sets init %1, flat copies %2, shared copies %3 (merges additional-bigger %4, own-bigger %5, %6 doublings during merges); growth events of own hashes without shared hash (new capacity:count)%7, %8 entries moved; of own hashes with shared hash%9, %10 entries moved").arg(satinvLabelHashStats.init).arg(satinvLabelHashStats.copyFlat).arg(satinvLabelHashStats.copyShared).arg(satinvLabelHashStats.mergeAdditionalBigger).arg(satinvLabelHashStats.mergeOwnBigger).arg(satinvLabelHashStats.mergeGrow).arg(gOwn).arg(satinvLabelHashStats.growOwnMoved).arg(gShared).arg(satinvLabelHashStats.growSharedMoved))); fflush(stderr);
+							}
 							completeSaturatedIndividualNodes(mProcessingDataBox,mCalcAlgContext);
 
 
