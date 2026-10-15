@@ -33,6 +33,17 @@ namespace Konclude {
 		extern QHash<CReapplyConceptSaturationLabelSet*,CSatinvCopyRecord> satinvCopyRecords;
 	} } }
 
+	static Reasoner::Kernel::Process::CIndividualSaturationProcessNode* satinvCurrentNode = nullptr;
+	static int satinvMode = 0; // 0 other, 1 back-propagation apply, 2 ALL rule push, 3 copy-dependent push
+	static const char* satinvModeNames[4] = { "other", "backprop", "ALLrule", "copydep" };
+	static const char* satinvStateNames[4] = { "self", "completed", "initialised", "uninitialised" };
+	static cint64 satinvProcFirst = 0, satinvProcRe = 0, satinvRulesFirst = 0, satinvRulesRe = 0;
+	static cint64 satinvCross[4][4]; static cint64 satinvQueue[4][4]; static cint64 satinvRequeueProcessed[4][4];
+	static cint64 satinvFlagWrites[4]; static cint64 satinvSucc[4]; static cint64 satinvInitLinks[4]; static cint64 satinvInstalls[4]; static cint64 satinvNonInv[4]; static cint64 satinvCopySrc[4];
+	static QHash<Reasoner::Kernel::Process::CIndividualSaturationProcessNode*,cint64> satinvProcCount;
+	static inline int satinvState(Reasoner::Kernel::Process::CIndividualSaturationProcessNode* n) { if (n == satinvCurrentNode) return 0; if (n->isCompleted()) return 1; if (n->isInitialized()) return 2; return 3; }
+	struct SatinvModeScope { int old; SatinvModeScope(int m) { old = satinvMode; satinvMode = m; } ~SatinvModeScope() { satinvMode = old; } };
+
 	namespace Reasoner {
 
 		namespace Kernel {
@@ -323,6 +334,7 @@ namespace Konclude {
 
 
 							continueNominalDelayedIndividualNodeProcessing(mProcessingDataBox,calcAlgContext);
+							if (satinvLabelHashOn) { cint64 qn = 0; for (CIndividualSaturationProcessNodeLinker* l = mProcessingDataBox->getIndividualSaturationProcessNodeLinker(); l; l = l->getNext()) ++qn; cint64 vn = mProcessingDataBox->getIndividualSaturationProcessNodeVector(false) ? mProcessingDataBox->getIndividualSaturationProcessNodeVector(false)->getItemCount() : -1; fprintf(stderr, "SATINV initial queue %lld linkers, node vector %lld\n", (long long)qn, (long long)vn); fflush(stderr); }
 
 							bool wroteExtensionProcDebugString = false;
 
@@ -349,6 +361,7 @@ namespace Konclude {
 											}
 
 											lastindiProcSatNode = indiProcSatNode;
+											satinvCurrentNode = indiProcSatNode; if (satinv) { if (satinvProcCount[indiProcSatNode]++ == 0) ++satinvProcFirst; else ++satinvProcRe; }
 											STATINC(INDIVIDUALNODESWITCHCOUNT,calcAlgContext);
 											++indiProcessedCount;
 											if (satinv) { ++satinvNodeProc; satinvNodes.insert(indiProcSatNode); }
@@ -358,6 +371,7 @@ namespace Konclude {
 												while (conceptSaturationProcessLinker) {
 													STATINC(RULEAPPLICATIONCOUNT,calcAlgContext);
 													KONCLUCE_TASK_ALGORITHM_SATURATION_SATURATION_MODEL_STRING_INSTRUCTION(mRuleBeginDebugIndiModelString = generateExtendedDebugIndiModelStringList(calcAlgContext));
+													if (satinv) { if (satinvProcCount.value(indiProcSatNode) <= 1) ++satinvRulesFirst; else ++satinvRulesRe; }
 													applyTableauSaturationRule(indiProcSatNode,conceptSaturationProcessLinker);
 													KONCLUCE_TASK_ALGORITHM_SATURATION_SATURATION_MODEL_STRING_INSTRUCTION(mRuleEndDebugIndiModelString = generateExtendedDebugIndiModelStringList(calcAlgContext));
 													releaseConceptSaturationProcessLinker(conceptSaturationProcessLinker,calcAlgContext);
@@ -378,6 +392,7 @@ namespace Konclude {
 											indiDisjCommonConExtProcessLinker->setProcessingQueued(false);
 											CIndividualSaturationProcessNode* indiProcSatNode = indiDisjCommonConExtProcessLinker->getData();
 											lastindiProcSatNode = indiProcSatNode;
+											satinvCurrentNode = indiProcSatNode; if (satinv) { if (satinvProcCount[indiProcSatNode]++ == 0) ++satinvProcFirst; else ++satinvProcRe; }
 											STATINC(INDIVIDUALNODESWITCHCOUNT,calcAlgContext);
 											++indiProcessedCount;
 											if (satinv) ++satinvDisjProc;
@@ -446,6 +461,12 @@ namespace Konclude {
 
 
 							if (satinv) {
+								{
+									QString c, q, rq, fw, su, il, ins, ni, cs;
+									for (int m = 0; m < 4; ++m) for (int st = 0; st < 4; ++st) { if (satinvCross[m][st]) c += QString(" %1/%2:%3").arg(satinvModeNames[m]).arg(satinvStateNames[st]).arg(satinvCross[m][st]); if (satinvQueue[m][st]) q += QString(" %1/%2:%3").arg(satinvModeNames[m]).arg(satinvStateNames[st]).arg(satinvQueue[m][st]); if (satinvRequeueProcessed[m][st]) rq += QString(" %1/%2:%3").arg(satinvModeNames[m]).arg(satinvStateNames[st]).arg(satinvRequeueProcessed[m][st]); }
+									for (int st = 0; st < 4; ++st) { fw += QString(" %1:%2").arg(satinvStateNames[st]).arg(satinvFlagWrites[st]); su += QString(" %1:%2").arg(satinvStateNames[st]).arg(satinvSucc[st]); il += QString(" %1:%2").arg(satinvStateNames[st]).arg(satinvInitLinks[st]); ins += QString(" %1:%2").arg(satinvStateNames[st]).arg(satinvInstalls[st]); ni += QString(" %1:%2").arg(satinvStateNames[st]).arg(satinvNonInv[st]); cs += QString(" %1:%2").arg(satinvStateNames[st]).arg(satinvCopySrc[st]); }
+									fprintf(stderr, "%s\n", qPrintable(QString("SATINV hazards: processings first %1, re %2; rule applications first %3, re %4; concept adds by mode/target state%5; queue events%6; of which re-queues of processed nodes%7; flag writes by target state%8; successor node state at SOME%9; initializing links%10; installed links%11; non-inverse linkers%12; copy source state%13").arg(satinvProcFirst).arg(satinvProcRe).arg(satinvRulesFirst).arg(satinvRulesRe).arg(c).arg(q).arg(rq).arg(fw).arg(su).arg(il).arg(ins).arg(ni).arg(cs))); fflush(stderr);
+								}
 								fprintf(stderr, "%s\n", qPrintable(QString("SATINV saturation task: %1 ms total, node processing %2 ms in %3 rounds (%4 node processings of %5 distinct nodes, %6 disjunct extractions), successor extensions %7 ms in %8 rounds, critical concepts %9 ms").arg(satinvTimer.elapsed()).arg(satinvNodeMs).arg(satinvRounds).arg(satinvNodeProc).arg(satinvNodes.count()).arg(satinvDisjProc).arg(satinvExtMs).arg(satinvExtRounds).arg(satinvCritMs))); fflush(stderr);
 							}
 							if (satinv) {
@@ -2103,6 +2124,7 @@ namespace Konclude {
 
 				void CCalculationTableauApproximationSaturationTaskHandleAlgorithm::initializeIndividualNodeByCoping(CIndividualSaturationProcessNode* indiProcSatNode, CIndividualSaturationProcessNode* copyFromIndiProcSatNode, bool tryFlatLabelCopy, CCalculationAlgorithmContextBase* calcAlgContext) {
 					++mCopiedIndiNodeCount;
+					if (satinvLabelHashOn) ++satinvCopySrc[satinvState(copyFromIndiProcSatNode)];
 					indiProcSatNode->initCopingIndividualSaturationProcessNode(copyFromIndiProcSatNode,tryFlatLabelCopy);
 					indiProcSatNode->setReferenceMode(2);
 					indiProcSatNode->setCopyIndividualNode(copyFromIndiProcSatNode);
@@ -6393,6 +6415,7 @@ namespace Konclude {
 				}
 
 				void CCalculationTableauApproximationSaturationTaskHandleAlgorithm::applyALLRule(CIndividualSaturationProcessNode*& processIndi, CConceptSaturationProcessLinker* conSatProLinker) {
+					SatinvModeScope satinvScope(2);
 					STATINC(ALLRULEAPPLICATIONCOUNT,mCalcAlgContext);
 					CConceptSaturationDescriptor* conDes = conSatProLinker->getConceptSaturationDescriptor();
 					bool conNegation = conDes->getNegation();
@@ -7239,6 +7262,7 @@ namespace Konclude {
 
 
 					KONCLUDE_ASSERT_X(existIndiNode,"SOME saturation rule","concept reference linked individual node missing");
+					if (satinvLabelHashOn && existIndiNode) ++satinvSucc[satinvState(existIndiNode)];
 					if (existIndiNode) {
 
 
@@ -7297,8 +7321,10 @@ namespace Konclude {
 										backPropLink = CObjectAllocator<CBackwardSaturationPropagationLink>::allocateAndConstruct(taskMemMan);
 										backPropLink->initBackwardPropagationLink(processIndi,superRole);
 										if (!existIndiInitialized) {
+											if (satinvLabelHashOn) ++satinvInitLinks[satinvState(existIndiNode)];
 											existIndiNode->addInitializingBackwardPropagationLinks(backPropLink);
 										} else {
+											if (satinvLabelHashOn) ++satinvInstalls[satinvState(existIndiNode)];
 											installBackwardPropagationLink(processIndi,existIndiNode,superRole,backPropLink,true,true,calcAlgContext);
 
 										}
@@ -7329,6 +7355,7 @@ namespace Konclude {
 							if (!connected && !separatedMode) {
 								CXLinker<CIndividualSaturationProcessNode*>* nonInvConnectedIndiNodeLinker = CObjectAllocator< CXLinker<CIndividualSaturationProcessNode*> >::allocateAndConstruct(taskMemMan);
 								nonInvConnectedIndiNodeLinker->initLinker(processIndi);
+								if (satinvLabelHashOn) ++satinvNonInv[satinvState(existIndiNode)];
 								existIndiNode->addNonInverseConnectedIndividualNodeLinker(nonInvConnectedIndiNodeLinker);
 							}
 						}
@@ -7337,6 +7364,7 @@ namespace Konclude {
 
 
 				void CCalculationTableauApproximationSaturationTaskHandleAlgorithm::applyBackwardPropagationConcepts(CIndividualSaturationProcessNode* sourceIndiNode, CBackwardSaturationPropagationReapplyDescriptor* backPropReapplyDesIt, CCalculationAlgorithmContextBase* calcAlgContext) {
+					SatinvModeScope satinvScope(1);
 					while (backPropReapplyDesIt) {
 						CConceptSaturationDescriptor* reapplyConSatDes = backPropReapplyDesIt->getReapplyConceptSaturationDescriptor();
 						CConcept* reapplyConcept = reapplyConSatDes->getConcept();
@@ -7357,6 +7385,7 @@ namespace Konclude {
 				void CCalculationTableauApproximationSaturationTaskHandleAlgorithm::addIndividualToProcessingQueue(CIndividualSaturationProcessNode*& processIndi, CCalculationAlgorithmContextBase* calcAlgContext) {
 					CIndividualSaturationProcessNodeLinker* processNodeLinker = processIndi->getIndividualSaturationProcessNodeLinker();
 					if (!processNodeLinker->isProcessingQueued()) {
+						if (satinvLabelHashOn) { int st = satinvState(processIndi); ++satinvQueue[satinvMode][st]; if (satinvProcCount.value(processIndi) > 0) ++satinvRequeueProcessed[satinvMode][st]; }
 						processNodeLinker->setProcessingQueued();
 						calcAlgContext->getUsedProcessingDataBox()->addIndividualSaturationProcessNodeLinker(processNodeLinker);
 					}
@@ -7465,6 +7494,7 @@ namespace Konclude {
 
 				void CCalculationTableauApproximationSaturationTaskHandleAlgorithm::addConceptToIndividual(CConcept* addingConcept, bool negate, CIndividualSaturationProcessNode*& rootProcessIndi, CReapplyConceptSaturationLabelSet* labelSet, bool updateCopyDependedIndividual, CCalculationAlgorithmContextBase* calcAlgContext) {
 					STATINC(CONCEPTSADDEDINDINODELABELSETCOUNT,calcAlgContext);
+					if (satinvLabelHashOn) ++satinvCross[satinvMode][satinvState(rootProcessIndi)];
 
 					KONCLUDE_ASSERT_X(addingConcept,"adding concept to individual","concept missing");
 
@@ -7505,7 +7535,7 @@ namespace Konclude {
 							CXNegLinker<CIndividualSaturationProcessNode*>* copyDepIndiLinkerIt = rootProcessIndi->getCopyDependingIndividualNodeLinker();
 							while (copyDepIndiLinkerIt) {
 								CIndividualSaturationProcessNode* copyDepIndiNode = copyDepIndiLinkerIt->getData();
-								addConceptToIndividual(addingConcept,negate,copyDepIndiNode,copyDepIndiNode->getReapplyConceptSaturationLabelSet(true),true,calcAlgContext);
+								{ SatinvModeScope satinvScope(3); addConceptToIndividual(addingConcept,negate,copyDepIndiNode,copyDepIndiNode->getReapplyConceptSaturationLabelSet(true),true,calcAlgContext); }
 								copyDepIndiLinkerIt = copyDepIndiLinkerIt->getNext();
 							}
 						}
@@ -7886,6 +7916,7 @@ namespace Konclude {
 						CIndividualSaturationProcessNodeStatusFlags* directIndiFlags = indiNode->getDirectStatusFlags();
 						directIndiFlags->addFlags(addingFlags);
 						++mDirectUpdatedStatusIndiNodeCount;
+						if (satinvLabelHashOn) ++satinvFlagWrites[satinvState(indiNode)];
 
 						while (directUpdateLinker) {
 							CIndividualSaturationProcessNodeStatusUpdateLinker* nextUpdateLinker = directUpdateLinker;
@@ -7900,6 +7931,7 @@ namespace Konclude {
 									CIndividualSaturationProcessNodeStatusFlags* directIndiFlags = dependingIndi->getDirectStatusFlags();
 									directIndiFlags->addFlags(addingFlags);
 									++mDirectUpdatedStatusIndiNodeCount;
+									if (satinvLabelHashOn) ++satinvFlagWrites[satinvState(dependingIndi)];
 									directUpdateLinker = createIndividualSaturationUpdateLinker(calcAlgContext)->initUpdateNodeLinker(dependingIndi)->append(directUpdateLinker);
 								}
 							}
@@ -7919,8 +7951,10 @@ namespace Konclude {
 							CIndividualSaturationProcessNodeStatusFlags* indirectIndiFlags = indiNode->getIndirectStatusFlags();
 							indirectIndiFlags->addFlags(addingFlags);
 							++mIndirectUpdatedStatusIndiNodeCount;
+							if (satinvLabelHashOn) ++satinvFlagWrites[satinvState(indiNode)];
 						}
 						++mDirectUpdatedStatusIndiNodeCount;
+						if (satinvLabelHashOn) ++satinvFlagWrites[satinvState(indiNode)];
 
 						if (!indiNode->isABoxIndividualRepresentationNode()) {
 							CRoleBackwardSaturationPropagationHash* backwardPropHash = indiNode->getRoleBackwardPropagationHash(false);
@@ -7954,6 +7988,7 @@ namespace Konclude {
 						CIndividualSaturationProcessNodeStatusFlags* indirectIndiFlags = indiNode->getIndirectStatusFlags();
 						indirectIndiFlags->addFlags(addingFlags);
 						++mIndirectUpdatedStatusIndiNodeCount;
+						if (satinvLabelHashOn) ++satinvFlagWrites[satinvState(indiNode)];
 
 						while (directUpdateLinker) {
 							CIndividualSaturationProcessNodeStatusUpdateLinker* nextUpdateLinker = directUpdateLinker;
@@ -7967,6 +8002,7 @@ namespace Konclude {
 									CIndividualSaturationProcessNodeStatusFlags* indirectIndiFlags = dependingIndi->getIndirectStatusFlags();
 									indirectIndiFlags->addFlags(addingFlags);
 									++mIndirectUpdatedStatusIndiNodeCount;
+									if (satinvLabelHashOn) ++satinvFlagWrites[satinvState(dependingIndi)];
 									directUpdateLinker = createIndividualSaturationUpdateLinker(calcAlgContext)->initUpdateNodeLinker(dependingIndi)->append(directUpdateLinker);
 								}
 							}
@@ -7984,6 +8020,7 @@ namespace Konclude {
 											CIndividualSaturationProcessNodeStatusFlags* indirectIndiFlags = sourceIndividual->getIndirectStatusFlags();
 											indirectIndiFlags->addFlags(addingFlags);
 											++mIndirectUpdatedStatusIndiNodeCount;
+											if (satinvLabelHashOn) ++satinvFlagWrites[satinvState(sourceIndividual)];
 											directUpdateLinker = createIndividualSaturationUpdateLinker(calcAlgContext)->initUpdateNodeLinker(sourceIndividual)->append(directUpdateLinker);
 										}
 									}
@@ -7998,6 +8035,7 @@ namespace Konclude {
 										CIndividualSaturationProcessNodeStatusFlags* indirectIndiFlags = sourceIndividual->getIndirectStatusFlags();
 										indirectIndiFlags->addFlags(addingFlags);
 										++mIndirectUpdatedStatusIndiNodeCount;
+										if (satinvLabelHashOn) ++satinvFlagWrites[satinvState(sourceIndividual)];
 										directUpdateLinker = createIndividualSaturationUpdateLinker(calcAlgContext)->initUpdateNodeLinker(sourceIndividual)->append(directUpdateLinker);
 									}
 								}
