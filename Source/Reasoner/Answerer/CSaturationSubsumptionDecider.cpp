@@ -371,7 +371,8 @@ namespace Konclude {
 						// successors of the query side's completed labels,
 						// -6515 onwards the exits of decideMergedFunctionalSuccessor(Links) in their order (-6528 what a merged
 						// successor carries back to the root, -6529 a scan handed to the closure for it), -6535 onwards those
-						// of completedLabelsSatisfyUniversal, -6540 onwards those of completedLabelSuccessorsSatisfyUniversal,
+						// of completedLabelsSatisfyUniversal, -6540 onwards those of completedLabelSuccessorsSatisfyUniversal
+						// (-6536 one of the label's existential restrictions' fillers without a saturation),
 						// and for the query side -4600 no node, -4700 unreliable, -4800 flags, -4900 data
 						// value or nominal, -5000 no label; for an existential restriction of the query -5600 no
 						// label, -5700 a successor with a range or a qualified or cardinality restriction,
@@ -1112,7 +1113,7 @@ namespace Konclude {
 							bool fillerNegated = opIt->isNegated() ^ entry.mNegated;
 							bool unsatisfiable = false;
 							CIndividualSaturationProcessNode* fillerNode = getSaturationNode(fillerConcept, &unsatisfiable, nullptr, fillerNegated);
-							if (!fillerNode || unsatisfiable || !isUsableSuccessorSaturation(fillerNode)) {
+							if (!fillerNode || unsatisfiable) {
 								// no saturation standing for the model's successor
 								mUndecidedMergeConceptCodeCounts[-13072] = mUndecidedMergeConceptCodeCounts.value(-13072, 0) + 1;
 								return false;

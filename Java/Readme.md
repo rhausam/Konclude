@@ -1750,11 +1750,12 @@ A completed label knew only the roles of its successors, so a universal restrict
 query that reached one of them, the remodelled SNOMED CT closures `only group (only r C)` in
 particular, sent the candidate to the tableau: about 5 100 tests and 12 to 14 s per selection
 of a defined class on the remodelled AU edition. The decider now reads the successors off the
-saturation of the candidate's class, which lists them even where it is unreliable for the class
-itself, provided that every existential restriction of the completed label is in the saturated
-label too, and settles the restriction where every successor under its role satisfies the
-filler: it is there, or it is a nested universal restriction over a role the successor has no
-successor under. Successors whose saturation is insufficient, has a nominal or an unresolved
+saturations of the fillers of the completed label's existential restrictions (not off the class's
+own saturation node, which lists no successors at all when the saturation gave up on it, so that a
+restriction would count as satisfied by nothing; the scenario's primitive P2 was lost that way by
+the first version), and settles the restriction where every such successor satisfies the filler:
+it is there, or it is a nested universal restriction over a role the successor has no successor
+under. Successors whose saturation is insufficient, has a nominal or an unresolved
 disjunction, roles with chains or transitivity, fillers that could add successors, and nested
 restrictions that lead back over an inverse role stay with the tableau. The same selections
 take 0.8 to 2.8 s, with no memory added; the OWL API scenario `completion-successors` holds the
