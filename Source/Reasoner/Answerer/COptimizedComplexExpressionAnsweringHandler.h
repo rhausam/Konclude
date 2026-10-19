@@ -831,6 +831,8 @@ namespace Konclude {
 					cint64 mConfLabelCompletionSampleSize;
 					cint64 mConfLabelCompletionMinimumDecisivePercent;
 					bool mConfLabelCompletionSuccessors;
+					bool mConfLabelCompletionFunctionalAtMost;
+					bool mConfLabelCompletionFunctionalSuccessors;
 					//! set once the completed labels decided too few candidates, the completion is not requested any more (issue #33)
 					bool mLabelCompletionStopped;
 					CSaturationSubsumptionDecider* mSaturationSubsumptionDecider;

@@ -1786,6 +1786,14 @@ namespace Konclude {
 						"Determines whether a universal restriction of a class expression query that reaches the successors of a sub class candidate whose label was completed is decided from the saturation of the candidate's class (the restriction is satisfied where its filler is at every successor under its role, or is a nested universal restriction over a role the successor has no successor under), instead of with a tableau test per candidate; see Konclude.Answering.SaturationBasedSubClassLabelCompletion.",
 						new CBooleanConfigType(true)),
 						new CBooleanConfigType(true));
+				addConfigProperty(new CConfigDescription("Konclude.Answering.SaturationBasedSubClassLabelCompletionFunctionalAtMost",
+						"Determines whether an at-most-one restriction over a functional role (the concept a functional property axiom becomes, present in the completed label of every class with a successor over the role) is merged like any other safe concept when a sub class candidate's completed label is checked against a class expression query, instead of leaving every such candidate to a tableau test; the merge still refuses two sides with successors over a functional role; see Konclude.Answering.SaturationBasedSubClassLabelCompletion.",
+						new CBooleanConfigType(true)),
+						new CBooleanConfigType(true));
+				addConfigProperty(new CConfigDescription("Konclude.Answering.SaturationBasedSubClassLabelCompletionFunctionalSuccessors",
+						"Determines whether the successor a sub class candidate's completed label and a class expression query both have over a functional role, which the tableau would merge, is decided from the saturations of its fillers (named classes from the existential restrictions over the role and the universal restrictions reaching them): a clash among them makes the candidate a sub class, a merge without one leaves it out, anything else goes to a tableau test; see Konclude.Answering.SaturationBasedSubClassLabelCompletion.",
+						new CBooleanConfigType(true)),
+						new CBooleanConfigType(true));
 				addConfigProperty(new CConfigDescription("Konclude.Answering.SaturationBasedSubClassLabelCompletionSampleSize",
 						"Number of decisions from completed labels after which the label completion is stopped for the rest of the reasoner's life if too few of them decided a sub class candidate, see Konclude.Answering.SaturationBasedSubClassLabelCompletionMinimumDecisivePercent. 0, the default, never stops it: a completed label is paid for once and used by every later query, so even a small share of decided candidates pays off over a session of queries, and stopping helps only a reasoner that answers a few queries, for which 2000 is a reasonable sample.",
 						new CIntegerConfigType(0)),

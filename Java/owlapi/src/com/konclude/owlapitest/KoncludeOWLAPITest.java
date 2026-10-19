@@ -1331,6 +1331,132 @@ public class KoncludeOWLAPITest {
 	}
 
 	/**
+	 * The at-most-one restriction over a functional role: a functional property axiom becomes one, and the
+	 * absorption lands it on every node with a successor over the role, so it is in the completed label of
+	 * every class with such a successor (the AMT packages of SNOMED CT AU, whose has product name, has
+	 * container type and pack size are functional). The decider takes it as safe when the labels of a
+	 * candidate and a query are merged, since each side's model satisfies it on its own, and relies on the
+	 * merge refusing two sides with successors over a functional role. Each corner is one where that
+	 * refusal has to hold: the functional role shared by both sides, a sub role of a functional role, a
+	 * self loop on a functional role meeting a successor, and a functional data property with two values.
+	 * The successor the two sides share over a functional role is then decided from the saturations of
+	 * its fillers where they are named classes: a clash among them (units that are disjoint) makes the
+	 * candidate a sub class, a merge without one leaves it out, and a negated filler or a universal
+	 * restriction of a filler that leads back to the root over the inverse of the link goes to the
+	 * tableau. The last query holds the mirror of the completion-successors scenario: a universal
+	 * restriction of the candidate reaching the successors of the query's completed label. The
+	 * candidates carry a disjunction so that their saturation is not trusted and their labels are
+	 * completed; the queries are the complements of defined classes, as Protege's Disjoint Classes display
+	 * asks them. Expected answers are the same on every path, so the scenario also runs with the decisions
+	 * switched off ('functional-atmost-plain').
+	 */
+	private static void runFunctionalAtMost() throws Exception {
+		OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
+		OWLOntology ontology = manager.createOntology(IRI.create(NS + "functional-atmost"));
+		OWLObjectProperty f = objectProperty("f");
+		OWLObjectProperty g = objectProperty("g");
+		OWLObjectProperty h = objectProperty("h");
+		OWLObjectProperty r = objectProperty("r");
+		OWLDataProperty d = dataProperty("d");
+		OWLClassExpression yOrZ = DF.getOWLObjectUnionOf(cls("Y"), cls("Z"));
+		manager.addAxioms(ontology, new HashSet<OWLAxiom>(Arrays.<OWLAxiom>asList(
+			DF.getOWLFunctionalObjectPropertyAxiom(f),
+			DF.getOWLFunctionalObjectPropertyAxiom(h),
+			DF.getOWLSubObjectPropertyOfAxiom(g, f),
+			DF.getOWLFunctionalDataPropertyAxiom(d),
+			DF.getOWLDisjointClassesAxiom(cls("B"), cls("C")),
+			DF.getOWLDisjointClassesAxiom(cls("B2"), cls("C")),
+			DF.getOWLDisjointClassesAxiom(cls("Base"), cls("C")),
+			DF.getOWLDisjointClassesAxiom(cls("U1"), cls("U2")),
+			// a U3 that is a B3 says 'no W' about the root: only the merge of a successor derives it
+			DF.getOWLSubClassOfAxiom(DF.getOWLObjectIntersectionOf(cls("U3"), cls("B3")),
+					DF.getOWLObjectAllValuesFrom(DF.getOWLObjectInverseOf(h), DF.getOWLObjectComplementOf(cls("W")))),
+			// A: a Y or a Z (the choice leaves the saturation unreliable) with an f successor in B
+			DF.getOWLEquivalentClassesAxiom(cls("A"), DF.getOWLObjectIntersectionOf(cls("Base"), yOrZ,
+					DF.getOWLObjectSomeValuesFrom(f, cls("B")))),
+			// A2: the successor is under g, a sub role of the functional f
+			DF.getOWLEquivalentClassesAxiom(cls("A2"), DF.getOWLObjectIntersectionOf(cls("Base"), yOrZ,
+					DF.getOWLObjectSomeValuesFrom(g, cls("B2")))),
+			// A3: the f successor is a B3, which nothing separates from C
+			DF.getOWLEquivalentClassesAxiom(cls("A3"), DF.getOWLObjectIntersectionOf(cls("Base"), yOrZ,
+					DF.getOWLObjectSomeValuesFrom(f, cls("B3")))),
+			// A4: the successor is under h, another functional role
+			DF.getOWLEquivalentClassesAxiom(cls("A4"), DF.getOWLObjectIntersectionOf(cls("Base"), yOrZ,
+					DF.getOWLObjectSomeValuesFrom(h, cls("B")))),
+			// A5: a value of the functional data property d
+			DF.getOWLEquivalentClassesAxiom(cls("A5"), DF.getOWLObjectIntersectionOf(cls("Base"), yOrZ,
+					DF.getOWLDataHasValue(d, DF.getOWLLiteral(1)))),
+			// S: a self loop under f
+			DF.getOWLEquivalentClassesAxiom(cls("S"), DF.getOWLObjectIntersectionOf(cls("Base"), yOrZ,
+					DF.getOWLObjectHasSelf(f))),
+			// A6: the h successor is a U1, disjoint from the U2 of D4
+			DF.getOWLEquivalentClassesAxiom(cls("A6"), DF.getOWLObjectIntersectionOf(cls("Base"), yOrZ,
+					DF.getOWLObjectSomeValuesFrom(h, cls("U1")))),
+			// A7: the h successor is a B and no U2, by a universal restriction with a negated filler
+			DF.getOWLEquivalentClassesAxiom(cls("A7"), DF.getOWLObjectIntersectionOf(cls("Base"), yOrZ,
+					DF.getOWLObjectSomeValuesFrom(h, cls("B")), DF.getOWLObjectAllValuesFrom(h, DF.getOWLObjectComplementOf(cls("U2"))))),
+			// A8: a W with an h successor in B3
+			DF.getOWLEquivalentClassesAxiom(cls("A8"), DF.getOWLObjectIntersectionOf(cls("Base"), yOrZ, cls("W"),
+					DF.getOWLObjectSomeValuesFrom(h, cls("B3")))),
+			// A9 and A10: a universal restriction over r, the plain role of D6's successor
+			DF.getOWLEquivalentClassesAxiom(cls("A9"), DF.getOWLObjectIntersectionOf(cls("Base"), yOrZ,
+					DF.getOWLObjectAllValuesFrom(r, DF.getOWLObjectComplementOf(cls("C"))))),
+			DF.getOWLEquivalentClassesAxiom(cls("A10"), DF.getOWLObjectIntersectionOf(cls("Base"), yOrZ,
+					DF.getOWLObjectAllValuesFrom(r, DF.getOWLObjectComplementOf(cls("B"))))),
+			// D: an f successor in C
+			DF.getOWLEquivalentClassesAxiom(cls("D"), DF.getOWLObjectSomeValuesFrom(f, cls("C"))),
+			// D2: another value of d
+			DF.getOWLEquivalentClassesAxiom(cls("D2"), DF.getOWLDataHasValue(d, DF.getOWLLiteral(2))),
+			// D3: an h successor in C, and neither a Y nor a Z
+			DF.getOWLEquivalentClassesAxiom(cls("D3"), DF.getOWLObjectIntersectionOf(
+					DF.getOWLObjectSomeValuesFrom(h, cls("C")),
+					DF.getOWLObjectComplementOf(cls("Y")), DF.getOWLObjectComplementOf(cls("Z")))),
+			// D4: an h successor in U2
+			DF.getOWLEquivalentClassesAxiom(cls("D4"), DF.getOWLObjectSomeValuesFrom(h, cls("U2"))),
+			// D5: an h successor in U3, which with a B3 says 'no W' about the root
+			DF.getOWLEquivalentClassesAxiom(cls("D5"), DF.getOWLObjectSomeValuesFrom(h, cls("U3"))),
+			// D6: a Y or a Z (so that its label is completed) with an r successor in C
+			DF.getOWLEquivalentClassesAxiom(cls("D6"), DF.getOWLObjectIntersectionOf(yOrZ,
+					DF.getOWLObjectSomeValuesFrom(r, cls("C"))))
+		)));
+		OWLReasoner reasoner = reasonerFor(ontology);
+		try {
+			check("satisfiable(A) .. (A10), (S)         ", Boolean.valueOf(reasoner.isSatisfiable(cls("A"))
+					&& reasoner.isSatisfiable(cls("A2")) && reasoner.isSatisfiable(cls("A3")) && reasoner.isSatisfiable(cls("A4"))
+					&& reasoner.isSatisfiable(cls("A5")) && reasoner.isSatisfiable(cls("A6")) && reasoner.isSatisfiable(cls("A7"))
+					&& reasoner.isSatisfiable(cls("A8")) && reasoner.isSatisfiable(cls("A9")) && reasoner.isSatisfiable(cls("A10"))
+					&& reasoner.isSatisfiable(cls("S"))), Boolean.TRUE);
+			// A is: its B and the query's C would be the one f successor; A2 is: its g successor is an f
+			// successor too; S is: the loop makes the root the C, and a Base is no C. A3 (B3 and C go
+			// together), A4 (another role) and A5 (no f successor) are not
+			check("subClasses(not D, true)        ", names(reasoner.getSubClasses(DF.getOWLObjectComplementOf(cls("D")), true)),
+					expected("A", "A2", "S"));
+			// A5 is: d has one value
+			check("subClasses(not D2, true)       ", names(reasoner.getSubClasses(DF.getOWLObjectComplementOf(cls("D2")), true)),
+					expected("A5"));
+			// every candidate is a Y or a Z (A7 below A4), and so are Y, Z and D6; the label of a candidate
+			// holds the disjunct its model chose, which proves nothing
+			check("subClasses(not D3, true)       ", names(reasoner.getSubClasses(DF.getOWLObjectComplementOf(cls("D3")), true)),
+					expected("A", "A2", "A3", "A4", "A5", "A6", "A8", "A9", "A10", "S", "Y", "Z", "D6"));
+			// the merged h successor: A6 is (U1 and U2 clash), A7 is (B, U2 and 'no U2' clash, through the
+			// negated filler the tableau gets); A4 (B and U2) and A8 (B3 and U2) are not
+			check("subClasses(not D4, true)       ", names(reasoner.getSubClasses(DF.getOWLObjectComplementOf(cls("D4")), true)),
+					expected("A6", "A7"));
+			// A8 is: U3 and B3 at the merged successor say 'no W' about the root, which is a W; A4, A6 and
+			// A7 are not (the saturations of B and U3 merge without a clash, and the restriction leading
+			// back to the root is the tableau's)
+			check("subClasses(not D5, true)       ", names(reasoner.getSubClasses(DF.getOWLObjectComplementOf(cls("D5")), true)),
+					expected("A8"));
+			// the mirror: A9 is, its 'no C' reaches the C successor of D6 (and D3 is, neither a Y nor a Z);
+			// A10 is not, the C is no B already
+			check("subClasses(not D6, true)       ", names(reasoner.getSubClasses(DF.getOWLObjectComplementOf(cls("D6")), true)),
+					expected("A9", "D3"));
+		} finally {
+			reasoner.dispose();
+		}
+	}
+
+	/**
 	 * The time out of the OWL API, which reports a call that does not come back instead of
 	 * blocking the caller for ever. A time out of one millisecond is used so that the
 	 * initialisation of the library instance already overruns it, since there is no longer a
@@ -1413,6 +1539,13 @@ public class KoncludeOWLAPITest {
 			sLoadingConfiguration = KoncludeReasoner.DEFAULT_LOADING_CONFIGURATION
 					+ "+=Konclude.Answering.SaturationBasedSubClassLabelCompletionSuccessors=false ";
 			runCompletionSuccessors();
+		} else if ("functional-atmost".equals(scenario)) {
+			runFunctionalAtMost();
+		} else if ("functional-atmost-plain".equals(scenario)) {
+			sLoadingConfiguration = KoncludeReasoner.DEFAULT_LOADING_CONFIGURATION
+					+ "+=Konclude.Answering.SaturationBasedSubClassLabelCompletionFunctionalAtMost=false "
+					+ "+=Konclude.Answering.SaturationBasedSubClassLabelCompletionFunctionalSuccessors=false ";
+			runFunctionalAtMost();
 		} else if ("timeout".equals(scenario)) {
 			runTimeout();
 		} else if ("entailment".equals(scenario)) {

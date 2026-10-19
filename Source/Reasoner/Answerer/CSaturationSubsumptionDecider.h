@@ -132,6 +132,10 @@ namespace Konclude {
 					bool hasCompletedLabel(CConcept* concept);
 					//! whether a universal restriction of a query that reaches the successors of a completed label is decided from the saturation of the label's existential restrictions (Konclude.Answering.SaturationBasedSubClassLabelCompletionSuccessors)
 					void setCompletedSuccessorDecision(bool enabled);
+					//! whether an at-most-one restriction over a functional role may be merged like any safe concept, see getLabelConceptKind
+					void setFunctionalAtMostSafe(bool enabled);
+					//! whether the successor two sides share over a functional role is decided from the saturations of its fillers, see decideMergedFunctionalSuccessor
+					void setFunctionalSuccessorMerge(bool enabled);
 
 					cint64 getSubsumedCount();
 					cint64 getNotSubsumedCount();
@@ -186,6 +190,17 @@ namespace Konclude {
 					//! what a concept of a saturated label can do when the label is merged with another one
 					LabelConceptKind getLabelConceptKind(CConcept* concept, bool negated);
 					//! a universal restriction of the merged label, with the part it came from, null if derived
+					class CCompletedLabel;
+
+					//! an existential restriction of a completed label merged into a state, kept for the merged successors over functional roles
+					class CMergeExistential {
+						public:
+							CMergeExistential(CConcept* concept = nullptr, bool negated = false, bool deterministic = false) : mConcept(concept), mNegated(negated), mDeterministic(deterministic) {}
+							CConcept* mConcept;
+							bool mNegated;
+							bool mDeterministic;
+					};
+
 					class CMergeUniversal {
 						public:
 							CMergeUniversal(CConcept* concept = nullptr, bool negated = false, CIndividualSaturationProcessNode* sourceNode = nullptr) : mConcept(concept), mNegated(negated), mSourceNode(sourceNode) {}
@@ -231,12 +246,16 @@ namespace Konclude {
 							//! whether a part from a completed label has a successor whose role, or a super role of it, has the tag
 							bool hasCompletedSuccessorRoleTag(cint64 roleTag) const { return mCompletedSuccessorRoleTagSet.contains(roleTag) || (mBase && mBase->hasCompletedSuccessorRoleTag(roleTag)); }
 							bool hasDataRoleTag(cint64 roleTag) const { return mDataRoleTagSet.contains(roleTag) || (mBase && mBase->hasDataRoleTag(roleTag)); }
+							//! whether a part has a self loop on the role with the tag, or on a sub role of it
+							bool hasSelfRoleTag(cint64 roleTag) const { return mSelfRoleTagSet.contains(roleTag) || (mBase && mBase->hasSelfRoleTag(roleTag)); }
 							const CMergeState* mBase;
 							QSet<CConcept*> mPositiveSet;
 							QSet<CConcept*> mNegativeSet;
 							QList<CConcept*> mImplicationList;
 							QList<CMergeUniversal> mUniversalList;
 							QSet<CConcept*> mSelfConceptSet;
+							//! the roles of the self loops of the parts, with their super roles
+							QSet<cint64> mSelfRoleTagSet;
 							QSet<CRole*> mSuccessorRoleSet;
 							QSet<CRole*> mDerivedSuccessorRoleSet;
 							//! for a base: the implications that wait for a trigger the base lacks, by that trigger
@@ -259,6 +278,10 @@ namespace Konclude {
 							QSet<cint64> mCompletedSuccessorRoleTagSet;
 							//! the data roles with successors, of every part
 							QSet<cint64> mDataRoleTagSet;
+							//! the existential and at-least restrictions of the parts that came from completed labels
+							QList<CMergeExistential> mExistentialList;
+							//! the completed labels the parts came from
+							QList<CCompletedLabel*> mCompletedLabelList;
 					};
 
 					//! the completed label of a class, see setCompletedLabel
@@ -293,6 +316,25 @@ namespace Konclude {
 					bool closeMergeStateWithCandidates(CMergeState& state);
 					//! the shared side of a conjunction of named classes, null if it cannot be decided
 					const CMergeState* getConjunctionMergeBase(const QList<CConcept*>& conjuncts);
+					//! builds the merge of the named conjuncts into the state, false if it cannot be decided
+					bool fillConjunctionMergeBase(CMergeState* base, const QList<CConcept*>& conjuncts);
+					//! the functional roles over which the label and the base both have successors (or a self loop), decided from the merged successors where possible
+					Verdict decideSuccessorRoleConflicts(CCompletedLabel* label, const CMergeState* other, bool nondeterministic, QList<QPair<CConcept*,bool> >& backPropagated);
+					//! the successor the label and the base share over a functional role: SUBSUMED if its merged label clashes, NOT_SUBSUMED if it is satisfiable, UNDECIDED otherwise
+					Verdict decideMergedFunctionalSuccessor(CCompletedLabel* label, const CMergeState* other, CRole* functionalRole, QList<QPair<CConcept*,bool> >& backPropagated);
+					//! the same for the links of one side given as (role, named filler or nullptr for top) pairs with the side's universal restrictions
+					//! backPropagated receives the operands the merged successor's universal restrictions over the inverse of a link carry to the root
+					Verdict decideMergedFunctionalSuccessorLinks(const QList<QPair<CRole*,CConcept*> >& links, const QList<QPair<CConcept*,bool> >& sideUniversals, const CMergeState* other, CRole* functionalRole, QList<QPair<CConcept*,bool> >& backPropagated);
+					//! the links an existential restriction over the functional role or a sub role of it contributes; false if it is one the merge cannot take
+					bool collectRestrictionLinks(CConcept* concept, bool negated, CRole* functionalRole, QList<QPair<CRole*,CConcept*> >& links);
+					//! the links of a saturation node's successors over the functional role or a sub role of it; false if one of them is not a named class
+					bool collectNodeFunctionalLinks(CIndividualSaturationProcessNode* repNode, CRole* functionalRole, QList<QPair<CRole*,CConcept*> >& links);
+					//! the functional roles over which a saturation node and a state both have successors, decided from the merged successors where possible
+					Verdict decideNodeSuccessorRoleConflicts(CIndividualSaturationProcessNode* repNode, const QList<CRole*>& conflictRoleList, const QList<QPair<CConcept*,bool> >& nodeUniversals, const CMergeState* other, bool nondeterministic, QList<QPair<CConcept*,bool> >& backPropagated);
+					//! whether every completed label merged into the state (and its base chain, if asked) with successors under the role satisfies the universal restriction at them, see completedLabelSuccessorsSatisfyUniversal
+					bool completedLabelsSatisfyUniversal(const CMergeState* holder, bool withBase, const QList<QPair<CConcept*,bool> >& allUniversals, CRole* role, CConcept* universalConcept, bool negated);
+					//! the universal restrictions of a state, and of its base chain if asked
+					void collectUniversals(const CMergeState* state, bool withBase, QList<QPair<CConcept*,bool> >& universals);
 					//! decides the merge of the node with the base by scanning the node's label only, FALLBACK if an implication would fire
 					enum FastVerdict { FAST_SUBSUMED, FAST_NOT_SUBSUMED, FAST_UNDECIDED, FAST_FALLBACK };
 					FastVerdict decideConjunctionSatisfiableFast(CIndividualSaturationProcessNode* baseNode, const CMergeState* base);
@@ -331,6 +373,12 @@ namespace Konclude {
 					Verdict decideNamedSubsumptionFromHierarchy(CConcept* subClassConcept, CConcept* superClassConcept);
 					//! whether a role of the existential restrictions is functional while a part has a successor under it, or a data role that a part has too
 					bool hasSuccessorRoleConflict(const QList<CRole*>& successorRoleList, const QSet<cint64>& dataRoleTagSet, const CMergeState& state);
+					//! an at-most-one restriction over a functional role with the top filler, the concept a functional property axiom becomes
+					bool isFunctionalAtMostOne(CConcept* concept);
+					//! whether a self loop on a functional role, or on a sub role of one, meets a successor of the state over that role
+					bool hasFunctionalSelfLoopConflict(CConcept* selfConcept, const CMergeState& state);
+					//! records a self loop of a part, false when it conflicts with a successor over a functional role
+					bool addSelfLoop(CMergeState& state, CConcept* concept);
 					//! whether a self restriction makes a node its own successor under the role
 					bool isSelfLoopOnRole(CConcept* selfConcept, CRole* role);
 					//! whether the node has an active successor under the role whose label lacks the concept
@@ -338,7 +386,7 @@ namespace Konclude {
 					//! whether a successor's saturated label holds the concept, or the concept would add nothing at it (a conjunction of held concepts, a disjunction with a held disjunct, a universal restriction its successors satisfy)
 					bool saturationNodeSatisfies(CIndividualSaturationProcessNode* succNode, CConcept* concept, bool negated, cint64 depth);
 					//! whether a universal restriction of the base that reaches the successors of a completed label is satisfied by the saturations of the label's existential restrictions
-					bool completedLabelSuccessorsSatisfyUniversal(CCompletedLabel* label, const CMergeState* base, CRole* role, CConcept* universalConcept, bool negated);
+					bool completedLabelSuccessorsSatisfyUniversal(CCompletedLabel* label, const QList<QPair<CConcept*,bool> >& otherUniversals, CRole* role, CConcept* universalConcept, bool negated);
 					//! a saturation node whose successors stand for those of a completion model's node: processed, completed, not insufficient, no nominal (critical and cardinality flags allowed, see the definition)
 					bool isUsableSuccessorSaturation(CIndividualSaturationProcessNode* node);
 					//! whether a filler propagated into a successor cannot add successors to it: negated named classes, plain universal restrictions, conjunctions and disjunctions of such
@@ -363,6 +411,8 @@ namespace Konclude {
 					cint64 mClosureDecisionCount;
 					QHash<CConcept*,CCompletedLabel*> mCompletedLabelHash;
 					bool mCompletedSuccessorDecision;
+					bool mFunctionalAtMostSafe;
+					bool mFunctionalSuccessorMerge;
 					CConcept* mCompletionConcept;
 					//! the class and the saturation node the current decision is about, at the root of the entailment check
 					CConcept* mRootSubClassConcept;
